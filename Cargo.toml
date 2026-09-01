@@ -1,6 +1,23 @@
 [package]
 name = "dioxus-auth"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+rust-version = "1.85"
+authors = ["Shedrack Godstime <shedrackgodstime@gmail.com>"]
+description = "Dioxus-native authentication and session management."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shedrackgodstime/dioxus-auth"
+documentation = "https://docs.rs/dioxus-auth"
+keywords = ["auth", "dioxus", "session", "axum"]
+categories = ["authentication", "web-programming"]
+include = [
+    "/Cargo.toml",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+    "/README.md",
+    "/docs/DESIGN.md",
+    "/src/**/*.rs",
+]
 
 [dependencies]
