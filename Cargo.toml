@@ -20,4 +20,13 @@ include = [
     "/src/**/*.rs",
 ]
 
+[features]
+default = ["dioxus"]
+dioxus = ["dep:dioxus"]
+
 [dependencies]
+dioxus = { version = "0.7", default-features = false, features = ["hooks", "signals", "macro", "html", "router"], optional = true }
+
+[dev-dependencies]
+rusqlite = { version = "0.33", features = ["bundled"] }
+tokio = { version = "1", features = ["macros", "rt"] }
