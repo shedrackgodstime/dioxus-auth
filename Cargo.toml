@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-auth"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Shedrack Godstime <shedrackgodstime@gmail.com>"]
@@ -12,12 +12,11 @@ documentation = "https://docs.rs/dioxus-auth"
 keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
 include = [
-    "/Cargo.toml",
-    "/LICENSE-APACHE",
-    "/LICENSE-MIT",
-    "/README.md",
-    "/docs/DESIGN.md",
-    "/src/**/*.rs",
+    "src/**",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
 ]
 
 [features]
