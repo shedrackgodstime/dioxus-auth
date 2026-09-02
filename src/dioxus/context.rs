@@ -3,9 +3,22 @@ use dioxus::prelude::*;
 use crate::session::AuthStatus;
 
 /// Handle to the reactive authentication state in the Dioxus component tree.
-#[derive(Clone, Copy, PartialEq)]
 pub struct Auth<User: 'static> {
     status: Signal<AuthStatus<User>>,
+}
+
+impl<User: 'static> Clone for Auth<User> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<User: 'static> Copy for Auth<User> {}
+
+impl<User: 'static> PartialEq for Auth<User> {
+    fn eq(&self, other: &Self) -> bool {
+        self.status == other.status
+    }
 }
 
 impl<User: Clone + 'static> Auth<User> {
