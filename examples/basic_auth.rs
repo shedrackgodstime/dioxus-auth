@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_auth::{
-    redirect_if_authed, require_auth, AuthProvider, AuthStatus, AuthUser, MemoryStore, RouteGate,
+    AuthProvider, AuthStatus, AuthUser, MemoryStore, RouteGate, redirect_if_authed, require_auth,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

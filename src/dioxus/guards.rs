@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::status::AuthStatus;
+use crate::session::AuthStatus;
 
 /// The outcome of evaluating route access permissions.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,7 +39,10 @@ pub fn require_auth<R: Clone, User>(status: &AuthStatus<User>, redirect_to: R) -
 
 /// Evaluates whether the user is already authenticated (e.g. on `/login` or `/register`),
 /// redirecting them to a dashboard if signed in.
-pub fn redirect_if_authed<R: Clone, User>(status: &AuthStatus<User>, redirect_to: R) -> GuardOutcome<R> {
+pub fn redirect_if_authed<R: Clone, User>(
+    status: &AuthStatus<User>,
+    redirect_to: R,
+) -> GuardOutcome<R> {
     match status {
         AuthStatus::Loading => GuardOutcome::Pending,
         AuthStatus::Authenticated(_) => GuardOutcome::Redirect(redirect_to),
@@ -80,8 +83,7 @@ impl<R: Clone + Send + Sync + 'static, User: 'static> RouteGuard<R, User> for Re
 #[component]
 pub fn RouteGate<R: Routable + Clone + PartialEq + 'static>(
     outcome: GuardOutcome<R>,
-    #[props(default)]
-    fallback: Option<Element>,
+    #[props(default)] fallback: Option<Element>,
 ) -> Element {
     let nav = use_navigator();
 

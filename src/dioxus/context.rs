@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::status::AuthStatus;
+use crate::session::AuthStatus;
 
 /// Handle to the reactive authentication state in the Dioxus component tree.
 #[derive(Clone, Copy, PartialEq)]
@@ -63,25 +63,7 @@ impl<User: Clone + 'static> Auth<User> {
 /// Hook to consume the current [`Auth`] context from any Dioxus component.
 ///
 /// # Panics
-/// Panics if called outside an [`AuthProvider`] tree for type `User`.
+/// Panics if called outside an [`crate::dioxus::AuthProvider`] tree for type `User`.
 pub fn use_auth<User: Clone + 'static>() -> Auth<User> {
     use_context::<Auth<User>>()
-}
-
-/// Component that injects the reactive authentication context into the component tree.
-#[component]
-pub fn AuthProvider<User: Clone + PartialEq + 'static>(
-    #[props(default)]
-    initial_status: Option<AuthStatus<User>>,
-    children: Element,
-) -> Element {
-    let status_signal = use_context_provider(|| {
-        Signal::new(initial_status.unwrap_or_default())
-    });
-    let auth = Auth::new(status_signal);
-    provide_context(auth);
-
-    rsx! {
-        {children}
-    }
 }
