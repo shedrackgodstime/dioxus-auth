@@ -62,14 +62,27 @@ static SERVER_STATE: LazyLock<(
 /// Server-side login: verifies credentials with Argon2id and returns user.
 #[server]
 pub async fn login_server(email: String, password: String) -> Result<AppUser, ServerFnError> {
-    let (_, engine) = &*SERVER_STATE;
+    #[cfg(feature = "server")]
+    {
+        println!("[SERVER] login_server received attempt for: {}", email);
+        let (_, engine) = &*SERVER_STATE;
 
-    let (user, _session) = engine
-        .login(&email, &password)
-        .await
-        .map_err(|_| ServerFnError::new("Invalid email or password."))?;
-
-    Ok(user)
+        match engine.login(&email, &password).await {
+            Ok((user, _session)) => {
+                println!("[SERVER] login SUCCEEDED for user: {}", user.email);
+                Ok(user)
+            }
+            Err(err) => {
+                eprintln!("[SERVER] login FAILED for {}: {:?}", email, err);
+                Err(ServerFnError::new("Invalid email or password."))
+            }
+        }
+    }
+    #[cfg(not(feature = "server"))]
+    {
+        let _ = (email, password);
+        Err(ServerFnError::new("Server only"))
+    }
 }
 
 /// Server-side logout function.
@@ -128,6 +141,7 @@ fn App() -> Element {
 #[component]
 fn Navbar() -> Element {
     let auth = use_auth::<AppUser>();
+    let nav = use_navigator();
 
     rsx! {
         header {
@@ -150,9 +164,11 @@ fn Navbar() -> Element {
                         style: "background: #ef4444; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer;",
                         onclick: move |_| {
                             let mut auth = auth;
+                            let nav = nav;
                             spawn(async move {
                                 logout_server().await.ok();
                                 auth.logout();
+                                nav.push(Route::Home {});
                             });
                         },
                         "Log Out"
@@ -209,6 +225,29 @@ fn Login() -> Element {
     let mut error_msg = use_signal(|| Option::<String>::None);
     let mut is_submitting = use_signal(|| false);
 
+    let execute_login = move || {
+        let mut auth = auth;
+        let nav = nav;
+        let em = email();
+        let pw = password();
+
+        spawn(async move {
+            is_submitting.set(true);
+            error_msg.set(None);
+
+            match login_server(em, pw).await {
+                Ok(user) => {
+                    auth.set_user(user);
+                    nav.push(Route::Dashboard {});
+                }
+                Err(err) => {
+                    error_msg.set(Some(format!("{err}")));
+                }
+            }
+            is_submitting.set(false);
+        });
+    };
+
     rsx! {
         div {
             style: "max-width: 420px; margin: 3rem auto; padding: 2rem; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);",
@@ -217,29 +256,14 @@ fn Login() -> Element {
             if let Some(err) = error_msg() {
                 div {
                     style: "background: #fee2e2; color: #991b1b; padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem;",
-                    "{err}"
+                    "⚠️ {err}"
                 }
             }
 
             form {
-                onsubmit: move |_| {
-                    let mut auth = auth;
-                    let nav = nav;
-                    spawn(async move {
-                        is_submitting.set(true);
-                        error_msg.set(None);
-
-                        match login_server(email(), password()).await {
-                            Ok(user) => {
-                                auth.set_user(user);
-                                nav.replace(Route::Dashboard {});
-                            }
-                            Err(err) => {
-                                error_msg.set(Some(err.to_string()));
-                            }
-                        }
-                        is_submitting.set(false);
-                    });
+                onsubmit: move |evt: FormEvent| {
+                    evt.prevent_default();
+                    execute_login();
                 },
                 div {
                     style: "margin-bottom: 1rem;",
@@ -324,5 +348,18 @@ fn Dashboard() -> Element {
                 }
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_login_server_credentials() {
+        let res = login_server("admin@example.com".into(), "password123".into()).await;
+        assert!(res.is_ok(), "login_server failed: {:?}", res.err());
+        let user = res.unwrap();
+        assert_eq!(user.email, "admin@example.com");
     }
 }

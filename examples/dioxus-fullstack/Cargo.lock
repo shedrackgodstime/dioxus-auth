@@ -1105,6 +1105,7 @@ dependencies = [
  "dioxus-auth",
  "getrandom 0.2.17",
  "serde",
+ "tokio",
 ]
 
 [[package]]
