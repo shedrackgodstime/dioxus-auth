@@ -1,5 +1,5 @@
 [package]
-name = "dioxus-fullstack"
+name = "dioxus-auth-demo"
 version = "0.1.0"
 authors = ["shedrackgodstime <shedrackgodstime@gmail.com>"]
 edition = "2021"
@@ -10,6 +10,9 @@ edition = "2021"
 dioxus = { version = "0.7.1", features = ["router", "fullstack"] }
 dioxus-auth = { path = "../..", features = ["dioxus"] }
 serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 [features]
 default = ["web"]

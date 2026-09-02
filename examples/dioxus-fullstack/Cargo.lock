@@ -1046,7 +1046,7 @@ dependencies = [
  "dioxus-desktop",
  "dioxus-devtools",
  "dioxus-document",
- "dioxus-fullstack 0.7.10",
+ "dioxus-fullstack",
  "dioxus-fullstack-macro",
  "dioxus-history",
  "dioxus-hooks",
@@ -1092,8 +1092,19 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "dioxus",
+ "getrandom 0.2.17",
  "hex",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "dioxus-auth-demo"
+version = "0.1.0"
+dependencies = [
+ "dioxus",
+ "dioxus-auth",
+ "getrandom 0.2.17",
+ "serde",
 ]
 
 [[package]]
@@ -1267,15 +1278,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
-]
-
-[[package]]
-name = "dioxus-fullstack"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "dioxus-auth",
- "serde",
 ]
 
 [[package]]

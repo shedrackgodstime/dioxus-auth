@@ -1,9 +1,9 @@
 [application]
+name = "dioxus-auth-demo"
 
 [web.app]
-
 # HTML title tag content
-title = "dioxus-fullstack"
+title = "Dioxus Auth Demo"
 
 # include `assets` in web platform
 [web.resource]
