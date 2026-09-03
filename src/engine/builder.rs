@@ -6,6 +6,13 @@ use crate::security::{Argon2Hasher, PasswordHasher};
 use crate::storage::{SessionStore, UserStore};
 use crate::user::AuthUser;
 
+/// Constant plaintext used to pre-compute the timing-defense dummy hash.
+///
+/// This string is never compared against a real user's password. It exists only so that
+/// the Argon2 verifier runs on a real PHC-encoded hash when the identifier is not found,
+/// closing the user-enumeration timing side-channel.
+const DUMMY_PASSWORD: &str = "dioxus-auth-timing-defense-dummy-password-do-not-use";
+
 /// Fluent builder for constructing an [`AuthEngine`].
 pub struct AuthEngineBuilder<U, S>
 where
@@ -52,14 +59,24 @@ where
     }
 
     /// Build the configured [`AuthEngine`].
+    ///
+    /// Pre-computes a real Argon2-encoded hash of [`DUMMY_PASSWORD`] using the
+    /// configured hasher, so that the unknown-user timing defense in
+    /// [`AuthEngine::login`] runs an actual Argon2 verification on miss instead
+    /// of short-circuiting on a malformed PHC string.
     pub fn build(self) -> AuthEngine<U, S> {
         let hasher = self.hasher.unwrap_or_else(|| Arc::new(Argon2Hasher::new()));
+
+        let dummy_hash = hasher
+            .hash_password(DUMMY_PASSWORD)
+            .expect("pre-computing dummy hash should not fail with a working hasher");
 
         AuthEngine {
             users: self.users,
             sessions: self.sessions,
             hasher,
             session_ttl_secs: self.session_ttl_secs,
+            dummy_hash,
         }
     }
 }

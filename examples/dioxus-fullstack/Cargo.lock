@@ -1095,6 +1095,8 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "rand_core 0.6.4",
+ "sha2",
+ "web-sys",
 ]
 
 [[package]]
@@ -1104,6 +1106,7 @@ dependencies = [
  "dioxus",
  "dioxus-auth",
  "getrandom 0.2.17",
+ "http",
  "serde",
  "tokio",
 ]

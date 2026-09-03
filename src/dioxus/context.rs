@@ -80,3 +80,31 @@ impl<User: Clone + 'static> Auth<User> {
 pub fn use_auth<User: Clone + 'static>() -> Auth<User> {
     use_context::<Auth<User>>()
 }
+
+/// Drive the reactive auth status from a restore result.
+///
+/// Intended to be paired with `use_resource` or `use_server_future` inside a child
+/// component of [`AuthProvider`]. The hook only mutates auth state while it is still
+/// `Loading`, so a manual login/logout elsewhere is never overwritten by a late or
+/// failed restore.
+///
+/// # Arguments
+/// * `restored` - The current value of the restore resource:
+///   - `None` → still resolving, do nothing.
+///   - `Some(Ok(Some(user)))` → transition to `Authenticated`.
+///   - `Some(Ok(None))` or `Some(Err(_))` → transition to `Unauthenticated`.
+pub fn use_auth_restore<User, E>(restored: Option<Result<Option<User>, E>>)
+where
+    User: Clone + 'static,
+{
+    let mut auth = use_auth::<User>();
+    if !auth.is_loading() {
+        return;
+    }
+
+    match restored {
+        None => {}
+        Some(Ok(Some(user))) => auth.set_user(user),
+        Some(Ok(None)) | Some(Err(_)) => auth.set_status(AuthStatus::Unauthenticated),
+    }
+}

@@ -95,10 +95,17 @@ impl AuthUser for User {
 
 ### 2. Initialize the Server Engine
 
-```rust
+```rust,ignore
 use std::sync::Arc;
 use std::time::Duration;
 use dioxus_auth::{AuthEngine, MemoryStore};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct User {
+    pub id: u64,
+    pub email: String,
+    pub password_hash: String,
+}
 
 // Use an in-memory store for testing, or your custom SQLite/Turso store
 let store = Arc::new(MemoryStore::<User>::new());
@@ -110,9 +117,23 @@ let engine = AuthEngine::builder(store.clone(), store.clone())
 
 ### 3. Mount `AuthProvider` in Your Dioxus App
 
-```rust
+```rust,ignore
 use dioxus::prelude::*;
 use dioxus_auth::{AuthProvider, AuthStatus};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct User {
+    pub id: u64,
+    pub email: String,
+    pub password_hash: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Route {
+    Login,
+    Dashboard,
+    Home,
+}
 
 fn App() -> Element {
     rsx! {
@@ -126,14 +147,28 @@ fn App() -> Element {
 
 ### 4. Protect Routes with `RouteGate`
 
-```rust
+```rust,ignore
 use dioxus::prelude::*;
 use dioxus_auth::{use_auth, require_auth, RouteGate};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct User {
+    pub id: u64,
+    pub email: String,
+    pub password_hash: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Route {
+    Login,
+    Dashboard,
+    Home,
+}
 
 #[component]
 fn ProtectedLayout() -> Element {
     let auth = use_auth::<User>();
-    let outcome = require_auth(&auth.status(), Route::Login {});
+    let outcome = require_auth(&auth.status(), Route::Login);
 
     rsx! {
         RouteGate {
@@ -146,9 +181,23 @@ fn ProtectedLayout() -> Element {
 
 ### 5. Use Auth in Components
 
-```rust
+```rust,ignore
 use dioxus::prelude::*;
 use dioxus_auth::{use_auth, SignedIn, SignedOut};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct User {
+    pub id: u64,
+    pub email: String,
+    pub password_hash: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Route {
+    Login,
+    Dashboard,
+    Home,
+}
 
 #[component]
 fn Navbar() -> Element {
@@ -161,7 +210,7 @@ fn Navbar() -> Element {
                 button { onclick: move |_| auth.logout(), "Log Out" }
             }
             SignedOut::<User> {
-                Link { to: Route::Login {}, "Log In" }
+                Link { to: Route::Login, "Log In" }
             }
         }
     }

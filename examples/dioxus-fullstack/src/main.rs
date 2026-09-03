@@ -1,12 +1,14 @@
 use dioxus::prelude::*;
 use dioxus_auth::{
-    require_auth, use_auth, AuthProvider, AuthStatus, AuthUser, RouteGate, SignedIn, SignedOut,
+    require_auth, use_auth, use_auth_restore, AuthProvider, AuthUser, RouteGate, ServerAuthContext,
+    SignedIn, SignedOut,
 };
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "server")]
 use {
-    dioxus_auth::{Argon2Hasher, AuthEngine, MemoryStore, PasswordHasher},
+    dioxus::fullstack::FullstackContext,
+    dioxus_auth::{Argon2Hasher, AuthEngine, CookieConfig, MemoryStore, PasswordHasher},
     std::sync::{Arc, LazyLock},
     std::time::Duration,
 };
@@ -32,10 +34,11 @@ impl AuthUser for AppUser {
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "server")]
-static SERVER_STATE: LazyLock<(
-    Arc<MemoryStore<AppUser>>,
-    AuthEngine<MemoryStore<AppUser>, MemoryStore<AppUser>>,
-)> = LazyLock::new(|| {
+type DemoEngine = AuthEngine<MemoryStore<AppUser>, MemoryStore<AppUser>>;
+
+#[cfg(feature = "server")]
+static SERVER_STATE: LazyLock<(Arc<MemoryStore<AppUser>>, DemoEngine, CookieConfig)> =
+    LazyLock::new(|| {
     let store = Arc::new(MemoryStore::<AppUser>::new());
     let hasher = Argon2Hasher::new();
 
@@ -52,30 +55,49 @@ static SERVER_STATE: LazyLock<(
         .session_ttl(Duration::from_secs(60 * 60 * 24 * 7)) // 7 days
         .build();
 
-    (store, engine)
+    let cookie_config = CookieConfig::default();
+
+    (store, engine, cookie_config)
 });
 
 // ---------------------------------------------------------------------------
 // Dioxus Server Functions (#[server])
 // ---------------------------------------------------------------------------
 
-/// Server-side login: verifies credentials with Argon2id and returns user.
+/// Extract the raw `Cookie` header string from the current fullstack request, if any.
+#[cfg(feature = "server")]
+fn read_cookie_header() -> Option<String> {
+    let ctx = FullstackContext::current()?;
+    let parts = ctx.parts_mut();
+    parts
+        .headers
+        .get(http::header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
+
+/// Server-side login: verifies credentials with Argon2id, mints a session,
+/// and emits a `Set-Cookie` header for the client.
 #[server]
-pub async fn login_server(email: String, password: String) -> Result<AppUser, ServerFnError> {
+pub async fn login_server(
+    email: String,
+    password: String,
+) -> Result<AppUser, ServerFnError> {
     #[cfg(feature = "server")]
     {
-        println!("[SERVER] login_server received attempt for: {}", email);
-        let (_, engine) = &*SERVER_STATE;
+        let (_, engine, cookie_config) = &*SERVER_STATE;
+        let server_ctx = ServerAuthContext::new(engine, cookie_config);
 
-        match engine.login(&email, &password).await {
-            Ok((user, _session)) => {
-                println!("[SERVER] login SUCCEEDED for user: {}", user.email);
+        match server_ctx.login(&email, &password).await {
+            Ok((user, set_cookie)) => {
+                if let Some(ctx) = FullstackContext::current() {
+                    let value = http::HeaderValue::from_str(&set_cookie)
+                        .map_err(|e| ServerFnError::new(format!("cookie error: {e}")))?;
+                    ctx.add_response_header(http::header::SET_COOKIE, value);
+                }
                 Ok(user)
             }
-            Err(err) => {
-                eprintln!("[SERVER] login FAILED for {}: {:?}", email, err);
-                Err(ServerFnError::new("Invalid email or password."))
-            }
+            Err(err) => Err(ServerFnError::new(format!("login failed: {err}"))),
         }
     }
     #[cfg(not(feature = "server"))]
@@ -85,20 +107,79 @@ pub async fn login_server(email: String, password: String) -> Result<AppUser, Se
     }
 }
 
-/// Server-side logout function.
+/// Server-side logout: revokes the active session and emits a delete-cookie header.
 #[server]
 pub async fn logout_server() -> Result<(), ServerFnError> {
-    Ok(())
+    #[cfg(feature = "server")]
+    {
+        let (_, engine, cookie_config) = &*SERVER_STATE;
+        let server_ctx = ServerAuthContext::new(engine, cookie_config);
+
+        let cookie_header = read_cookie_header();
+        if let Some(session_id) = server_ctx.extract_session_id(cookie_header.as_deref()) {
+            let delete_cookie = server_ctx
+                .logout(&session_id)
+                .await
+                .map_err(|e| ServerFnError::new(format!("logout failed: {e}")))?;
+            if let Some(ctx) = FullstackContext::current() {
+                let value = http::HeaderValue::from_str(&delete_cookie)
+                    .map_err(|e| ServerFnError::new(format!("cookie error: {e}")))?;
+                ctx.add_response_header(http::header::SET_COOKIE, value);
+            }
+        }
+
+        Ok(())
+    }
+    #[cfg(not(feature = "server"))]
+    {
+        Ok(())
+    }
 }
 
-/// Server-side protected data endpoint.
+/// Server-side restore: reads the session cookie and returns the current user, if any.
+#[server]
+pub async fn get_current_user() -> Result<Option<AppUser>, ServerFnError> {
+    #[cfg(feature = "server")]
+    {
+        let (_, engine, cookie_config) = &*SERVER_STATE;
+        let server_ctx = ServerAuthContext::new(engine, cookie_config);
+
+        let cookie_header = read_cookie_header();
+        server_ctx
+            .current_user(cookie_header.as_deref())
+            .await
+            .map_err(|e| ServerFnError::new(format!("restore failed: {e}")))
+    }
+    #[cfg(not(feature = "server"))]
+    {
+        Ok(None)
+    }
+}
+
+/// Server-side protected data endpoint. Returns 401 (Unauthenticated) without a valid session.
 #[server]
 pub async fn get_secret_metrics() -> Result<Vec<String>, ServerFnError> {
-    Ok(vec![
-        "Active Subscribers: 1,420".into(),
-        "Monthly Recurring Revenue: $18,500".into(),
-        "API Success Rate: 99.98%".into(),
-    ])
+    #[cfg(feature = "server")]
+    {
+        let (_, engine, cookie_config) = &*SERVER_STATE;
+        let server_ctx = ServerAuthContext::new(engine, cookie_config);
+
+        let cookie_header = read_cookie_header();
+        let _user = server_ctx
+            .require_user(cookie_header.as_deref())
+            .await
+            .map_err(|e| ServerFnError::new(format!("unauthorized: {e}")))?;
+
+        Ok(vec![
+            "Active Subscribers: 1,420".into(),
+            "Monthly Recurring Revenue: $18,500".into(),
+            "API Success Rate: 99.98%".into(),
+        ])
+    }
+    #[cfg(not(feature = "server"))]
+    {
+        Ok(vec![])
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -131,10 +212,24 @@ fn App() -> Element {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         AuthProvider::<AppUser> {
-            initial_status: AuthStatus::Unauthenticated,
+            AuthRestore {}
             Router::<Route> {}
         }
     }
+}
+
+/// Child of `AuthProvider` that drives the 3-state from a `get_current_user` resource.
+///
+/// Starts in `Loading` (the `AuthProvider` default). Once the resource resolves:
+/// - `Some(Ok(Some(user)))` → `Authenticated(user)`
+/// - `Some(Ok(None))` or `Some(Err(_))` → `Unauthenticated`
+///
+/// Only mutates while still `Loading`, so a manual login elsewhere is never overwritten.
+#[component]
+fn AuthRestore() -> Element {
+    let whoami = use_resource(get_current_user);
+    use_auth_restore(whoami.read().clone());
+    rsx! {}
 }
 
 /// Navigation Bar with SignedIn / SignedOut conditional rendering.
