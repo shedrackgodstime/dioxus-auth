@@ -19,15 +19,17 @@ You are working on **`dioxus-auth`**, a Dioxus-native, storage-agnostic authenti
 
 All architectural specifications, findings, and problem catalogs are written down in `docs/`:
 
-1. **[`docs/CORE_CHALLENGES_AND_PITFALLS.md`](./CORE_CHALLENGES_AND_PITFALLS.md)**:
+1. **[`docs/DIOXUS_NATIVE_PHILOSOPHY.md`](./DIOXUS_NATIVE_PHILOSOPHY.md)**:
+   The foundational design doctrine: making `dioxus-auth` feel as if the Dioxus core team built it into Dioxus from day one (unconditional `Copy` handles, Dioxus primitives, router layout composition, and 3-state hydration).
+2. **[`docs/CORE_CHALLENGES_AND_PITFALLS.md`](./CORE_CHALLENGES_AND_PITFALLS.md)**:
    The master 11-problem catalog and priority ranking (Abstraction boundary, security correctness, SSR hydration flash, write amplification, multi-platform transport).
-2. **[`docs/NATIVE_FULLSTACK_DESIGN.md`](./NATIVE_FULLSTACK_DESIGN.md)**:
+3. **[`docs/NATIVE_FULLSTACK_DESIGN.md`](./NATIVE_FULLSTACK_DESIGN.md)**:
    How `AuthLayer` acts as the Dioxus equivalent to Next.js `middleware.ts`, how `#[server]` functions access context, and how SSR hydration works.
-3. **[`docs/SECURITY_SPECIFICATION.md`](./SECURITY_SPECIFICATION.md)**:
+4. **[`docs/SECURITY_SPECIFICATION.md`](./SECURITY_SPECIFICATION.md)**:
    Threat model, SHA-256 stored session hashing (Lucia pattern), CSRF Origin/Host checks, pre-hash Argon2 DoS rate limiting, and `__Host-` cookies.
-4. **[`docs/CROSS_PLATFORM_SESSION_AND_IDENTITY_SPEC.md`](./CROSS_PLATFORM_SESSION_AND_IDENTITY_SPEC.md)**:
+5. **[`docs/CROSS_PLATFORM_SESSION_AND_IDENTITY_SPEC.md`](./CROSS_PLATFORM_SESSION_AND_IDENTITY_SPEC.md)**:
    Dual-transport (Web Cookies vs. Desktop/Mobile Bearer tokens), the 50% sliding window renewal rule, and identity normalization (NFKC, 128-char cap).
-5. **[`docs/DESIGN.md`](./DESIGN.md)**:
+6. **[`docs/DESIGN.md`](./DESIGN.md)**:
    The 3-layer capability architecture and directory layout.
 
 ---
