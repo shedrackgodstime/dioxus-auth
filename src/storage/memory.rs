@@ -11,11 +11,27 @@ use crate::user::AuthUser;
 /// An in-memory, thread-safe implementation of [`UserStore`], [`PasswordUserStore`], and [`SessionStore`].
 ///
 /// Useful for testing, rapid prototyping, and lightweight mock environments.
+///
+/// # Hashing contract
+///
+/// Keys sessions by whatever id is passed in. The engine is responsible for
+/// passing the storage form (`sha256(raw wire token)`). Direct callers of this
+/// store in tests may pass any id.
 #[derive(Debug, Default)]
 pub struct MemoryStore<User: AuthUser> {
     users: RwLock<HashMap<User::Id, User>>,
     credentials: RwLock<HashMap<String, (User::Id, String)>>,
     sessions: RwLock<HashMap<SessionId, Session<User::Id>>>,
+}
+
+impl<User: AuthUser> Clone for MemoryStore<User> {
+    fn clone(&self) -> Self {
+        Self {
+            users: RwLock::new(self.users.read().unwrap().clone()),
+            credentials: RwLock::new(self.credentials.read().unwrap().clone()),
+            sessions: RwLock::new(self.sessions.read().unwrap().clone()),
+        }
+    }
 }
 
 impl<User: AuthUser> MemoryStore<User> {

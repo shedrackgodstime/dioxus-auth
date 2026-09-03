@@ -2,6 +2,14 @@ use crate::error::AuthResult;
 use crate::session::{Session, SessionId};
 
 /// Storage interface for managing session persistence and lifecycle.
+///
+/// # Hashing contract
+///
+/// Implementations receive and return session records whose `id` field is the
+/// **storage form** — `sha256(raw wire token)`. [`crate::engine::AuthEngine`]
+/// is the boundary that hashes wire tokens before calling this trait and
+/// re-hashes incoming raw tokens before lookup. A leaked store therefore
+/// yields no session-hijackable secrets.
 pub trait SessionStore<UserId>: Send + Sync + 'static {
     /// Save a newly created session or update an existing one.
     fn save_session(
@@ -9,13 +17,13 @@ pub trait SessionStore<UserId>: Send + Sync + 'static {
         session: Session<UserId>,
     ) -> impl std::future::Future<Output = AuthResult<()>> + Send;
 
-    /// Find an active session by its ID.
+    /// Find an active session by its storage-form id.
     fn find_session(
         &self,
         id: &SessionId,
     ) -> impl std::future::Future<Output = AuthResult<Option<Session<UserId>>>> + Send;
 
-    /// Delete/revoke a session by ID.
+    /// Delete/revoke a session by its storage-form id.
     fn delete_session(
         &self,
         id: &SessionId,
