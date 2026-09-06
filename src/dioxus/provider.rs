@@ -30,7 +30,7 @@ impl TokenStorageRef {
     }
 }
 
-/// Component that injects the reactive authentication context into the component tree.
+/// Inject the reactive authentication context into the component tree.
 #[component]
 pub fn AuthProvider<User: Clone + PartialEq + 'static>(
     #[props(default)] initial_status: Option<AuthStatus<User>>,

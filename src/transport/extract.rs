@@ -1,21 +1,7 @@
 /// Extract a session token from request headers, preferring `Authorization: Bearer`
 /// and falling back to a `Cookie` header.
 ///
-/// This is the v0.1 dual-transport contract. On web, the browser usually attaches
-/// the cookie; on desktop and mobile, the client usually attaches a bearer token
-/// from a `TokenStorage`. If both are present, Bearer wins (mobile clients often
-/// have no `Origin` header, so CSRF defenses are skipped for bearer credentials —
-/// see spec/11 §5).
-///
-/// # Arguments
-/// * `authorization` - the raw `Authorization` header value, if any
-///   (e.g. `"Bearer abc123"`).
-/// * `cookie` - the raw `Cookie` header value, if any
-///   (e.g. `"dioxus_session=abc123; foo=bar"`).
-/// * `cookie_name` - the session cookie name to look for in the `Cookie` header.
-///
-/// # Returns
-/// The raw session token string, or `None` if neither header carries one.
+/// Bearer takes precedence over cookies. If both are present, Bearer wins.
 pub fn extract_session_token(
     authorization: Option<&str>,
     cookie: Option<&str>,
@@ -36,8 +22,7 @@ pub fn extract_session_token(
 
 /// Extract the bearer token from an `Authorization` header value.
 ///
-/// Accepts `Bearer <token>` and `bearer <token>`. Returns `None` for any other
-/// scheme (Basic, Digest, missing scheme, empty token).
+/// Accepts `Bearer <token>` and `bearer <token>`.
 fn bearer_token(authorization: &str) -> Option<&str> {
     let trimmed = authorization.trim();
     let mut parts = trimmed.splitn(2, ' ');
@@ -51,10 +36,7 @@ fn bearer_token(authorization: &str) -> Option<&str> {
 
 /// Extract a named cookie value from a `Cookie` header string.
 ///
-/// Returns `None` if the cookie is not present or has an empty value.
-///
-/// When the cookie name is used with `__Host-` prefix (see [`CookieConfig::host_only`]),
-/// this function also matches the prefixed form.
+/// Matches the exact name or the `__Host-` prefixed form.
 fn cookie_value<'a>(cookie_header: &'a str, name: &str) -> Option<&'a str> {
     let host_prefix = format!("__Host-{name}");
     for pair in cookie_header.split(';') {

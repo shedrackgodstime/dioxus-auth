@@ -1,11 +1,9 @@
 //! Axum/Tower integration for [`dioxus-auth`].
 //!
-//! Provides middleware for Axum applications that validates sessions and
-//! inserts the authenticated user into request extensions.
+//! Provides middleware that validates sessions and inserts the authenticated user
+//! into request extensions.
 //!
-//! # Feature flag
-//!
-//! This module requires the `axum` feature:
+//! Requires the `axum` feature:
 //!
 //! ```toml
 //! dioxus-auth = { version = "0.1", features = ["dioxus", "axum"] }

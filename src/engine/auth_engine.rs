@@ -195,22 +195,22 @@ where
         Ok(existed)
     }
 
-    fn fire_on_sign_in(&self, user: &U::User) {
-        if let Some(ref hook) = self.on_sign_in {
+    fn fire_hook(&self, hook: Option<&Arc<dyn Fn(&U::User) + Send + Sync>>, user: &U::User) {
+        if let Some(hook) = hook {
             let _ = std::panic::catch_unwind(AssertUnwindSafe(|| hook(user)));
         }
+    }
+
+    fn fire_on_sign_in(&self, user: &U::User) {
+        self.fire_hook(self.on_sign_in.as_ref(), user);
     }
 
     fn fire_on_sign_out(&self, user: &U::User) {
-        if let Some(ref hook) = self.on_sign_out {
-            let _ = std::panic::catch_unwind(AssertUnwindSafe(|| hook(user)));
-        }
+        self.fire_hook(self.on_sign_out.as_ref(), user);
     }
 
     fn fire_on_session_validated(&self, user: &U::User) {
-        if let Some(ref hook) = self.on_session_validated {
-            let _ = std::panic::catch_unwind(AssertUnwindSafe(|| hook(user)));
-        }
+        self.fire_hook(self.on_session_validated.as_ref(), user);
     }
 }
 
@@ -219,72 +219,31 @@ where
     U: PasswordUserStore,
     S: SessionStore<<U::User as AuthUser>::Id>,
 {
-    /// Authenticate a user by identifier (e.g. email or username) and plaintext password.
+    /// Authenticate a user by identifier and plaintext password.
     ///
-    /// Implements timing attack mitigation by executing a real Argon2 password verification
-    /// against a pre-computed dummy hash if the identifier is not found, ensuring
-    /// indistinguishable response latency between the "user not found" and "wrong password"
-    /// branches. The dummy hash is computed at builder time against the same configured
-    /// hasher, so both branches perform one Argon2 invocation with the same cost.
+    /// Constant-time defense: unknown-user login runs one Argon2 verification
+    /// against the dummy hash, so miss and hit take indistinguishable time.
     pub async fn login(
         &self,
         identifier: &str,
         password: &str,
     ) -> AuthResult<(U::User, Session<<U::User as AuthUser>::Id>)> {
-        let user_entry = self.users.find_by_identifier(identifier).await?;
-
-        let (user, password_hash) = match user_entry {
-            Some((u, hash)) => (Some(u), hash),
-            None => {
-                // Constant-time defense: run a real Argon2 verification against the
-                // pre-computed dummy hash so the miss path is not distinguishable from
-                // the hit path by timing.
-                let _ = self.hasher.verify_password(password, &self.dummy_hash);
-                return Err(AuthError::Unauthenticated);
-            }
-        };
-
-        let is_valid = self.hasher.verify_password(password, &password_hash)?;
-        if !is_valid {
-            return Err(AuthError::Unauthenticated);
-        }
-
-        let user = user.expect("user exists");
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let expires_at = now + self.session_ttl_secs;
-
-        if self.rotate_tokens {
-            let _ = self.sessions.delete_user_sessions(&user.id()).await;
-        }
-
-        let raw_id = SessionId::generate();
-        let storage_id = raw_id.hash_for_storage();
-        let auth_hash = user.session_auth_hash().map(str::to_string);
-
-        let mut storage_session = Session::new(storage_id, user.id(), now, expires_at);
-        if let Some(ref h) = auth_hash {
-            storage_session = storage_session.with_auth_hash(h.clone());
-        }
-        self.sessions.save_session(storage_session).await?;
-
-        let mut wire_session = Session::new(raw_id, user.id(), now, expires_at);
-        if let Some(h) = auth_hash {
-            wire_session = wire_session.with_auth_hash(h);
-        }
-        self.fire_on_sign_in(&user);
-        Ok((user, wire_session))
+        self.do_login(identifier, password, LoginOptions::default())
+            .await
     }
 
     /// Authenticate a user with optional session metadata (IP address, user agent).
-    ///
-    /// This is the extended version of [`login`](Self::login) that records
-    /// client metadata for security auditing. The metadata is optional and
-    /// stored alongside the session record.
     #[must_use = "the authenticated user and session should be used"]
     pub async fn login_with_options(
+        &self,
+        identifier: &str,
+        password: &str,
+        options: LoginOptions<'_>,
+    ) -> AuthResult<(U::User, Session<<U::User as AuthUser>::Id>)> {
+        self.do_login(identifier, password, options).await
+    }
+
+    async fn do_login(
         &self,
         identifier: &str,
         password: &str,

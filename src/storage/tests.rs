@@ -1,9 +1,7 @@
 //! Test helpers and conformance tests for [`UserStore`], [`PasswordUserStore`], and [`SessionStore`] implementations.
 //!
-//! # Usage
-//!
-//! Replicate these tests against your store. The session tests are fully self-contained.
-//! For user and engine tests, pre-seed your store with a test user, then run the checks:
+//! Replicate these tests against your store. For user and engine tests, pre-seed
+//! your store with a test user, then run the checks:
 //!
 //! ```rust,ignore
 //! #[cfg(test)]
@@ -36,13 +34,9 @@ use crate::storage::session::SessionStore;
 use crate::storage::user::{PasswordUserStore, UserStore};
 use crate::user::AuthUser;
 
-// ---------------------------------------------------------------------------
 // Test user fixture
-// ---------------------------------------------------------------------------
 
-/// A minimal `AuthUser` implementation for store conformance tests.
-///
-/// Substitute this with your own `User` type when adapting the tests.
+/// Minimal `AuthUser` for store conformance tests.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TestUser {
     pub id: u64,
@@ -79,19 +73,11 @@ impl TestUser {
     }
 }
 
-// ---------------------------------------------------------------------------
 // UserStore tests
-// ---------------------------------------------------------------------------
 
-/// Run [`UserStore`] conformance tests against any store implementation.
+/// Run [`UserStore`] conformance tests.
 ///
-/// # Parameters
-/// * `store` — A store implementing [`UserStore<User = TestUser>`]
-///
-/// # Pre-seeding
-///
-/// Insert a user with `id == 1` and `email == "alice@example.com"` before calling
-/// this function. The tests will look up that user by id and by email.
+/// Pre-seed the store with a user `id == 1` and `email == "alice@example.com"`.
 pub async fn run_user_store_tests<S>(store: Arc<S>)
 where
     S: UserStore<User = TestUser>,
@@ -118,20 +104,12 @@ where
     );
 }
 
-// ---------------------------------------------------------------------------
 // PasswordUserStore tests
-// ---------------------------------------------------------------------------
 
-/// Run [`PasswordUserStore`] conformance tests against any store implementation.
+/// Run [`PasswordUserStore`] conformance tests.
 ///
-/// # Parameters
-/// * `store` — A store implementing [`PasswordUserStore<User = TestUser>`]
-/// * `hasher` — A [`crate::security::PasswordHasher`] implementation to verify passwords
-///
-/// # Pre-seeding
-///
-/// Insert a user with `id == 1`, `email == "alice@example.com"`, and a known
-/// password hash before calling this function.
+/// Pre-seed the store with a user `id == 1`, `email == "alice@example.com"`,
+/// and a known password hash for `"password123"`.
 pub async fn run_password_user_store_tests<S>(store: Arc<S>, hasher: &Argon2Hasher)
 where
     S: PasswordUserStore<User = TestUser>,
@@ -169,16 +147,9 @@ where
     );
 }
 
-// ---------------------------------------------------------------------------
 // SessionStore tests
-// ---------------------------------------------------------------------------
 
-/// Run [`SessionStore`] conformance tests against any store implementation.
-///
-/// # Parameters
-/// * `store` — A store implementing [`SessionStore<u64>`]
-///
-/// This test is fully self-contained — it creates and manipulates its own sessions.
+/// Run [`SessionStore`] conformance tests. Fully self-contained.
 pub async fn run_session_store_tests<S>(store: Arc<S>)
 where
     S: SessionStore<u64>,
@@ -264,20 +235,12 @@ where
     assert!(listed.iter().any(|s| s.id() == session5.id()));
 }
 
-// ---------------------------------------------------------------------------
 // Engine lifecycle tests
-// ---------------------------------------------------------------------------
 
-/// Run [`AuthEngine`] lifecycle conformance tests against any store pair.
+/// Run [`AuthEngine`] lifecycle conformance tests.
 ///
-/// # Parameters
-/// * `users` — Store implementing [`PasswordUserStore<User = TestUser>`]
-/// * `sessions` — Store implementing [`SessionStore<u64>`]
-///
-/// # Pre-seeding
-///
-/// Insert a user with `id == 1`, `email == "alice@example.com"`, password hash
-/// for `"password123"` before calling this function.
+/// Pre-seed the store with a user `id == 1`, `email == "alice@example.com"`,
+/// password hash for `"password123"`.
 pub async fn run_engine_lifecycle_tests<U, S>(users: Arc<U>, sessions: Arc<S>)
 where
     U: PasswordUserStore<User = TestUser>,
@@ -318,13 +281,9 @@ where
     assert!(after_logout.is_none());
 }
 
-// ---------------------------------------------------------------------------
 // Store fixture helpers
-// ---------------------------------------------------------------------------
 
-/// Create a seeded [`TestUser`] with a known password hash for test setups.
-///
-/// Returns the user and the Argon2 hash for `"password123"`.
+/// Create a seeded [`TestUser`] with a known password hash.
 pub fn seeded_test_user(id: u64, email: &str) -> (TestUser, String) {
     let hasher = Argon2Hasher::new();
     let hash = hasher

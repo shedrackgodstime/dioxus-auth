@@ -26,68 +26,67 @@ impl<UserId> Session<UserId> {
         }
     }
 
-    /// Attach a security hash (e.g. password hash or token version) for automatic revocation upon password change.
+    /// Attach a hash used to invalidate this session when credentials change.
     pub fn with_auth_hash(mut self, auth_hash: impl Into<String>) -> Self {
         self.auth_hash = Some(auth_hash.into());
         self
     }
 
-    /// Attach the client IP address for session activity tracking.
+    /// Attach the client IP address.
     pub fn with_ip_address(mut self, ip_address: impl Into<String>) -> Self {
         self.ip_address = Some(ip_address.into());
         self
     }
 
-    /// Attach the client user agent for session activity tracking.
+    /// Attach the client user agent.
     pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
         self.user_agent = Some(user_agent.into());
         self
     }
 
-    /// Access the unique session identifier.
+    /// Session identifier.
     pub fn id(&self) -> &SessionId {
         &self.id
     }
 
-    /// Access the associated user identifier.
+    /// User identifier.
     pub fn user_id(&self) -> &UserId {
         &self.user_id
     }
 
-    /// Unix timestamp (seconds) when the session was created.
+    /// Creation timestamp (seconds).
     pub fn created_at_unix(&self) -> u64 {
         self.created_at_unix
     }
 
-    /// Unix timestamp (seconds) when the session expires.
+    /// Expiry timestamp (seconds).
     pub fn expires_at_unix(&self) -> u64 {
         self.expires_at_unix
     }
 
-    /// Access the optional session authentication hash.
+    /// Session authentication hash.
     pub fn auth_hash(&self) -> Option<&str> {
         self.auth_hash.as_deref()
     }
 
-    /// Access the optional client IP address.
+    /// Client IP address.
     pub fn ip_address(&self) -> Option<&str> {
         self.ip_address.as_deref()
     }
 
-    /// Access the optional client user agent.
+    /// Client user agent.
     pub fn user_agent(&self) -> Option<&str> {
         self.user_agent.as_deref()
     }
 
-    /// Check if the session is expired relative to a given unix timestamp.
+    /// Whether the session is expired at `unix_timestamp`.
     pub fn is_expired_at(&self, unix_timestamp: u64) -> bool {
         unix_timestamp >= self.expires_at_unix
     }
 
-    /// Extend the session expiry by the given TTL from the current time.
+    /// Extend the session expiry by `ttl_secs` from `now`.
     ///
-    /// This is used for sliding TTL — on each validated access, the session
-    /// lifetime is extended by the configured TTL.
+    /// Used for sliding TTL.
     pub fn extend_expiry(mut self, now: u64, ttl_secs: u64) -> Self {
         self.expires_at_unix = now + ttl_secs;
         self
