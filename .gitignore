@@ -1,6 +1,6 @@
 /target
 /scratch
 /.kilo
-
-# Local shared agent-rules symlink
 /.agent-rules
+/.cargo
+/examples/*/target

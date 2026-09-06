@@ -1,26 +1,20 @@
-use std::fmt;
+use thiserror::Error;
 
 pub type AuthResult<T> = Result<T, AuthError>;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Error, PartialEq)]
+#[non_exhaustive]
 pub enum AuthError {
+    #[error("missing authentication session")]
     MissingSession,
+    #[error("invalid authentication session")]
     InvalidSession,
+    #[error("expired authentication session")]
     ExpiredSession,
+    #[error("user is not authenticated")]
     Unauthenticated,
+    #[error("cross-site request forgery attempt detected")]
+    Csrf,
+    #[error("authentication store error: {0}")]
     Store(String),
 }
-
-impl fmt::Display for AuthError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingSession => f.write_str("missing authentication session"),
-            Self::InvalidSession => f.write_str("invalid authentication session"),
-            Self::ExpiredSession => f.write_str("expired authentication session"),
-            Self::Unauthenticated => f.write_str("user is not authenticated"),
-            Self::Store(message) => write!(f, "authentication store error: {message}"),
-        }
-    }
-}
-
-impl std::error::Error for AuthError {}

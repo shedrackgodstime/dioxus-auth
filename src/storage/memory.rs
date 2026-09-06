@@ -27,9 +27,24 @@ pub struct MemoryStore<User: AuthUser> {
 impl<User: AuthUser> Clone for MemoryStore<User> {
     fn clone(&self) -> Self {
         Self {
-            users: RwLock::new(self.users.read().unwrap().clone()),
-            credentials: RwLock::new(self.credentials.read().unwrap().clone()),
-            sessions: RwLock::new(self.sessions.read().unwrap().clone()),
+            users: RwLock::new(
+                self.users
+                    .read()
+                    .expect("MemoryStore lock poisoned")
+                    .clone(),
+            ),
+            credentials: RwLock::new(
+                self.credentials
+                    .read()
+                    .expect("MemoryStore lock poisoned")
+                    .clone(),
+            ),
+            sessions: RwLock::new(
+                self.sessions
+                    .read()
+                    .expect("MemoryStore lock poisoned")
+                    .clone(),
+            ),
         }
     }
 }
@@ -134,5 +149,17 @@ where
             .map_err(|e| crate::error::AuthError::Store(e.to_string()))?;
         sessions.retain(|_, session| session.user_id() != user_id);
         Ok(())
+    }
+
+    async fn list_user_sessions(&self, user_id: &User::Id) -> AuthResult<Vec<Session<User::Id>>> {
+        let sessions = self
+            .sessions
+            .read()
+            .map_err(|e| crate::error::AuthError::Store(e.to_string()))?;
+        Ok(sessions
+            .values()
+            .filter(|session| session.user_id() == user_id)
+            .cloned()
+            .collect())
     }
 }

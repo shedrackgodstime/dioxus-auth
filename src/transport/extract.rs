@@ -52,11 +52,16 @@ fn bearer_token(authorization: &str) -> Option<&str> {
 /// Extract a named cookie value from a `Cookie` header string.
 ///
 /// Returns `None` if the cookie is not present or has an empty value.
+///
+/// When the cookie name is used with `__Host-` prefix (see [`CookieConfig::host_only`]),
+/// this function also matches the prefixed form.
 fn cookie_value<'a>(cookie_header: &'a str, name: &str) -> Option<&'a str> {
+    let host_prefix = format!("__Host-{name}");
     for pair in cookie_header.split(';') {
         let mut parts = pair.trim().splitn(2, '=');
         if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
-            if k.trim() == name {
+            let k = k.trim();
+            if k == name || k == host_prefix {
                 let v = v.trim();
                 if !v.is_empty() {
                     return Some(v);
@@ -132,5 +137,15 @@ mod tests {
             "dioxus_session",
         );
         assert_eq!(token.as_deref(), Some("mine"));
+    }
+
+    #[test]
+    fn host_prefixed_cookie_is_found() {
+        let token = extract_session_token(
+            None,
+            Some("__Host-dioxus_session=host_token_abc"),
+            "dioxus_session",
+        );
+        assert_eq!(token.as_deref(), Some("host_token_abc"));
     }
 }

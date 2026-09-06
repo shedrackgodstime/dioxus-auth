@@ -19,6 +19,11 @@ pub use engine::{AuthEngine, AuthEngineBuilder};
 pub use error::{AuthError, AuthResult};
 pub use security::{Argon2Hasher, CookieConfig, PasswordHasher, SameSite};
 pub use session::{AuthStatus, Session, SessionId};
+#[cfg(any(test, doc))]
+pub use storage::tests::{
+    TestUser, run_engine_lifecycle_tests, run_password_user_store_tests, run_session_store_tests,
+    run_user_store_tests, seeded_test_user,
+};
 pub use storage::{MemoryStore, PasswordUserStore, SessionStore, UserStore};
 #[cfg(not(target_arch = "wasm32"))]
 pub use transport::FileTokenStorage;
@@ -30,8 +35,13 @@ pub use user::AuthUser;
 #[cfg(feature = "dioxus")]
 pub use dioxus::{
     Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate, RouteGuard,
-    ServerAuthContext, SignedIn, SignedOut, redirect_if_authed, require_auth, use_auth,
-    use_auth_restore,
+    ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, clear_persisted_token, persist_token,
+    redirect_if_authed, require_auth, use_auth, use_auth_restore, use_token_storage,
+};
+#[cfg(all(feature = "dioxus", feature = "axum"))]
+pub use dioxus::{
+    AuthenticatedUser, RequireAuthUser, auth_middleware, permission_middleware,
+    require_auth_middleware,
 };
 
 #[cfg(test)]
@@ -39,6 +49,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::security::OriginValidation;
 
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct TestUser {
@@ -106,6 +117,8 @@ mod tests {
             http_only: true,
             same_site: SameSite::Lax,
             max_age_secs: Some(3600),
+            host_only: false,
+            expected_origins: None,
         };
 
         let session_id = SessionId::new("test-token-123");
@@ -294,7 +307,7 @@ mod tests {
         let engine = AuthEngine::builder(store.clone(), store.clone()).build();
 
         // 1. The dummy hash must be a real PHC string (the old broken hash was not).
-        let dummy_hash = &engine.dummy_hash;
+        let dummy_hash = engine.dummy_hash();
         assert!(
             PasswordHash::new(dummy_hash).is_ok(),
             "dummy hash must be a parseable Argon2 PHC string"
@@ -813,5 +826,527 @@ mod tests {
             }
         });
         vdom_components.rebuild_in_place();
+    }
+
+    /// Phase F: sliding TTL extends session expiry on validation within the window.
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_sliding_ttl_extends_expiry() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "sliding_pass";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 404,
+            name: "Slide".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "slide@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .sliding_window(Duration::from_secs(1800))
+            .build();
+
+        let (_, session) = engine
+            .login("slide@example.com", password)
+            .await
+            .expect("login should succeed");
+        let original_expiry = session.expires_at_unix();
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let validated = engine
+            .validate_session(session.id())
+            .await
+            .unwrap()
+            .expect("session should be valid");
+
+        let stored = store
+            .find_session(&session.id().hash_for_storage())
+            .await
+            .unwrap()
+            .expect("stored session must exist");
+        assert!(
+            stored.expires_at_unix() > original_expiry,
+            "sliding TTL should extend expiry: {} > {}",
+            stored.expires_at_unix(),
+            original_expiry
+        );
+        assert_eq!(validated, user);
+    }
+
+    /// Phase F: token rotation invalidates old sessions on re-login.
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_token_rotation_invalidates_old_sessions() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "rotation_pass";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 505,
+            name: "Rotate".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "rotate@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .rotate_tokens(true)
+            .build();
+
+        let (_, session1) = engine
+            .login("rotate@example.com", password)
+            .await
+            .expect("first login should succeed");
+
+        let (_, session2) = engine
+            .login("rotate@example.com", password)
+            .await
+            .expect("second login should succeed");
+
+        assert_ne!(
+            session1.id(),
+            session2.id(),
+            "new session must have a different token"
+        );
+
+        let result = engine.validate_session(session1.id()).await.unwrap();
+        assert_eq!(
+            result, None,
+            "old session must be invalidated after re-login"
+        );
+
+        let result2 = engine.validate_session(session2.id()).await.unwrap();
+        assert_eq!(result2, Some(user));
+    }
+
+    /// Phase F: __Host- cookie prefix enforces host-only cookie rules.
+    #[test]
+    fn cookie_config_host_only_prefix_and_constraints() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            path: "/".into(),
+            domain: Some("example.com".into()),
+            secure: false,
+            http_only: true,
+            same_site: SameSite::Lax,
+            max_age_secs: Some(3600),
+            host_only: true,
+            expected_origins: None,
+        };
+
+        let session_id = SessionId::new("token-abc");
+        let header = config.build_set_cookie_header(&session_id);
+        assert!(
+            header.starts_with("__Host-sess="),
+            "__Host- prefix missing: {header}"
+        );
+        assert!(
+            !header.contains("Domain="),
+            "__Host- cookies must not have Domain: {header}"
+        );
+        assert!(
+            header.contains("; Secure"),
+            "__Host- cookies must have Secure: {header}"
+        );
+        assert!(
+            header.contains("Path=/"),
+            "__Host- cookies must have Path=/: {header}"
+        );
+
+        let delete = config.build_delete_cookie_header();
+        assert!(delete.starts_with("__Host-sess="));
+        assert!(!delete.contains("Domain="));
+    }
+
+    /// Phase F: `__Host-` cookies can be emitted and then extracted back from a
+    /// `Cookie` header, closing the round-trip bug where the server emitted
+    /// `__Host-session=...` but later looked for `session=...`.
+    #[test]
+    fn cookie_config_host_only_round_trip() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            path: "/".into(),
+            domain: None,
+            secure: true,
+            http_only: true,
+            same_site: SameSite::Lax,
+            max_age_secs: Some(3600),
+            host_only: true,
+            expected_origins: None,
+        };
+
+        let session_id = SessionId::new("token-abc");
+        let set_cookie = config.build_set_cookie_header(&session_id);
+        assert!(set_cookie.starts_with("__Host-sess=token-abc"));
+
+        let cookie_header = format!("foo=bar; {set_cookie}; baz=qux");
+        let extracted = config.extract_session_id(&cookie_header);
+        assert_eq!(extracted, Some(session_id));
+    }
+
+    /// Phase F: Origin validation rejects mismatched origins and accepts matching ones.
+    #[test]
+    fn cookie_config_origin_validation() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            path: "/".into(),
+            domain: None,
+            secure: true,
+            http_only: true,
+            same_site: SameSite::Lax,
+            max_age_secs: Some(3600),
+            host_only: false,
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+        };
+
+        assert!(matches!(
+            config.validate_origin(Some("https://app.example.com")),
+            OriginValidation::Valid
+        ));
+        assert!(matches!(
+            config.validate_origin(None),
+            OriginValidation::Valid
+        ));
+        assert!(matches!(
+            config.validate_origin(Some("https://evil.example.com")),
+            OriginValidation::Mismatch { .. }
+        ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_getters_reflect_builder_config() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(1234))
+            .sliding_window(Duration::from_secs(567))
+            .rotate_tokens(true)
+            .build();
+
+        assert_eq!(engine.session_ttl_secs(), 1234);
+        assert_eq!(engine.sliding_window_secs(), Some(567));
+        assert!(engine.rotate_tokens());
+        assert!(engine.user_store().find_by_id(&1).await.unwrap().is_none());
+        assert!(
+            engine
+                .session_store()
+                .find_session(&SessionId::new("x"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(engine.hasher().hash_password("x").is_ok());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_revoke_all_user_sessions() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "revoke_all_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 707,
+            name: "Revoke".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "revoke@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let (_, session1) = engine.login("revoke@example.com", password).await.unwrap();
+        let (_, session2) = engine.login("revoke@example.com", password).await.unwrap();
+
+        engine.revoke_all_user_sessions(&user.id()).await.unwrap();
+
+        assert_eq!(engine.validate_session(session1.id()).await.unwrap(), None);
+        assert_eq!(engine.validate_session(session2.id()).await.unwrap(), None);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_list_user_sessions_returns_active_sessions() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "list_sessions_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 808,
+            name: "Lister".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "lister@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let (_, session1) = engine.login("lister@example.com", password).await.unwrap();
+        let (_, session2) = engine.login("lister@example.com", password).await.unwrap();
+
+        let sessions = engine.list_user_sessions(&user.id()).await.unwrap();
+        assert_eq!(sessions.len(), 2, "must list both active sessions");
+
+        // Sessions in the store use storage-form ids (sha256(raw)). Validate both to confirm they work.
+        let valid1 = engine.validate_session(session1.id()).await.unwrap();
+        let valid2 = engine.validate_session(session2.id()).await.unwrap();
+        assert_eq!(valid1, Some(user.clone()));
+        assert_eq!(valid2, Some(user.clone()));
+
+        engine.revoke_all_user_sessions(&user.id()).await.unwrap();
+
+        let after_revoke = engine.list_user_sessions(&user.id()).await.unwrap();
+        assert!(
+            after_revoke.is_empty(),
+            "sessions must be cleared after revoke_all"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_revoke_session_returns_true_for_existing() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "revoke_one_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 909,
+            name: "Revoker".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "revoker@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let (_, session) = engine.login("revoker@example.com", password).await.unwrap();
+        let revoked = engine.revoke_session(session.id()).await.unwrap();
+        assert!(revoked, "existing session should be revoked");
+
+        let not_found = engine.revoke_session(session.id()).await.unwrap();
+        assert!(!not_found, "already-revoked session should return false");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_identifier_exists_returns_false_for_unknown_identifier() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        assert!(
+            !engine
+                .identifier_exists("nonexistent@example.com")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_identifier_exists_returns_true_for_existing_user() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "exists_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 601,
+            name: "Exists".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "exists@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        assert!(
+            engine
+                .identifier_exists("exists@example.com")
+                .await
+                .unwrap()
+        );
+        assert!(!engine.identifier_exists("other@example.com").await.unwrap());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_on_sign_in_hook_fires() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "hook_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 801,
+            name: "Hook".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "hook@example.com", &password_hash);
+
+        let counter = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .on_sign_in({
+                let counter = counter.clone();
+                move |u| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    assert_eq!(u.id(), 801);
+                }
+            })
+            .build();
+
+        let _ = engine.login("hook@example.com", password).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Login failure must not fire the hook.
+        let _ = engine.login("hook@example.com", "wrong").await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_on_sign_out_hook_fires() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "hook_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 802,
+            name: "Hook".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "hookout@example.com", &password_hash);
+
+        let counter = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .on_sign_out({
+                let counter = counter.clone();
+                move |u| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    assert_eq!(u.id(), 802);
+                }
+            })
+            .build();
+
+        let (_, session) = engine.login("hookout@example.com", password).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+
+        engine.logout(session.id()).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Logging out a non-existent session must not fire the hook.
+        let _ = engine.logout(session.id()).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_on_session_validated_hook_fires() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "hook_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 803,
+            name: "Hook".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "hookval@example.com", &password_hash);
+
+        let counter = std::sync::Arc::new(AtomicUsize::new(0));
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .on_session_validated({
+                let counter = counter.clone();
+                move |u| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    assert_eq!(u.id(), 803);
+                }
+            })
+            .build();
+
+        let (_, session) = engine.login("hookval@example.com", password).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+
+        engine.validate_session(session.id()).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Every successful validation fires the hook.
+        engine.validate_session(session.id()).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+
+        engine.logout(session.id()).await.unwrap();
+
+        // Invalid session must not fire the hook.
+        let _ = engine.validate_session(session.id()).await.unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_panicking_hook_does_not_break_auth_flow() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "hook_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 804,
+            name: "Hook".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "hookpanic@example.com", &password_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .on_sign_in(|_| panic!("sign_in hook must not break auth"))
+            .on_sign_out(|_| panic!("sign_out hook must not break auth"))
+            .on_session_validated(|_| panic!("session_validated hook must not break auth"))
+            .build();
+
+        // Login must succeed despite panicking hook.
+        let (_, session) = engine
+            .login("hookpanic@example.com", password)
+            .await
+            .unwrap();
+
+        // Validation must succeed despite panicking hook.
+        engine.validate_session(session.id()).await.unwrap();
+
+        // Logout must succeed despite panicking hook.
+        engine.logout(session.id()).await.unwrap();
+    }
+
+    #[test]
+    fn auth_provider_creates_context() {
+        use ::dioxus::prelude::*;
+
+        let mut vdom = VirtualDom::new(|| {
+            let _auth_signal = use_signal(|| AuthStatus::<TestUser>::Loading);
+            rsx! {
+                AuthProvider::<TestUser> {
+                    initial_status: Some(AuthStatus::Loading),
+                    div {}
+                }
+            }
+        });
+        vdom.rebuild_in_place();
+    }
+
+    #[test]
+    fn samesite_as_str_matches_variants() {
+        assert_eq!(SameSite::Lax.as_str(), "Lax");
+        assert_eq!(SameSite::Strict.as_str(), "Strict");
+        assert_eq!(SameSite::None.as_str(), "None");
     }
 }

@@ -1,9 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use dioxus_auth::{
-    AuthEngine, AuthUser, MemoryStore, Argon2Hasher, UserStore, PasswordHasher,
-};
+use dioxus_auth::{Argon2Hasher, AuthEngine, AuthUser, MemoryStore, PasswordHasher, UserStore};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct StressUser {
@@ -45,7 +43,7 @@ async fn concurrency_stress_1000_tasks_100_sessions() {
 
     for i in 0..NUM_USERS {
         let (user, hash) = seeded_user(i as u64, &format!("user{i}@test.com"), "stress_pass");
-        store.insert_user_with_password(user, &format!("user{i}@test.com"), &hash);
+        store.insert_user_with_password(user, format!("user{i}@test.com"), &hash);
     }
 
     let engine = AuthEngine::builder(store.clone(), store.clone())
@@ -78,7 +76,10 @@ async fn concurrency_stress_1000_tasks_100_sessions() {
                 }
 
                 if task_idx % 3 == 0 {
-                    engine.logout(&raw_id).await.expect("logout should not error");
+                    engine
+                        .logout(&raw_id)
+                        .await
+                        .expect("logout should not error");
                     let post = engine
                         .validate_session(&raw_id)
                         .await
@@ -135,7 +136,10 @@ async fn concurrent_session_validation_no_corruption() {
                     .validate_session(&raw_id)
                     .await
                     .expect("validate should not error");
-                assert!(result.is_some(), "session must remain valid under concurrency");
+                assert!(
+                    result.is_some(),
+                    "session must remain valid under concurrency"
+                );
             }
         }));
     }

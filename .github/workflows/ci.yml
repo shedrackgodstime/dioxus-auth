@@ -4,29 +4,66 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   test:
-    name: Format, lint, and test
+    name: Test
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - 1.85.0
+        features:
+          - "--features dioxus"
+          - "--features dioxus-fullstack"
+          - "--features axum"
+          - "--no-default-features"
+        include:
+          - rust: stable
+            features: "--all-targets --features dioxus"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          toolchain: ${{ matrix.rust }}
+      - name: Check format
+        run: cargo fmt -- --check
+      - name: Check clippy
+        run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
+      - name: Run tests
+        run: cargo test --all-targets ${{ matrix.features }}
+      - name: Run doc tests
+        if: matrix.features == '--all-targets --features dioxus' || matrix.features == '--all-targets --features dioxus-fullstack'
+        run: cargo test --doc ${{ matrix.features }}
 
-      - name: Check formatting
-        run: cargo fmt --check
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Run cargo audit
+        run: cargo audit
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+      - name: Run cargo deny
+        run: cargo deny check
 
-      - name: Lint
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Test
-        run: cargo test
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate docs
+        run: cargo doc --no-deps --features dioxus
+      - name: Check doc links
+        run: cargo doc --no-deps --features dioxus --check

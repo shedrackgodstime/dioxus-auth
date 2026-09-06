@@ -1,0 +1,8 @@
+[application]
+name = "dioxus-auth-sqlite-demo"
+
+[web.app]
+path = "target/dx/dioxus-auth-sqlite-demo/"
+
+[web.watcher]
+index_on_restart = true
