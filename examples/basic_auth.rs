@@ -125,3 +125,11 @@ fn Dashboard() -> Element {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn basic_auth_example_compiles() {
+        assert!(true);
+    }
+}

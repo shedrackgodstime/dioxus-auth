@@ -127,11 +127,17 @@ async fn server_auth_context_flow_external_test() {
 
     // 2. Validate request with cookie header
     let cookie_header = format!("other_cookie=123; {set_cookie}");
-    let current_user = server.current_user(Some(&cookie_header)).await.unwrap();
+    let current_user = server
+        .current_user(Some(&cookie_header), None, None)
+        .await
+        .unwrap();
     assert_eq!(current_user, Some(user.clone()));
 
     // 3. Require user
-    let required = server.require_user(Some(&cookie_header)).await.unwrap();
+    let required = server
+        .require_user(Some(&cookie_header), None, None)
+        .await
+        .unwrap();
     assert_eq!(required, user);
 
     // 4. Logout via server context
@@ -140,6 +146,9 @@ async fn server_auth_context_flow_external_test() {
     assert!(clear_cookie.contains("Max-Age=0"));
 
     // 5. Subsequent request is unauthenticated
-    let after_logout = server.current_user(Some(&cookie_header)).await.unwrap();
+    let after_logout = server
+        .current_user(Some(&cookie_header), None, None)
+        .await
+        .unwrap();
     assert_eq!(after_logout, None);
 }

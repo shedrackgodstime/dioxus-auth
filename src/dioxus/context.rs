@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 
 use crate::session::AuthStatus;
+
+use crate::transport::TokenStorage;
 
 /// Handle to the reactive authentication state in the Dioxus component tree.
 pub struct Auth<User: 'static> {
@@ -84,7 +88,7 @@ pub fn use_auth<User: Clone + 'static>() -> Auth<User> {
 /// Drive the reactive auth status from a restore result.
 ///
 /// Intended to be paired with `use_resource` or `use_server_future` inside a child
-/// component of [`AuthProvider`]. The hook only mutates auth state while it is still
+/// component of `AuthProvider`. The hook only mutates auth state while it is still
 /// `Loading`, so a manual login/logout elsewhere is never overwritten by a late or
 /// failed restore.
 ///
@@ -106,5 +110,30 @@ where
         None => {}
         Some(Ok(Some(user))) => auth.set_user(user),
         Some(Ok(None)) | Some(Err(_)) => auth.set_status(AuthStatus::Unauthenticated),
+    }
+}
+
+/// Access the optional [`TokenStorage`] provided by [`AuthProvider`].
+///
+/// Returns `None` if the app did not provide a storage backend.
+pub fn use_token_storage() -> Option<Arc<dyn TokenStorage>> {
+    use_context::<Option<Arc<dyn TokenStorage>>>()
+}
+
+/// Persist a raw session token to the current [`TokenStorage`], if available.
+///
+/// Intended to be called after a successful login. Silently ignores errors.
+pub fn persist_token(raw_token: &str) {
+    if let Some(storage) = use_token_storage() {
+        let _ = storage.save(raw_token);
+    }
+}
+
+/// Clear the current [`TokenStorage`], if available.
+///
+/// Intended to be called after logout. Silently ignores errors.
+pub fn clear_persisted_token() {
+    if let Some(storage) = use_token_storage() {
+        storage.clear();
     }
 }

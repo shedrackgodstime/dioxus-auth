@@ -34,4 +34,10 @@ pub trait SessionStore<UserId>: Send + Sync + 'static {
         &self,
         user_id: &UserId,
     ) -> impl std::future::Future<Output = AuthResult<()>> + Send;
+
+    /// List all active sessions belonging to a user.
+    fn list_user_sessions(
+        &self,
+        user_id: &UserId,
+    ) -> impl std::future::Future<Output = AuthResult<Vec<Session<UserId>>>> + Send;
 }

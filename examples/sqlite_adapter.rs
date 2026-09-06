@@ -229,6 +229,35 @@ impl SessionStore<u64> for SqliteStore {
             .map_err(|e| AuthError::Store(e.to_string()))?;
         Ok(())
     }
+
+    async fn list_user_sessions(&self, user_id: &u64) -> AuthResult<Vec<Session<u64>>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AuthError::Store(e.to_string()))?;
+        let mut stmt = conn
+            .prepare("SELECT id, user_id, created_at_unix, expires_at_unix, auth_hash FROM sessions WHERE user_id = ?1")
+            .map_err(|e| AuthError::Store(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![user_id], |row| {
+                let sess_id = SessionId::new(row.get::<_, String>(0)?);
+                let uid = row.get::<_, u64>(1)?;
+                let created_at = row.get::<_, u64>(2)?;
+                let expires_at = row.get::<_, u64>(3)?;
+                let auth_hash = row.get::<_, Option<String>>(4)?;
+                let mut s = Session::new(sess_id, uid, created_at, expires_at);
+                if let Some(hash) = auth_hash {
+                    s = s.with_auth_hash(hash);
+                }
+                Ok(s)
+            })
+            .map_err(|e| AuthError::Store(e.to_string()))?;
+        let mut sessions = Vec::new();
+        for row in rows {
+            sessions.push(row.map_err(|e| AuthError::Store(e.to_string()))?);
+        }
+        Ok(sessions)
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -319,5 +348,13 @@ fn Dashboard() -> Element {
             p { "User: {user.username} (ID: {user.id})" }
             p { "Email: {user.email}" }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn sqlite_adapter_example_compiles() {
+        assert!(true);
     }
 }

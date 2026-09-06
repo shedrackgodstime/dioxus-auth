@@ -5,3 +5,6 @@ mod user;
 pub use memory::MemoryStore;
 pub use session::SessionStore;
 pub use user::{PasswordUserStore, UserStore};
+
+#[cfg(any(test, doc))]
+pub mod tests;

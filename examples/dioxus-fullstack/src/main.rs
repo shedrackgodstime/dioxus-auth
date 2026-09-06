@@ -1,15 +1,15 @@
 use dioxus::prelude::*;
 use dioxus_auth::{
-    require_auth, use_auth, use_auth_restore, AuthProvider, AuthUser, RouteGate, ServerAuthContext,
-    SignedIn, SignedOut,
+    fullstack_server_fns, require_auth, use_auth, use_auth_restore, use_token_storage, AuthProvider,
+    AuthUser, RouteGate, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[cfg(feature = "server")]
 use {
-    dioxus::fullstack::FullstackContext,
     dioxus_auth::{Argon2Hasher, AuthEngine, CookieConfig, MemoryStore, PasswordHasher},
-    std::sync::{Arc, LazyLock},
+    std::sync::LazyLock,
     std::time::Duration,
 };
 
@@ -64,96 +64,10 @@ static SERVER_STATE: LazyLock<(Arc<MemoryStore<AppUser>>, DemoEngine, CookieConf
 // Dioxus Server Functions (#[server])
 // ---------------------------------------------------------------------------
 
-/// Extract the raw `Cookie` header string from the current fullstack request, if any.
-#[cfg(feature = "server")]
-fn read_cookie_header() -> Option<String> {
-    let ctx = FullstackContext::current()?;
-    let parts = ctx.parts_mut();
-    parts
-        .headers
-        .get(http::header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-}
-
-/// Server-side login: verifies credentials with Argon2id, mints a session,
-/// and emits a `Set-Cookie` header for the client.
-#[server]
-pub async fn login_server(
-    email: String,
-    password: String,
-) -> Result<AppUser, ServerFnError> {
-    #[cfg(feature = "server")]
-    {
-        let (_, engine, cookie_config) = &*SERVER_STATE;
-        let server_ctx = ServerAuthContext::new(engine, cookie_config);
-
-        match server_ctx.login(&email, &password).await {
-            Ok((user, set_cookie)) => {
-                if let Some(ctx) = FullstackContext::current() {
-                    let value = http::HeaderValue::from_str(&set_cookie)
-                        .map_err(|e| ServerFnError::new(format!("cookie error: {e}")))?;
-                    ctx.add_response_header(http::header::SET_COOKIE, value);
-                }
-                Ok(user)
-            }
-            Err(err) => Err(ServerFnError::new(format!("login failed: {err}"))),
-        }
-    }
-    #[cfg(not(feature = "server"))]
-    {
-        let _ = (email, password);
-        Err(ServerFnError::new("Server only"))
-    }
-}
-
-/// Server-side logout: revokes the active session and emits a delete-cookie header.
-#[server]
-pub async fn logout_server() -> Result<(), ServerFnError> {
-    #[cfg(feature = "server")]
-    {
-        let (_, engine, cookie_config) = &*SERVER_STATE;
-        let server_ctx = ServerAuthContext::new(engine, cookie_config);
-
-        let cookie_header = read_cookie_header();
-        if let Some(session_id) = server_ctx.extract_session_id(cookie_header.as_deref()) {
-            let delete_cookie = server_ctx
-                .logout(&session_id)
-                .await
-                .map_err(|e| ServerFnError::new(format!("logout failed: {e}")))?;
-            if let Some(ctx) = FullstackContext::current() {
-                let value = http::HeaderValue::from_str(&delete_cookie)
-                    .map_err(|e| ServerFnError::new(format!("cookie error: {e}")))?;
-                ctx.add_response_header(http::header::SET_COOKIE, value);
-            }
-        }
-
-        Ok(())
-    }
-    #[cfg(not(feature = "server"))]
-    {
-        Ok(())
-    }
-}
-
-/// Server-side restore: reads the session cookie and returns the current user, if any.
-#[server]
-pub async fn get_current_user() -> Result<Option<AppUser>, ServerFnError> {
-    #[cfg(feature = "server")]
-    {
-        let (_, engine, cookie_config) = &*SERVER_STATE;
-        let server_ctx = ServerAuthContext::new(engine, cookie_config);
-
-        let cookie_header = read_cookie_header();
-        server_ctx
-            .current_user(cookie_header.as_deref())
-            .await
-            .map_err(|e| ServerFnError::new(format!("restore failed: {e}")))
-    }
-    #[cfg(not(feature = "server"))]
-    {
-        Ok(None)
-    }
+fullstack_server_fns! {
+    AppUser,
+    &SERVER_STATE.1,
+    &SERVER_STATE.2,
 }
 
 /// Server-side protected data endpoint. Returns 401 (Unauthenticated) without a valid session.
@@ -162,11 +76,11 @@ pub async fn get_secret_metrics() -> Result<Vec<String>, ServerFnError> {
     #[cfg(feature = "server")]
     {
         let (_, engine, cookie_config) = &*SERVER_STATE;
-        let server_ctx = ServerAuthContext::new(engine, cookie_config);
+        let server_ctx = ServerAuthContext::from_request(engine, cookie_config)
+            .ok_or_else(|| ServerFnError::new("not in a request context"))?;
 
-        let cookie_header = read_cookie_header();
         let _user = server_ctx
-            .require_user(cookie_header.as_deref())
+            .require_user_from_request()
             .await
             .map_err(|e| ServerFnError::new(format!("unauthorized: {e}")))?;
 
@@ -208,14 +122,16 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    rsx! {
-        document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS }
-        AuthProvider::<AppUser> {
-            AuthRestore {}
-            Router::<Route> {}
+        rsx! {
+            document::Link { rel: "icon", href: FAVICON }
+            document::Link { rel: "stylesheet", href: MAIN_CSS }
+            AuthProvider::<AppUser> {
+                initial_status: None,
+                token_storage: TokenStorageRef::new(Arc::new(dioxus_auth::MemoryTokenStorage::default())),
+                AuthRestore {}
+                Router::<Route> {}
+            }
         }
-    }
 }
 
 /// Child of `AuthProvider` that drives the 3-state from a `get_current_user` resource.
@@ -262,6 +178,9 @@ fn Navbar() -> Element {
                             let nav = nav;
                             spawn(async move {
                                 logout_server().await.ok();
+                                if let Some(storage) = use_token_storage() {
+                                    storage.clear();
+                                }
                                 auth.logout();
                                 nav.push(Route::Home {});
                             });
@@ -331,7 +250,10 @@ fn Login() -> Element {
             error_msg.set(None);
 
             match login_server(em, pw).await {
-                Ok(user) => {
+                Ok((user, raw_token)) => {
+                    if let Some(storage) = use_token_storage() {
+                        let _ = storage.save(&raw_token);
+                    }
                     auth.set_user(user);
                     nav.push(Route::Dashboard {});
                 }
@@ -449,12 +371,48 @@ fn Dashboard() -> Element {
 #[cfg(all(test, feature = "server"))]
 mod tests {
     use super::*;
+    use dioxus_auth::SessionId;
 
     #[tokio::test]
-    async fn test_login_server_credentials() {
-        let res = login_server("admin@example.com".into(), "password123".into()).await;
-        assert!(res.is_ok(), "login_server failed: {:?}", res.err());
-        let user = res.unwrap();
+    async fn test_login_and_current_user_flow() {
+        let (_, engine, cookie_config) = &*SERVER_STATE;
+        let server_ctx = ServerAuthContext::new(engine, cookie_config);
+
+        let (user, raw_token) = server_ctx
+            .login_and_set_cookie("admin@example.com", "password123")
+            .await
+            .expect("login must succeed");
         assert_eq!(user.email, "admin@example.com");
+
+        let cookie_header = format!("dioxus_session={raw_token}");
+        let current = server_ctx
+            .current_user(Some(&cookie_header), None, None)
+            .await
+            .expect("current_user must not error");
+        assert_eq!(current, Some(user));
+    }
+
+    #[tokio::test]
+    async fn test_logout_revokes_session() {
+        let (_, engine, cookie_config) = &*SERVER_STATE;
+        let server_ctx = ServerAuthContext::new(engine, cookie_config);
+
+        let (_, raw_token) = server_ctx
+            .login("admin@example.com", "password123")
+            .await
+            .expect("login must succeed");
+
+        let session_id = SessionId::new(&raw_token);
+        server_ctx
+            .logout(&session_id)
+            .await
+            .expect("logout must succeed");
+
+        let cookie_header = format!("dioxus_session={raw_token}");
+        let after = server_ctx
+            .current_user(Some(&cookie_header), None, None)
+            .await
+            .expect("current_user must not error");
+        assert_eq!(after, None);
     }
 }

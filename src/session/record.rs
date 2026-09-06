@@ -8,6 +8,8 @@ pub struct Session<UserId> {
     created_at_unix: u64,
     expires_at_unix: u64,
     auth_hash: Option<String>,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
 }
 
 impl<UserId> Session<UserId> {
@@ -19,12 +21,26 @@ impl<UserId> Session<UserId> {
             created_at_unix,
             expires_at_unix,
             auth_hash: None,
+            ip_address: None,
+            user_agent: None,
         }
     }
 
     /// Attach a security hash (e.g. password hash or token version) for automatic revocation upon password change.
     pub fn with_auth_hash(mut self, auth_hash: impl Into<String>) -> Self {
         self.auth_hash = Some(auth_hash.into());
+        self
+    }
+
+    /// Attach the client IP address for session activity tracking.
+    pub fn with_ip_address(mut self, ip_address: impl Into<String>) -> Self {
+        self.ip_address = Some(ip_address.into());
+        self
+    }
+
+    /// Attach the client user agent for session activity tracking.
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
@@ -53,8 +69,27 @@ impl<UserId> Session<UserId> {
         self.auth_hash.as_deref()
     }
 
+    /// Access the optional client IP address.
+    pub fn ip_address(&self) -> Option<&str> {
+        self.ip_address.as_deref()
+    }
+
+    /// Access the optional client user agent.
+    pub fn user_agent(&self) -> Option<&str> {
+        self.user_agent.as_deref()
+    }
+
     /// Check if the session is expired relative to a given unix timestamp.
     pub fn is_expired_at(&self, unix_timestamp: u64) -> bool {
         unix_timestamp >= self.expires_at_unix
+    }
+
+    /// Extend the session expiry by the given TTL from the current time.
+    ///
+    /// This is used for sliding TTL — on each validated access, the session
+    /// lifetime is extended by the configured TTL.
+    pub fn extend_expiry(mut self, now: u64, ttl_secs: u64) -> Self {
+        self.expires_at_unix = now + ttl_secs;
+        self
     }
 }

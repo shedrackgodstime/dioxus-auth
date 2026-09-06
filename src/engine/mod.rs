@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 mod auth_engine;
 mod builder;
 

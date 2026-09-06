@@ -47,14 +47,7 @@ impl TokenStorage for FileTokenStorage {
                     Some(trimmed)
                 }
             }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => {
-                eprintln!(
-                    "[dioxus-auth] FileTokenStorage::load failed for {}: {e}",
-                    self.path.display()
-                );
-                None
-            }
+            Err(_) => None,
         }
     }
 
@@ -79,16 +72,7 @@ impl TokenStorage for FileTokenStorage {
     }
 
     fn clear(&self) {
-        match fs::remove_file(&self.path) {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => {
-                eprintln!(
-                    "[dioxus-auth] FileTokenStorage::clear failed for {}: {e}",
-                    self.path.display()
-                );
-            }
-        }
+        let _ = fs::remove_file(&self.path);
     }
 }
 
@@ -114,4 +98,47 @@ fn write_secret(path: &Path, contents: &str) -> io::Result<()> {
 #[cfg(not(unix))]
 fn write_secret(path: &Path, contents: &str) -> io::Result<()> {
     fs::write(path, contents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_returns_none_for_missing_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "dioxus_auth_file_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("does_not_exist.token");
+
+        let storage = FileTokenStorage::new(&path);
+        assert_eq!(storage.load(), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_is_idempotent() {
+        let dir = std::env::temp_dir().join(format!(
+            "dioxus_auth_file_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("clear_idempotent.token");
+
+        let storage = FileTokenStorage::new(&path);
+        storage.save("token").unwrap();
+        storage.clear();
+        storage.clear(); // second clear must not panic
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

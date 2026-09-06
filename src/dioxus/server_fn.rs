@@ -1,6 +1,6 @@
 use crate::engine::AuthEngine;
 use crate::error::{AuthError, AuthResult};
-use crate::security::CookieConfig;
+use crate::security::{CookieConfig, OriginValidation};
 use crate::session::SessionId;
 use crate::storage::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
@@ -16,6 +16,9 @@ where
 {
     engine: &'a AuthEngine<U, S>,
     cookie_config: &'a CookieConfig,
+    cookie_header: Option<String>,
+    origin_header: Option<String>,
+    authorization_header: Option<String>,
 }
 
 impl<'a, U, S> ServerAuthContext<'a, U, S>
@@ -28,7 +31,46 @@ where
         Self {
             engine,
             cookie_config,
+            cookie_header: None,
+            origin_header: None,
+            authorization_header: None,
         }
+    }
+
+    /// Create a `ServerAuthContext` from the current Dioxus fullstack request.
+    ///
+    /// Automatically extracts `Cookie`, `Origin`, and `Authorization` headers from the incoming
+    /// request. Returns `None` if called outside a `#[server]` function context.
+    #[cfg(feature = "dioxus-fullstack")]
+    pub fn from_request(
+        engine: &'a AuthEngine<U, S>,
+        cookie_config: &'a CookieConfig,
+    ) -> Option<Self> {
+        use dioxus::fullstack::FullstackContext;
+        let ctx = FullstackContext::current()?;
+        let parts = ctx.parts_mut();
+        let cookie_header = parts
+            .headers
+            .get(http::header::COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let origin_header = parts
+            .headers
+            .get(http::header::ORIGIN)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let authorization_header = parts
+            .headers
+            .get(http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        Some(Self {
+            engine,
+            cookie_config,
+            cookie_header,
+            origin_header,
+            authorization_header,
+        })
     }
 
     /// Access the underlying [`AuthEngine`].
@@ -41,31 +83,121 @@ where
         self.cookie_config
     }
 
+    /// Return the raw `Cookie` header value, if one was extracted from the request.
+    pub fn cookie_header(&self) -> Option<&str> {
+        self.cookie_header.as_deref()
+    }
+
+    /// Return the raw `Origin` header value, if one was extracted from the request.
+    pub fn origin_header(&self) -> Option<&str> {
+        self.origin_header.as_deref()
+    }
+
+    /// Return the raw `Authorization` header value, if one was extracted from the request.
+    pub fn authorization_header(&self) -> Option<&str> {
+        self.authorization_header.as_deref()
+    }
+
+    /// Extract a [`SessionId`] from the stored `Cookie` header.
+    pub fn session_id(&self) -> Option<SessionId> {
+        self.cookie_header
+            .as_deref()
+            .and_then(|h| self.cookie_config.extract_session_id(h))
+    }
+
     /// Extract a [`SessionId`] from an incoming HTTP `Cookie` header string.
     pub fn extract_session_id(&self, cookie_header: Option<&str>) -> Option<SessionId> {
-        let header = cookie_header?;
+        let header = cookie_header.or(self.cookie_header.as_deref())?;
         self.cookie_config.extract_session_id(header)
     }
 
-    /// Authenticate the incoming request by checking its cookie header.
+    /// Authenticate the incoming request by checking its cookie and/or bearer token.
+    ///
+    /// Validates the `Origin` header for CSRF protection when cookie credentials
+    /// are used and `expected_origins` is configured on [`CookieConfig`].
+    ///
+    /// Bearer tokens take precedence over cookies (matching the client-side
+    /// `extract_session_token` contract). Bearer credentials bypass CSRF/Origin
+    /// checks because they are not susceptible to cross-site request forgery.
     ///
     /// Returns `Ok(Some(user))` if a valid, unexpired session is present,
-    /// or `Ok(None)` if no session cookie exists or the session has expired/been revoked.
-    pub async fn current_user(&self, cookie_header: Option<&str>) -> AuthResult<Option<U::User>> {
-        let session_id = match self.extract_session_id(cookie_header) {
-            Some(id) => id,
-            None => return Ok(None),
+    /// or `Ok(None)` if no session token exists or the session has expired/been revoked.
+    ///
+    /// Falls back to the stored request headers if the explicit arguments are `None`.
+    #[must_use = "use the authenticated user or handle the error"]
+    pub async fn current_user(
+        &self,
+        cookie_header: Option<&str>,
+        origin_header: Option<&str>,
+        authorization_header: Option<&str>,
+    ) -> AuthResult<Option<U::User>> {
+        let cookie_header = cookie_header.or(self.cookie_header.as_deref());
+        let origin_header = origin_header.or(self.origin_header.as_deref());
+        let authorization_header = authorization_header.or(self.authorization_header.as_deref());
+
+        let session_id = if let Some(auth_header) = authorization_header {
+            if let Some(token) = crate::transport::extract_session_token(
+                Some(auth_header),
+                cookie_header,
+                self.cookie_config.name.as_str(),
+            ) {
+                SessionId::new(token)
+            } else {
+                return Ok(None);
+            }
+        } else if let Some(cookie) = cookie_header {
+            match self.cookie_config.extract_session_id(cookie) {
+                Some(id) => id,
+                None => return Ok(None),
+            }
+        } else {
+            return Ok(None);
         };
 
+        let origin_validation = self.cookie_config.validate_origin(origin_header);
+        if matches!(origin_validation, OriginValidation::Mismatch { .. }) {
+            return Err(AuthError::Csrf);
+        }
+
         self.engine.validate_session(&session_id).await
+    }
+
+    /// Authenticate using the headers stored by [`from_request`](Self::from_request).
+    ///
+    /// Requires the `dioxus-fullstack` feature.
+    #[cfg(feature = "dioxus-fullstack")]
+    pub async fn current_user_from_request(&self) -> AuthResult<Option<U::User>> {
+        self.current_user(
+            self.cookie_header.as_deref(),
+            self.origin_header.as_deref(),
+            self.authorization_header.as_deref(),
+        )
+        .await
     }
 
     /// Require an authenticated user from the incoming request.
     ///
     /// Returns `Ok(user)` on success, or `Err(AuthError::Unauthenticated)`
     /// if the session is missing, expired, or invalid.
-    pub async fn require_user(&self, cookie_header: Option<&str>) -> AuthResult<U::User> {
-        self.current_user(cookie_header)
+    ///
+    /// Falls back to the stored request headers if the explicit arguments are `None`.
+    pub async fn require_user(
+        &self,
+        cookie_header: Option<&str>,
+        origin_header: Option<&str>,
+        authorization_header: Option<&str>,
+    ) -> AuthResult<U::User> {
+        self.current_user(cookie_header, origin_header, authorization_header)
+            .await?
+            .ok_or(AuthError::Unauthenticated)
+    }
+
+    /// Require an authenticated user using the headers stored by [`from_request`](Self::from_request).
+    ///
+    /// Requires the `dioxus-fullstack` feature.
+    #[cfg(feature = "dioxus-fullstack")]
+    pub async fn require_user_from_request(&self) -> AuthResult<U::User> {
+        self.current_user_from_request()
             .await?
             .ok_or(AuthError::Unauthenticated)
     }
@@ -94,10 +226,47 @@ where
 {
     /// Authenticate credentials, create a new session in storage, and return
     /// the authenticated user along with the `Set-Cookie` HTTP header value.
+    #[must_use = "the login result must be used to set the session cookie"]
     pub async fn login(&self, identifier: &str, password: &str) -> AuthResult<(U::User, String)> {
         let (user, session) = self.engine.login(identifier, password).await?;
         let set_cookie_header = self.cookie_config.build_set_cookie_header(session.id());
         Ok((user, set_cookie_header))
+    }
+
+    /// Authenticate credentials, create a new session, automatically set the session
+    /// cookie on the response, and return the authenticated user along with the raw
+    /// session token for client-side persistence.
+    ///
+    /// Requires the `dioxus-fullstack` feature.
+    #[cfg(feature = "dioxus-fullstack")]
+    pub async fn login_and_set_cookie(
+        &self,
+        identifier: &str,
+        password: &str,
+    ) -> AuthResult<(U::User, String)> {
+        let (user, session) = self.engine.login(identifier, password).await?;
+        let cookie_header = self.cookie_config.build_set_cookie_header(session.id());
+        if let Some(ctx) = dioxus::fullstack::FullstackContext::current() {
+            let value = http::HeaderValue::from_str(&cookie_header)
+                .map_err(|e| AuthError::Store(format!("invalid cookie header: {e}")))?;
+            ctx.add_response_header(http::header::SET_COOKIE, value);
+        }
+        Ok((user, session.id().as_str().to_string()))
+    }
+
+    /// Invalidate the active session and automatically clear the session cookie on the response.
+    ///
+    /// Requires the `dioxus-fullstack` feature.
+    #[cfg(feature = "dioxus-fullstack")]
+    pub async fn logout_and_clear_cookie(&self, session_id: &SessionId) -> AuthResult<()> {
+        self.logout(session_id).await?;
+        let cookie_header = self.cookie_config.build_delete_cookie_header();
+        if let Some(ctx) = dioxus::fullstack::FullstackContext::current() {
+            let value = http::HeaderValue::from_str(&cookie_header)
+                .map_err(|e| AuthError::Store(format!("invalid cookie header: {e}")))?;
+            ctx.add_response_header(http::header::SET_COOKIE, value);
+        }
+        Ok(())
     }
 }
 
@@ -162,20 +331,20 @@ mod tests {
         // 2. Extract session and authenticate request
         let incoming_cookie_header = format!("foo=bar; {set_cookie}; baz=qux");
         let current = server_ctx
-            .current_user(Some(&incoming_cookie_header))
+            .current_user(Some(&incoming_cookie_header), None, None)
             .await
             .unwrap();
         assert_eq!(current, Some(user.clone()));
 
         // 3. Require user succeeds
         let required = server_ctx
-            .require_user(Some(&incoming_cookie_header))
+            .require_user(Some(&incoming_cookie_header), None, None)
             .await
             .unwrap();
         assert_eq!(required, user);
 
         // 4. Require user fails on empty/invalid cookie
-        let err = server_ctx.require_user(Some("foo=bar")).await;
+        let err = server_ctx.require_user(Some("foo=bar"), None, None).await;
         assert_eq!(err.unwrap_err(), AuthError::Unauthenticated);
 
         // 5. Logout revokes session and generates delete cookie header
@@ -187,9 +356,121 @@ mod tests {
 
         // 6. Validating now returns None
         let after_logout = server_ctx
-            .current_user(Some(&incoming_cookie_header))
+            .current_user(Some(&incoming_cookie_header), None, None)
             .await
             .unwrap();
         assert_eq!(after_logout, None);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn server_auth_context_rejects_mismatched_origin() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "hunter2_secure";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "bob@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "bob@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+
+        // Login to get a valid session
+        let (_, set_cookie) = server_ctx.login("bob@example.com", pass).await.unwrap();
+        let incoming_cookie_header = format!("foo=bar; {set_cookie}");
+
+        // Mismatched Origin should be rejected with Csrf error
+        let err = server_ctx
+            .current_user(
+                Some(&incoming_cookie_header),
+                Some("https://evil.example.com"),
+                None,
+            )
+            .await;
+        assert_eq!(err.unwrap_err(), AuthError::Csrf);
+
+        // Missing Origin should be allowed (browsers omit it for same-origin GETs)
+        let ok = server_ctx
+            .current_user(Some(&incoming_cookie_header), None, None)
+            .await
+            .unwrap();
+        assert_eq!(ok, Some(user.clone()));
+
+        // Matching Origin should be allowed
+        let ok2 = server_ctx
+            .current_user(
+                Some(&incoming_cookie_header),
+                Some("https://app.example.com"),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(ok2, Some(user));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn server_auth_context_authenticates_bearer_token() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "bearer_test_pass";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "bearer@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "bearer@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+
+        // Login to get a valid session
+        let (_, session) = engine.login("bearer@example.com", pass).await.unwrap();
+        let raw_token = session.id().as_str();
+
+        // Authenticate via Authorization: Bearer header
+        let auth_header = format!("Bearer {raw_token}");
+        let current = server_ctx
+            .current_user(None, None, Some(&auth_header))
+            .await
+            .unwrap();
+        assert_eq!(current, Some(user.clone()));
+
+        // Bearer wins over cookie when both are present
+        let cookie_header = "dioxus_session=wrong_token; other=val".to_string();
+        let current_both = server_ctx
+            .current_user(Some(&cookie_header), None, Some(&auth_header))
+            .await
+            .unwrap();
+        assert_eq!(current_both, Some(user));
+
+        // Invalid bearer token returns None
+        let bad_auth = server_ctx
+            .current_user(None, None, Some("Bearer invalid_token"))
+            .await
+            .unwrap();
+        assert_eq!(bad_auth, None);
     }
 }
