@@ -12,7 +12,7 @@ pub trait UserStore: Send + Sync + 'static {
     ) -> impl std::future::Future<Output = AuthResult<Option<Self::User>>> + Send;
 }
 
-/// Storage interface for finding users and password hashes by login identifier (e.g. email or username).
+/// Storage interface for finding users and password hashes by login identifier.
 pub trait PasswordUserStore: UserStore {
     /// Retrieve a user and their hashed password by login identifier.
     fn find_by_identifier(

@@ -5,10 +5,10 @@ use crate::session::SessionId;
 use crate::storage::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
 
-/// Server-side authentication helper for Dioxus `#[server]` functions and Axum request handlers.
+/// Server-side authentication helper for `#[server]` functions and Axum handlers.
 ///
-/// Encapsulates reading session IDs from cookies, authenticating incoming requests,
-/// and generating `Set-Cookie` headers for session creation and revocation.
+/// Reads session IDs from cookies or bearer tokens, authenticates requests,
+/// and produces `Set-Cookie` headers.
 pub struct ServerAuthContext<'a, U, S>
 where
     U: UserStore,
@@ -83,17 +83,17 @@ where
         self.cookie_config
     }
 
-    /// Return the raw `Cookie` header value, if one was extracted from the request.
+    /// Raw `Cookie` header, if present.
     pub fn cookie_header(&self) -> Option<&str> {
         self.cookie_header.as_deref()
     }
 
-    /// Return the raw `Origin` header value, if one was extracted from the request.
+    /// Raw `Origin` header, if present.
     pub fn origin_header(&self) -> Option<&str> {
         self.origin_header.as_deref()
     }
 
-    /// Return the raw `Authorization` header value, if one was extracted from the request.
+    /// Raw `Authorization` header, if present.
     pub fn authorization_header(&self) -> Option<&str> {
         self.authorization_header.as_deref()
     }
@@ -105,25 +105,17 @@ where
             .and_then(|h| self.cookie_config.extract_session_id(h))
     }
 
-    /// Extract a [`SessionId`] from an incoming HTTP `Cookie` header string.
+    /// Extract a [`SessionId`] from an HTTP `Cookie` header string.
     pub fn extract_session_id(&self, cookie_header: Option<&str>) -> Option<SessionId> {
         let header = cookie_header.or(self.cookie_header.as_deref())?;
         self.cookie_config.extract_session_id(header)
     }
 
-    /// Authenticate the incoming request by checking its cookie and/or bearer token.
+    /// Authenticate the request from cookie and/or bearer token.
     ///
-    /// Validates the `Origin` header for CSRF protection when cookie credentials
-    /// are used and `expected_origins` is configured on [`CookieConfig`].
-    ///
-    /// Bearer tokens take precedence over cookies (matching the client-side
-    /// `extract_session_token` contract). Bearer credentials bypass CSRF/Origin
-    /// checks because they are not susceptible to cross-site request forgery.
-    ///
-    /// Returns `Ok(Some(user))` if a valid, unexpired session is present,
-    /// or `Ok(None)` if no session token exists or the session has expired/been revoked.
-    ///
-    /// Falls back to the stored request headers if the explicit arguments are `None`.
+    /// Bearer takes precedence over cookies. CSRF/Origin checks apply only to
+    /// cookie credentials. Falls back to stored request headers when arguments
+    /// are `None`.
     #[must_use = "use the authenticated user or handle the error"]
     pub async fn current_user(
         &self,

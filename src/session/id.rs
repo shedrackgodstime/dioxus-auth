@@ -1,9 +1,9 @@
 use std::fmt;
 
-/// Opaque, cryptographically secure session identifier.
+/// Opaque session identifier.
 ///
-/// On the wire (cookie, bearer header) this is the raw 256-bit CSPRNG token.
-/// In storage (DB, memory) the lookup key is `sha256(raw)` — a leaked store
+/// On the wire (cookie, bearer header) this is the raw 256-bit token.
+/// In storage the lookup key is `sha256(raw)`. A leaked store therefore
 /// cannot be used to hijack active sessions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SessionId(String);
@@ -22,10 +22,7 @@ impl SessionId {
         Self(hex::encode(bytes))
     }
 
-    /// Compute the storage form of this session ID: `sha256(raw)` as a lowercase hex string.
-    ///
-    /// The wire always carries the raw token. The store always keys by the hash.
-    /// A leaked store therefore yields no session-hijackable secrets.
+    /// Compute the storage form: `sha256(raw)` as a lowercase hex string.
     pub fn hash_for_storage(&self) -> SessionId {
         use sha2::{Digest, Sha256};
         let digest = Sha256::digest(self.0.as_bytes());

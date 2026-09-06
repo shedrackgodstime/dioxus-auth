@@ -6,7 +6,7 @@ use crate::session::AuthStatus;
 
 use crate::transport::TokenStorage;
 
-/// Handle to the reactive authentication state in the Dioxus component tree.
+/// Handle to the reactive authentication state in the component tree.
 pub struct Auth<User: 'static> {
     status: Signal<AuthStatus<User>>,
 }
@@ -31,27 +31,27 @@ impl<User: Clone + 'static> Auth<User> {
         Self { status }
     }
 
-    /// Read the current [`AuthStatus`].
+    /// Current [`AuthStatus`].
     pub fn status(&self) -> AuthStatus<User> {
         (self.status)()
     }
 
-    /// Returns `true` if authentication is currently resolving (e.g. restoring session).
+    /// Whether authentication is resolving.
     pub fn is_loading(&self) -> bool {
         self.status().is_loading()
     }
 
-    /// Returns `true` if there is an active authenticated user.
+    /// Whether the user is authenticated.
     pub fn is_authenticated(&self) -> bool {
         self.status().is_authenticated()
     }
 
-    /// Returns `true` if the user is explicitly unauthenticated / signed out.
+    /// Whether the user is unauthenticated.
     pub fn is_unauthenticated(&self) -> bool {
         self.status().is_unauthenticated()
     }
 
-    /// Return a clone of the current authenticated user if signed in.
+    /// Authenticated user, if signed in.
     pub fn user(&self) -> Option<User> {
         self.status().into_user()
     }
@@ -61,42 +61,34 @@ impl<User: Clone + 'static> Auth<User> {
         self.status.set(status);
     }
 
-    /// Mark the state as authenticated with the given user.
+    /// Set the authenticated user.
     pub fn set_user(&mut self, user: User) {
         self.status.set(AuthStatus::Authenticated(user));
     }
 
-    /// Reset authentication state to unauthenticated.
+    /// Reset to unauthenticated.
     pub fn logout(&mut self) {
         self.status.set(AuthStatus::Unauthenticated);
     }
 
-    /// Access the underlying `Signal<AuthStatus<User>>`.
+    /// Underlying `Signal<AuthStatus<User>>`.
     pub fn signal(&self) -> Signal<AuthStatus<User>> {
         self.status
     }
 }
 
-/// Hook to consume the current [`Auth`] context from any Dioxus component.
+/// Consume the current [`Auth`] context from any component.
 ///
 /// # Panics
-/// Panics if called outside an [`crate::dioxus::AuthProvider`] tree for type `User`.
+/// Panics if called outside an [`AuthProvider`] tree.
 pub fn use_auth<User: Clone + 'static>() -> Auth<User> {
     use_context::<Auth<User>>()
 }
 
-/// Drive the reactive auth status from a restore result.
+/// Drive auth status from a restore result.
 ///
-/// Intended to be paired with `use_resource` or `use_server_future` inside a child
-/// component of `AuthProvider`. The hook only mutates auth state while it is still
-/// `Loading`, so a manual login/logout elsewhere is never overwritten by a late or
-/// failed restore.
-///
-/// # Arguments
-/// * `restored` - The current value of the restore resource:
-///   - `None` → still resolving, do nothing.
-///   - `Some(Ok(Some(user)))` → transition to `Authenticated`.
-///   - `Some(Ok(None))` or `Some(Err(_))` → transition to `Unauthenticated`.
+/// Only mutates while still `Loading`, so a manual login/logout is never
+/// overwritten by a late or failed restore.
 pub fn use_auth_restore<User, E>(restored: Option<Result<Option<User>, E>>)
 where
     User: Clone + 'static,
@@ -120,18 +112,18 @@ pub fn use_token_storage() -> Option<Arc<dyn TokenStorage>> {
     use_context::<Option<Arc<dyn TokenStorage>>>()
 }
 
-/// Persist a raw session token to the current [`TokenStorage`], if available.
+/// Persist a raw session token to [`TokenStorage`], if available.
 ///
-/// Intended to be called after a successful login. Silently ignores errors.
+/// Silently ignores errors.
 pub fn persist_token(raw_token: &str) {
     if let Some(storage) = use_token_storage() {
         let _ = storage.save(raw_token);
     }
 }
 
-/// Clear the current [`TokenStorage`], if available.
+/// Clear [`TokenStorage`], if available.
 ///
-/// Intended to be called after logout. Silently ignores errors.
+/// Silently ignores errors.
 pub fn clear_persisted_token() {
     if let Some(storage) = use_token_storage() {
         storage.clear();

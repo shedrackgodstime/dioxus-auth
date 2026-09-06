@@ -6,23 +6,18 @@
 
 ### Features
 
-* Authentication and session management
-* Application-owned user and data models
-* Pluggable storage — implement `UserStore`, `PasswordUserStore`, and `SessionStore` against any backend
 * Argon2id password hashing with constant-time timing defense
 * Opaque session tokens hashed at rest (`sha256(raw)`)
 * Automatic session revocation on password change
-* Dioxus-native authentication state and APIs
-* Route protection with `RouteGate` and `RequireAuth`
-* Server-side `ServerAuthContext` for `#[server]` functions — auto-extracts cookies, origin, and bearer tokens from the fullstack request
-* `fullstack_server_fns!` macro — generates ready-made `#[server]` login, logout, restore, and require functions
-* Token persistence lifecycle — `TokenStorage` trait with `WebTokenStorage` (localStorage) and `FileTokenStorage` (0600)
-* Event hooks — `on_sign_in`, `on_sign_out`, `on_session_validated` on `AuthEngineBuilder`
+* Dioxus-native auth state (`AuthProvider`, `use_auth`, `RouteGate`, `SignedIn`/`SignedOut`)
+* Server-side extraction (`ServerAuthContext`) — auto-extracts cookies, origin, and bearer tokens
+* `fullstack_server_fns!` macro — generates `#[server]` login, logout, restore, and require functions
+* Token persistence (`TokenStorage` trait with `WebTokenStorage` and `FileTokenStorage`)
+* Event hooks (`on_sign_in`, `on_sign_out`, `on_session_validated`)
 * Sliding TTL and token rotation
 * Hardened cookies — `__Host-` prefix, `HttpOnly`, `SameSite`, CSRF/Origin validation
-* Axum middleware — `auth_middleware` for raw Axum routes
-* UI-independent — build your own interface
-* Designed to work with your existing application infrastructure
+* Axum middleware (`auth_middleware`)
+* Pluggable storage — implement `UserStore`, `PasswordUserStore`, and `SessionStore` against any backend
 
 ### Quick Start
 

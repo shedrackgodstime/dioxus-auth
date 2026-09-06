@@ -5,6 +5,39 @@ All notable changes to `dioxus-auth` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-06
+
+### Added
+
+- `fullstack_server_fns!` macro — generates ready-made `#[server]` login, logout, restore, and require functions
+- `ServerAuthContext::login_and_set_cookie` and `logout_and_clear_cookie` for automatic cookie handling in `#[server]` functions
+- `login_with_options` — login with optional IP address and user agent metadata
+- Axum middleware (`auth_middleware`, `require_auth_middleware`, `permission_middleware`)
+- Event hooks (`on_sign_in`, `on_sign_out`, `on_session_validated`) on `AuthEngineBuilder`
+- Sliding TTL — session expiry extends on validation within configured window
+- Token rotation — re-login invalidates existing sessions when enabled
+- `__Host-` cookie prefix support with enforced constraints
+- CSRF/Origin validation for cookie-based authentication
+- `extract_session_token` — dual-extract helper preferring `Authorization: Bearer`, falling back to `Cookie`
+- `use_token_storage()` and `TokenStorageRef` for client-side token persistence
+- SQLite-backed demo (`examples/sqlite-demo/`) with `SqliteStore`
+- Store test suite helpers in `dioxus_auth::tests`
+
+### Changed
+
+- Simplified and tightened all doc comments across the crate
+- Extracted shared login logic in `AuthEngine` to reduce duplication
+- Consolidated hook firing into a single helper
+- Trimmed verbose README feature list and module-level documentation
+- `AuthEngine::dummy_hash` is now private with `pub(crate)` getter for tests
+
+### Security
+
+- Bearer tokens bypass CSRF/Origin checks (not susceptible to cross-site request forgery)
+- File-backed `FileTokenStorage` enforces 0600 permissions on Unix
+- Session tokens are hashed at rest with SHA-256
+- Constant-time dummy Argon2 verification on unknown-user login
+
 ## [0.1.0] - 2026-09-04
 
 ### Added
