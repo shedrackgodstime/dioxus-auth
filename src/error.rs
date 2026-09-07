@@ -15,6 +15,8 @@ pub enum AuthError {
     Unauthenticated,
     #[error("cross-site request forgery attempt detected")]
     Csrf,
+    #[error("too many authentication attempts, try again later")]
+    RateLimited,
     #[error("authentication store error: {0}")]
     Store(String),
 }

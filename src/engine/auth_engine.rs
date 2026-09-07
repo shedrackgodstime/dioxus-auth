@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::engine::builder::AuthEngineBuilder;
 use crate::error::{AuthError, AuthResult};
-use crate::security::PasswordHasher;
+use crate::security::{PasswordHasher, RateLimiter};
 use crate::session::{Session, SessionId};
 use crate::storage::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
@@ -36,6 +36,7 @@ where
     pub(crate) on_sign_in: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     pub(crate) on_sign_out: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     pub(crate) on_session_validated: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
+    pub(crate) rate_limiter: Option<Arc<dyn RateLimiter>>,
     /// Pre-computed Argon2-encoded hash of a constant dummy password.
     ///
     /// Used by [`AuthEngine::login`] when the identifier is not found, so that the
@@ -249,11 +250,18 @@ where
         password: &str,
         options: LoginOptions<'_>,
     ) -> AuthResult<(U::User, Session<<U::User as AuthUser>::Id>)> {
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.check(identifier)?;
+        }
+
         let user_entry = self.users.find_by_identifier(identifier).await?;
 
         let (user, password_hash) = match user_entry {
             Some((u, hash)) => (Some(u), hash),
             None => {
+                if let Some(limiter) = &self.rate_limiter {
+                    limiter.record_attempt(identifier);
+                }
                 let _ = self.hasher.verify_password(password, &self.dummy_hash);
                 return Err(AuthError::Unauthenticated);
             }
@@ -261,6 +269,9 @@ where
 
         let is_valid = self.hasher.verify_password(password, &password_hash)?;
         if !is_valid {
+            if let Some(limiter) = &self.rate_limiter {
+                limiter.record_attempt(identifier);
+            }
             return Err(AuthError::Unauthenticated);
         }
 
@@ -296,6 +307,9 @@ where
             wire_session = wire_session.with_auth_hash(h);
         }
         self.fire_on_sign_in(&user);
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.record_success(identifier);
+        }
         Ok((user, wire_session))
     }
 

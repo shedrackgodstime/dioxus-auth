@@ -17,7 +17,7 @@ pub mod dioxus;
 // Top-level re-exports
 pub use engine::{AuthEngine, AuthEngineBuilder};
 pub use error::{AuthError, AuthResult};
-pub use security::{Argon2Hasher, CookieConfig, PasswordHasher, SameSite};
+pub use security::{Argon2Hasher, CookieConfig, InMemoryRateLimiter, PasswordHasher, RateLimiter, SameSite};
 pub use session::{AuthStatus, Session, SessionId};
 #[cfg(any(test, doc))]
 pub use storage::tests::{
@@ -34,10 +34,12 @@ pub use user::AuthUser;
 
 #[cfg(feature = "dioxus")]
 pub use dioxus::{
-    Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate, RouteGuard,
-    ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, clear_persisted_token, persist_token,
-    redirect_if_authed, require_auth, use_auth, use_auth_restore, use_token_storage,
+    Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate,
+    RouteGuard, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, clear_persisted_token,
+    persist_token, redirect_if_authed, require_auth, use_auth, use_auth_restore, use_token_storage,
 };
+#[cfg(all(feature = "dioxus", target_arch = "wasm32"))]
+pub use dioxus::CrossTabSync;
 #[cfg(all(feature = "dioxus", feature = "axum"))]
 pub use dioxus::{
     AuthenticatedUser, RequireAuthUser, auth_middleware, permission_middleware,
@@ -1348,5 +1350,104 @@ mod tests {
         assert_eq!(SameSite::Lax.as_str(), "Lax");
         assert_eq!(SameSite::Strict.as_str(), "Strict");
         assert_eq!(SameSite::None.as_str(), "None");
+    }
+
+    #[test]
+    fn in_memory_rate_limiter_blocks_after_max_attempts() {
+        use crate::security::InMemoryRateLimiter;
+        use std::time::Duration;
+
+        let limiter = InMemoryRateLimiter::new(2, Duration::from_secs(60));
+
+        assert!(limiter.check("user@example.com").is_ok());
+        limiter.record_attempt("user@example.com");
+
+        assert!(limiter.check("user@example.com").is_ok());
+        limiter.record_attempt("user@example.com");
+
+        assert_eq!(limiter.check("user@example.com"), Err(AuthError::RateLimited));
+    }
+
+    #[test]
+    fn in_memory_rate_limiter_resets_after_success() {
+        use crate::security::InMemoryRateLimiter;
+        use std::time::Duration;
+
+        let limiter = InMemoryRateLimiter::new(2, Duration::from_secs(60));
+
+        assert!(limiter.check("user@example.com").is_ok());
+        limiter.record_attempt("user@example.com");
+        assert!(limiter.check("user@example.com").is_ok());
+        limiter.record_attempt("user@example.com");
+        assert_eq!(limiter.check("user@example.com"), Err(AuthError::RateLimited));
+
+        limiter.record_success("user@example.com");
+        assert!(limiter.check("user@example.com").is_ok());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_login_rejects_when_rate_limited() {
+        use crate::security::InMemoryRateLimiter;
+        use std::time::Duration;
+
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "rate_limit_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 501,
+            name: "Rate".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "rate@example.com", &password_hash);
+
+        let limiter = InMemoryRateLimiter::new(1, Duration::from_secs(60));
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .with_rate_limiter(limiter)
+            .build();
+
+        // First attempt with wrong password records attempt.
+        let _ = engine.login("rate@example.com", "wrong").await;
+
+        // Second attempt should be rate-limited before even checking the password.
+        let result = engine.login("rate@example.com", password).await;
+        assert_eq!(result, Err(AuthError::RateLimited));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_login_clears_rate_limit_on_success() {
+        use crate::security::InMemoryRateLimiter;
+        use std::time::Duration;
+
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "rate_limit_ok_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 502,
+            name: "RateOk".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "rateok@example.com", &password_hash);
+
+        let limiter = InMemoryRateLimiter::new(2, Duration::from_secs(60));
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .with_rate_limiter(limiter)
+            .build();
+
+        // First attempt with wrong password records attempt.
+        let _ = engine.login("rateok@example.com", "wrong").await;
+
+        // Successful login resets the counter.
+        let result = engine.login("rateok@example.com", password).await;
+        assert!(result.is_ok());
+
+        // Another login after success should work.
+        let result2 = engine.login("rateok@example.com", password).await;
+        assert!(result2.is_ok());
     }
 }

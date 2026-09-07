@@ -1,0 +1,21 @@
+[package]
+name = "dioxus-auth-registration-demo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dioxus = { version = "0.7", features = ["router", "fullstack"] }
+dioxus-auth = { path = "../..", features = ["dioxus", "dioxus-fullstack"] }
+http = "1"
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[features]
+default = ["web"]
+web = ["dioxus/web"]
+server = ["dioxus/server"]
