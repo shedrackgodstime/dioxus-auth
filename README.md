@@ -384,6 +384,9 @@ impl SessionStore<u64> for MyStore {
     }
     async fn delete_session(&self, id: &SessionId) -> dioxus_auth::AuthResult<()> { Ok(()) }
     async fn delete_user_sessions(&self, user_id: &u64) -> dioxus_auth::AuthResult<()> { Ok(()) }
+    async fn list_user_sessions(&self, user_id: &u64) -> dioxus_auth::AuthResult<Vec<Session<u64>>> {
+        Ok(self.sessions.values().filter(|s| s.user_id() == user_id).cloned().collect())
+    }
 }
 
 // 3. Wire the engine

@@ -274,10 +274,7 @@ async fn main() {
     let user = store
         .create_user("charlie", "charlie@example.com", &password_hash)
         .unwrap();
-    println!(
-        "User created in SQLite: {} ({})",
-        user.username, user.email
-    );
+    println!("User created in SQLite: {} ({})", user.username, user.email);
 
     // 3. Build AuthEngine wired to SQLite store
     let engine = AuthEngine::builder(store.clone(), store.clone())

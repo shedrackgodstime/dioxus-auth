@@ -1,5 +1,6 @@
 mod components;
 mod context;
+#[cfg(feature = "dioxus-fullstack")]
 mod fullstack;
 mod guards;
 mod provider;

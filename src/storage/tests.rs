@@ -7,7 +7,7 @@
 //! #[cfg(test)]
 //! mod tests {
 //!     use std::sync::Arc;
-//!     use dioxus_auth::{tests::*, AuthEngine, Argon2Hasher};
+//!     use dioxus_auth::{tests::*, crate::AuthEngine, Argon2Hasher};
 //!
 //!     #[tokio::test]
 //!     async fn my_sqlite_store_follows_contract() {
@@ -237,7 +237,7 @@ where
 
 // Engine lifecycle tests
 
-/// Run [`AuthEngine`] lifecycle conformance tests.
+/// Run [`crate::AuthEngine`] lifecycle conformance tests.
 ///
 /// Pre-seed the store with a user `id == 1`, `email == "alice@example.com"`,
 /// password hash for `"password123"`.
