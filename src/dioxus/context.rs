@@ -80,7 +80,7 @@ impl<User: Clone + 'static> Auth<User> {
 /// Consume the current [`Auth`] context from any component.
 ///
 /// # Panics
-/// Panics if called outside an [`AuthProvider`] tree.
+/// Panics if called outside an [`crate::dioxus::AuthProvider`] tree.
 pub fn use_auth<User: Clone + 'static>() -> Auth<User> {
     use_context::<Auth<User>>()
 }
@@ -105,7 +105,7 @@ where
     }
 }
 
-/// Access the optional [`TokenStorage`] provided by [`AuthProvider`].
+/// Access the optional [`crate::transport::TokenStorage`] provided by [`crate::dioxus::AuthProvider`].
 ///
 /// Returns `None` if the app did not provide a storage backend.
 pub fn use_token_storage() -> Option<Arc<dyn TokenStorage>> {

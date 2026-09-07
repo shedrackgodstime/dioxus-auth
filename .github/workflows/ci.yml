@@ -40,7 +40,7 @@ jobs:
         run: cargo test --all-targets ${{ matrix.features }}
       - name: Run doc tests
         if: matrix.features == '--all-targets --features dioxus' || matrix.features == '--all-targets --features dioxus-fullstack'
-        run: cargo test --doc ${{ matrix.features }}
+        run: cargo test --doc --features dioxus
 
   audit:
     name: Security Audit
@@ -64,6 +64,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
-        run: cargo doc --no-deps --features dioxus
-      - name: Check doc links
-        run: cargo doc --no-deps --features dioxus --check
+        run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus

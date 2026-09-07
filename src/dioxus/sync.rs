@@ -81,8 +81,9 @@ pub fn CrossTabSync<User: Clone + Serialize + for<'de> Deserialize<'de> + 'stati
         };
 
         let on_message_handle = on_message.clone();
-        let closure = web_sys::Closure::wrap(Box::new(on_message_handle)
-            as Box<dyn Fn(web_sys::MessageEvent)>);
+        let closure = web_sys::Closure::wrap(
+            Box::new(on_message_handle) as Box<dyn Fn(web_sys::MessageEvent)>
+        );
         let _ = channel.set_onmessage(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
 

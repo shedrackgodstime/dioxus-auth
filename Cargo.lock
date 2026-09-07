@@ -635,6 +635,7 @@ dependencies = [
  "argon2",
  "axum",
  "dioxus",
+ "dioxus-auth-derive",
  "getrandom 0.2.17",
  "hex",
  "http",
@@ -646,6 +647,15 @@ dependencies = [
  "tokio",
  "tower",
  "web-sys",
+]
+
+[[package]]
+name = "dioxus-auth-derive"
+version = "0.1.0"
+dependencies = [
+ "dioxus-auth",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

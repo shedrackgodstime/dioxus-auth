@@ -19,6 +19,9 @@ include = [
     "LICENSE*",
 ]
 
+[workspace]
+members = ["crates/dioxus-auth-derive"]
+
 [profile.release]
 opt-level = 3
 lto = "fat"
@@ -51,3 +54,4 @@ web-sys = { version = "0.3", features = ["BroadcastChannel", "Window", "Storage"
 [dev-dependencies]
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+dioxus-auth-derive = { path = "./crates/dioxus-auth-derive" }

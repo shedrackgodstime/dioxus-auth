@@ -17,7 +17,9 @@ pub mod dioxus;
 // Top-level re-exports
 pub use engine::{AuthEngine, AuthEngineBuilder};
 pub use error::{AuthError, AuthResult};
-pub use security::{Argon2Hasher, CookieConfig, InMemoryRateLimiter, PasswordHasher, RateLimiter, SameSite};
+pub use security::{
+    Argon2Hasher, CookieConfig, InMemoryRateLimiter, PasswordHasher, RateLimiter, SameSite,
+};
 pub use session::{AuthStatus, Session, SessionId};
 #[cfg(any(test, doc))]
 pub use storage::tests::{
@@ -32,14 +34,14 @@ pub use transport::WebTokenStorage;
 pub use transport::{MemoryTokenStorage, TokenStorage, extract_session_token};
 pub use user::AuthUser;
 
-#[cfg(feature = "dioxus")]
-pub use dioxus::{
-    Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate,
-    RouteGuard, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, clear_persisted_token,
-    persist_token, redirect_if_authed, require_auth, use_auth, use_auth_restore, use_token_storage,
-};
 #[cfg(all(feature = "dioxus", target_arch = "wasm32"))]
 pub use dioxus::CrossTabSync;
+#[cfg(feature = "dioxus")]
+pub use dioxus::{
+    Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate, RouteGuard,
+    ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, clear_persisted_token, persist_token,
+    redirect_if_authed, require_auth, use_auth, use_auth_restore, use_token_storage,
+};
 #[cfg(all(feature = "dioxus", feature = "axum"))]
 pub use dioxus::{
     AuthenticatedUser, RequireAuthUser, auth_middleware, permission_middleware,
@@ -1365,7 +1367,10 @@ mod tests {
         assert!(limiter.check("user@example.com").is_ok());
         limiter.record_attempt("user@example.com");
 
-        assert_eq!(limiter.check("user@example.com"), Err(AuthError::RateLimited));
+        assert_eq!(
+            limiter.check("user@example.com"),
+            Err(AuthError::RateLimited)
+        );
     }
 
     #[test]
@@ -1379,7 +1384,10 @@ mod tests {
         limiter.record_attempt("user@example.com");
         assert!(limiter.check("user@example.com").is_ok());
         limiter.record_attempt("user@example.com");
-        assert_eq!(limiter.check("user@example.com"), Err(AuthError::RateLimited));
+        assert_eq!(
+            limiter.check("user@example.com"),
+            Err(AuthError::RateLimited)
+        );
 
         limiter.record_success("user@example.com");
         assert!(limiter.check("user@example.com").is_ok());

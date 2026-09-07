@@ -7,12 +7,11 @@
 /// - `get_current_user() -> Result<Option<User>, ServerFnError>`
 /// - `require_user() -> Result<User, ServerFnError>`
 ///
-/// The generated functions use [`ServerAuthContext::from_request`] internally, so they
-/// must be called from within a `#[server]` function context. For unit tests or
-/// non-request contexts, use [`ServerAuthContext::new`] directly.
+/// The generated functions use [`crate::dioxus::ServerAuthContext::from_request`] internally when the
+/// `dioxus-fullstack` feature is enabled, so they must be called from within a `#[server]` function
+/// context. For unit tests or non-request contexts, use [`crate::dioxus::ServerAuthContext::new`] directly.
 ///
 /// # Requirements
-///
 /// - The `dioxus-fullstack` feature must be enabled.
 /// - `User` must implement [`crate::user::AuthUser`] and be `Serialize + Deserialize + 'static`.
 /// - `$engine` and `$cookie_config` must be expressions that evaluate to `&AuthEngine` and `&CookieConfig`.
