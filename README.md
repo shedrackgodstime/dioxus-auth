@@ -273,7 +273,7 @@ let engine = AuthEngine::builder(store.clone(), store.clone())
     .build();
 ```
 
-#### 11. SQLite-backed demo
+#### 11. SQLite-backed demo (rusqlite)
 
 A complete working example with a real `rusqlite` store is in [`examples/sqlite-demo/`](examples/sqlite-demo/). It demonstrates:
 
@@ -288,7 +288,22 @@ Run it with:
 cargo run --example dioxus-auth-sqlite-demo --features server
 ```
 
-#### 12. Store test suite
+#### 12. SQLite-backed demo (SQLx)
+
+A production-pattern example using `sqlx` with `SqlitePool` is in [`examples/sqlx-sqlite/`](examples/sqlx-sqlite/). It demonstrates:
+
+- Async `SqliteStore` with connection pooling
+- `UserStore`, `PasswordUserStore`, and `SessionStore` implementations
+- Type-safe queries with `sqlx::query_as`
+- Full Dioxus fullstack wiring
+
+Run it with:
+
+```sh
+cargo run -p dioxus-auth-sqlx-sqlite --features server
+```
+
+#### 13. Store test suite
 
 The crate ships a `dioxus_auth::tests` module with conformance tests for `UserStore`, `PasswordUserStore`, and `SessionStore` implementations. Use them to verify your custom store works with `AuthEngine`:
 
@@ -386,7 +401,7 @@ fn main() {
 }
 ```
 
-Replace `MyStore` with your actual database (SQLite, PostgreSQL, etc.). See [`examples/sqlite-demo/`](examples/sqlite-demo/) for a complete SQLite implementation.
+Replace `MyStore` with your actual database (SQLite, PostgreSQL, etc.). See [`examples/sqlite-demo/`](examples/sqlite-demo/) for a `rusqlite` implementation or [`examples/sqlx-sqlite/`](examples/sqlx-sqlite/) for an async `sqlx` implementation with connection pooling.
 
 ### Philosophy
 

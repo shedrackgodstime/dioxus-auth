@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::engine::auth_engine::AuthEngine;
-use crate::security::{Argon2Hasher, PasswordHasher};
+use crate::security::{Argon2Hasher, PasswordHasher, RateLimiter};
 use crate::storage::{SessionStore, UserStore};
 use crate::user::AuthUser;
 
@@ -28,6 +28,7 @@ where
     on_sign_in: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     on_sign_out: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     on_session_validated: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
+    rate_limiter: Option<Arc<dyn RateLimiter>>,
 }
 
 impl<U, S> AuthEngineBuilder<U, S>
@@ -47,6 +48,7 @@ where
             on_sign_in: None,
             on_sign_out: None,
             on_session_validated: None,
+            rate_limiter: None,
         }
     }
 
@@ -104,6 +106,12 @@ where
         self
     }
 
+    /// Set a rate limiter to throttle login attempts per identifier.
+    pub fn with_rate_limiter(mut self, limiter: impl RateLimiter + 'static) -> Self {
+        self.rate_limiter = Some(Arc::new(limiter));
+        self
+    }
+
     /// Build the configured [`AuthEngine`].
     ///
     /// Pre-computes a real Argon2 hash of the internal dummy password so the
@@ -126,6 +134,7 @@ where
             on_sign_in: self.on_sign_in,
             on_sign_out: self.on_sign_out,
             on_session_validated: self.on_session_validated,
+            rate_limiter: self.rate_limiter,
         }
     }
 }

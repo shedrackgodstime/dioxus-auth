@@ -5,6 +5,9 @@ mod guards;
 mod provider;
 mod server_fn;
 
+#[cfg(target_arch = "wasm32")]
+mod sync;
+
 #[cfg(feature = "axum")]
 mod axum;
 
@@ -23,3 +26,6 @@ pub use guards::{
 };
 pub use provider::{AuthProvider, TokenStorageRef};
 pub use server_fn::ServerAuthContext;
+
+#[cfg(target_arch = "wasm32")]
+pub use sync::CrossTabSync;

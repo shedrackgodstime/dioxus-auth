@@ -9,13 +9,13 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct IntegrationSqlUser {
-    id: u64,
+    id: i64,
     email: String,
     password_hash: String,
 }
 
 impl AuthUser for IntegrationSqlUser {
-    type Id = u64;
+    type Id = i64;
 
     fn id(&self) -> Self::Id {
         self.id
@@ -89,7 +89,7 @@ impl TestSqlStore {
             params![email, password_hash],
         )
         .unwrap();
-        let id = conn.last_insert_rowid() as u64;
+        let id = conn.last_insert_rowid();
         IntegrationSqlUser {
             id,
             email: email.to_string(),
@@ -101,7 +101,7 @@ impl TestSqlStore {
 impl UserStore for TestSqlStore {
     type User = IntegrationSqlUser;
 
-    async fn find_by_id(&self, id: &u64) -> AuthResult<Option<IntegrationSqlUser>> {
+    async fn find_by_id(&self, id: &i64) -> AuthResult<Option<IntegrationSqlUser>> {
         let conn = self
             .conn
             .lock()
@@ -153,8 +153,8 @@ impl PasswordUserStore for TestSqlStore {
     }
 }
 
-impl SessionStore<u64> for TestSqlStore {
-    async fn save_session(&self, session: Session<u64>) -> AuthResult<()> {
+impl SessionStore<i64> for TestSqlStore {
+    async fn save_session(&self, session: Session<i64>) -> AuthResult<()> {
         let conn = self
             .conn
             .lock()
@@ -170,8 +170,8 @@ impl SessionStore<u64> for TestSqlStore {
             params![
                 session.id().as_str(),
                 session.user_id(),
-                session.created_at_unix(),
-                session.expires_at_unix(),
+                session.created_at_unix() as i64,
+                session.expires_at_unix() as i64,
                 session.auth_hash(),
             ],
         )
@@ -179,7 +179,7 @@ impl SessionStore<u64> for TestSqlStore {
         Ok(())
     }
 
-    async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<u64>>> {
+    async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<i64>>> {
         let conn = self
             .conn
             .lock()
@@ -190,12 +190,12 @@ impl SessionStore<u64> for TestSqlStore {
                 params![id.as_str()],
                 |row| {
                     let s_id = SessionId::new(row.get::<_, String>(0)?);
-                    let u_id = row.get::<_, u64>(1)?;
-                    let c_at = row.get::<_, u64>(2)?;
-                    let e_at = row.get::<_, u64>(3)?;
+                    let u_id = row.get::<_, i64>(1)?;
+                    let c_at = row.get::<_, i64>(2)?;
+                    let e_at = row.get::<_, i64>(3)?;
                     let hash = row.get::<_, Option<String>>(4)?;
 
-                    let mut s = Session::new(s_id, u_id, c_at, e_at);
+                    let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
                     if let Some(h) = hash {
                         s = s.with_auth_hash(h);
                     }
@@ -217,7 +217,7 @@ impl SessionStore<u64> for TestSqlStore {
         Ok(())
     }
 
-    async fn delete_user_sessions(&self, user_id: &u64) -> AuthResult<()> {
+    async fn delete_user_sessions(&self, user_id: &i64) -> AuthResult<()> {
         let conn = self
             .conn
             .lock()
@@ -227,7 +227,7 @@ impl SessionStore<u64> for TestSqlStore {
         Ok(())
     }
 
-    async fn list_user_sessions(&self, user_id: &u64) -> AuthResult<Vec<Session<u64>>> {
+    async fn list_user_sessions(&self, user_id: &i64) -> AuthResult<Vec<Session<i64>>> {
         let conn = self
             .conn
             .lock()
@@ -238,11 +238,11 @@ impl SessionStore<u64> for TestSqlStore {
         let rows = stmt
             .query_map(params![user_id], |row| {
                 let s_id = SessionId::new(row.get::<_, String>(0)?);
-                let u_id = row.get::<_, u64>(1)?;
-                let c_at = row.get::<_, u64>(2)?;
-                let e_at = row.get::<_, u64>(3)?;
+                let u_id = row.get::<_, i64>(1)?;
+                let c_at = row.get::<_, i64>(2)?;
+                let e_at = row.get::<_, i64>(3)?;
                 let hash = row.get::<_, Option<String>>(4)?;
-                let mut s = Session::new(s_id, u_id, c_at, e_at);
+                let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
                 if let Some(h) = hash {
                     s = s.with_auth_hash(h);
                 }

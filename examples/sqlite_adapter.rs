@@ -16,14 +16,14 @@ use rusqlite::{Connection, OptionalExtension, params};
 /// Application custom User model.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DbUser {
-    pub id: u64,
+    pub id: i64,
     pub username: String,
     pub email: String,
     pub password_hash: String,
 }
 
 impl AuthUser for DbUser {
-    type Id = u64;
+    type Id = i64;
 
     fn id(&self) -> Self::Id {
         self.id
@@ -88,7 +88,7 @@ impl SqliteStore {
             "INSERT INTO users (username, email, password_hash) VALUES (?1, ?2, ?3)",
             params![username, email, password_hash],
         )?;
-        let id = conn.last_insert_rowid() as u64;
+        let id = conn.last_insert_rowid();
         Ok(DbUser {
             id,
             username: username.to_string(),
@@ -101,7 +101,7 @@ impl SqliteStore {
 impl UserStore for SqliteStore {
     type User = DbUser;
 
-    async fn find_by_id(&self, id: &u64) -> AuthResult<Option<DbUser>> {
+    async fn find_by_id(&self, id: &i64) -> AuthResult<Option<DbUser>> {
         let conn = self
             .conn
             .lock()
@@ -154,8 +154,8 @@ impl PasswordUserStore for SqliteStore {
     }
 }
 
-impl SessionStore<u64> for SqliteStore {
-    async fn save_session(&self, session: Session<u64>) -> AuthResult<()> {
+impl SessionStore<i64> for SqliteStore {
+    async fn save_session(&self, session: Session<i64>) -> AuthResult<()> {
         let conn = self
             .conn
             .lock()
@@ -171,8 +171,8 @@ impl SessionStore<u64> for SqliteStore {
             params![
                 session.id().as_str(),
                 session.user_id(),
-                session.created_at_unix(),
-                session.expires_at_unix(),
+                session.created_at_unix() as i64,
+                session.expires_at_unix() as i64,
                 session.auth_hash(),
             ],
         )
@@ -181,7 +181,7 @@ impl SessionStore<u64> for SqliteStore {
         Ok(())
     }
 
-    async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<u64>>> {
+    async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<i64>>> {
         let conn = self
             .conn
             .lock()
@@ -192,12 +192,12 @@ impl SessionStore<u64> for SqliteStore {
                 params![id.as_str()],
                 |row| {
                     let sess_id = SessionId::new(row.get::<_, String>(0)?);
-                    let user_id = row.get::<_, u64>(1)?;
-                    let created_at = row.get::<_, u64>(2)?;
-                    let expires_at = row.get::<_, u64>(3)?;
+                    let user_id = row.get::<_, i64>(1)?;
+                    let created_at = row.get::<_, i64>(2)?;
+                    let expires_at = row.get::<_, i64>(3)?;
                     let auth_hash = row.get::<_, Option<String>>(4)?;
 
-                    let mut s = Session::new(sess_id, user_id, created_at, expires_at);
+                    let mut s = Session::new(sess_id, user_id, created_at as u64, expires_at as u64);
                     if let Some(hash) = auth_hash {
                         s = s.with_auth_hash(hash);
                     }
@@ -220,7 +220,7 @@ impl SessionStore<u64> for SqliteStore {
         Ok(())
     }
 
-    async fn delete_user_sessions(&self, user_id: &u64) -> AuthResult<()> {
+    async fn delete_user_sessions(&self, user_id: &i64) -> AuthResult<()> {
         let conn = self
             .conn
             .lock()
@@ -230,7 +230,7 @@ impl SessionStore<u64> for SqliteStore {
         Ok(())
     }
 
-    async fn list_user_sessions(&self, user_id: &u64) -> AuthResult<Vec<Session<u64>>> {
+    async fn list_user_sessions(&self, user_id: &i64) -> AuthResult<Vec<Session<i64>>> {
         let conn = self
             .conn
             .lock()
@@ -241,11 +241,11 @@ impl SessionStore<u64> for SqliteStore {
         let rows = stmt
             .query_map(params![user_id], |row| {
                 let sess_id = SessionId::new(row.get::<_, String>(0)?);
-                let uid = row.get::<_, u64>(1)?;
-                let created_at = row.get::<_, u64>(2)?;
-                let expires_at = row.get::<_, u64>(3)?;
+                let uid = row.get::<_, i64>(1)?;
+                let created_at = row.get::<_, i64>(2)?;
+                let expires_at = row.get::<_, i64>(3)?;
                 let auth_hash = row.get::<_, Option<String>>(4)?;
-                let mut s = Session::new(sess_id, uid, created_at, expires_at);
+                let mut s = Session::new(sess_id, uid, created_at as u64, expires_at as u64);
                 if let Some(hash) = auth_hash {
                     s = s.with_auth_hash(hash);
                 }
@@ -275,7 +275,7 @@ async fn main() {
         .create_user("charlie", "charlie@example.com", &password_hash)
         .unwrap();
     println!(
-        "✓ User created in SQLite: {} ({})",
+        "User created in SQLite: {} ({})",
         user.username, user.email
     );
 
@@ -287,7 +287,7 @@ async fn main() {
     // 4. Test failed login
     let failed = engine.login("charlie@example.com", "wrong_password").await;
     assert_eq!(failed.unwrap_err(), AuthError::Unauthenticated);
-    println!("✓ Wrong password correctly rejected by AuthEngine");
+    println!("Wrong password correctly rejected by AuthEngine");
 
     // 5. Test successful login
     let (authed_user, session) = engine
@@ -296,7 +296,7 @@ async fn main() {
         .expect("Login failed");
     assert_eq!(authed_user, user);
     println!(
-        "✓ AuthEngine::login verified Argon2 password and issued session: {}",
+        "AuthEngine::login verified Argon2 password and issued session: {}",
         session.id().as_str()
     );
 
@@ -307,19 +307,19 @@ async fn main() {
         .unwrap()
         .expect("Session should be valid in SQLite");
     assert_eq!(validated, user);
-    println!("✓ AuthEngine::validate_session loaded active session from SQLite");
+    println!("AuthEngine::validate_session loaded active session from SQLite");
 
     // 7. Test Dioxus UI mount
     let mut vdom = VirtualDom::new_with_props(App, AppProps { user: authed_user });
     vdom.rebuild_in_place();
-    println!("✓ Dioxus AuthProvider successfully mounted with SQLite authenticated user");
+    println!("AuthProvider successfully mounted with SQLite authenticated user");
 
     // 8. Test logout
     engine.logout(session.id()).await.unwrap();
     assert_eq!(engine.validate_session(session.id()).await.unwrap(), None);
-    println!("✓ AuthEngine::logout revoked session in SQLite");
+    println!("AuthEngine::logout revoked session in SQLite");
 
-    println!("\n=== All SQLite + AuthEngine tests completed successfully! ===");
+    println!("All SQLite + AuthEngine tests completed successfully!");
 }
 
 #[derive(Props, Clone, PartialEq)]
