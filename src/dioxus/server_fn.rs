@@ -5,7 +5,7 @@ use crate::session::SessionId;
 use crate::storage::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
 
-/// Server-side authentication helper for `#[server]` functions and Axum handlers.
+/// Server-side authentication helper for `\[server\]` functions and Axum handlers.
 ///
 /// Reads session IDs from cookies or bearer tokens, authenticates requests,
 /// and produces `Set-Cookie` headers.
@@ -40,7 +40,7 @@ where
     /// Create a `ServerAuthContext` from the current Dioxus fullstack request.
     ///
     /// Automatically extracts `Cookie`, `Origin`, and `Authorization` headers from the incoming
-    /// request. Returns `None` if called outside a `#[server]` function context.
+    /// request. Returns `None` if called outside a `\[server\]` function context.
     #[cfg(feature = "dioxus-fullstack")]
     pub fn from_request(
         engine: &'a AuthEngine<U, S>,
@@ -225,17 +225,15 @@ where
         Ok((user, set_cookie_header))
     }
 
-    /// Authenticate credentials, create a new session, automatically set the session
-    /// cookie on the response, and return the authenticated user along with the raw
-    /// session token for client-side persistence.
+    /// Browser flow: authenticate credentials, create a session, and set the
+    /// `HttpOnly` session cookie on the response.
+    ///
+    /// Returns **only the authenticated user** — the raw session token never
+    /// leaves the server response. The cookie jar is the credential store.
     ///
     /// Requires the `dioxus-fullstack` feature.
     #[cfg(feature = "dioxus-fullstack")]
-    pub async fn login_and_set_cookie(
-        &self,
-        identifier: &str,
-        password: &str,
-    ) -> AuthResult<(U::User, String)> {
+    pub async fn login_cookie(&self, identifier: &str, password: &str) -> AuthResult<U::User> {
         let (user, session) = self.engine.login(identifier, password).await?;
         let cookie_header = self.cookie_config.build_set_cookie_header(session.id());
         if let Some(ctx) = dioxus::fullstack::FullstackContext::current() {
@@ -243,6 +241,21 @@ where
                 .map_err(|e| AuthError::Store(format!("invalid cookie header: {e}")))?;
             ctx.add_response_header(http::header::SET_COOKIE, value);
         }
+        Ok(user)
+    }
+
+    /// Native / API flow: authenticate credentials and return the raw session
+    /// token for the client to persist via `TokenStorage`.
+    ///
+    /// Does **not** set a cookie. The caller is responsible for handing the
+    /// token to the client process (file, keychain, in-memory).
+    #[must_use = "the bearer token must be handed to the client"]
+    pub async fn login_bearer(
+        &self,
+        identifier: &str,
+        password: &str,
+    ) -> AuthResult<(U::User, String)> {
+        let (user, session) = self.engine.login(identifier, password).await?;
         Ok((user, session.id().as_str().to_string()))
     }
 
@@ -257,6 +270,76 @@ where
             let value = http::HeaderValue::from_str(&cookie_header)
                 .map_err(|e| AuthError::Store(format!("invalid cookie header: {e}")))?;
             ctx.add_response_header(http::header::SET_COOKIE, value);
+        }
+        Ok(())
+    }
+
+    /// Logout the current request's session, regardless of whether it was sent
+    /// as a cookie or a bearer token. Uses the same extraction precedence as
+    /// [`current_user`](Self::current_user) (bearer wins). Automatically clears
+    /// the cookie if a cookie session was active.
+    ///
+    /// Requires the `dioxus-fullstack` feature.
+    #[cfg(feature = "dioxus-fullstack")]
+    pub async fn logout_current(&self) -> AuthResult<()> {
+        use dioxus::fullstack::FullstackContext;
+
+        let ctx = FullstackContext::current()
+            .ok_or_else(|| AuthError::Store("not in a request context".into()))?;
+
+        // Re-read headers from the request — same precedence as current_user.
+        // Drop the borrow before any await.
+        let (cookie_header, authorization_header, had_cookie) = {
+            let parts = ctx.parts_mut();
+            let cookie_header = parts
+                .headers
+                .get(http::header::COOKIE)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+            let authorization_header = parts
+                .headers
+                .get(http::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+            let had_cookie = cookie_header.is_some()
+                && self
+                    .cookie_config
+                    .extract_session_id(cookie_header.as_deref().unwrap())
+                    .is_some();
+            (cookie_header, authorization_header, had_cookie)
+        };
+
+        // Try bearer first, then cookie. Extract the raw wire token.
+        let wire_token = if let Some(auth) = authorization_header.as_deref() {
+            crate::transport::extract_session_token(
+                Some(auth),
+                cookie_header.as_deref(),
+                self.cookie_config.name.as_str(),
+            )
+        } else {
+            None
+        };
+
+        let session_id = if let Some(token) = wire_token {
+            SessionId::new(token)
+        } else if let Some(cookie) = cookie_header.as_deref() {
+            match self.cookie_config.extract_session_id(cookie) {
+                Some(id) => id,
+                None => return Ok(()),
+            }
+        } else {
+            return Ok(());
+        };
+
+        // Revoke the session. If a cookie was sent, also clear it on the response.
+        self.engine.logout(&session_id).await?;
+        if had_cookie {
+            let delete_header = self.cookie_config.build_delete_cookie_header();
+            if let Some(ctx) = FullstackContext::current() {
+                let value = http::HeaderValue::from_str(&delete_header)
+                    .map_err(|e| AuthError::Store(format!("invalid cookie header: {e}")))?;
+                ctx.add_response_header(http::header::SET_COOKIE, value);
+            }
         }
         Ok(())
     }
@@ -464,5 +547,124 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(bad_auth, None);
+    }
+
+    /// Spec 14: `login_bearer` returns the raw token for the client to persist.
+    /// Does NOT set a cookie.
+    #[tokio::test(flavor = "current_thread")]
+    async fn login_bearer_returns_raw_token_without_cookie() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "bearer_issue_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "bearer_issue@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "bearer_issue@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+
+        // login_bearer returns (user, raw_token)
+        let (authed_user, raw_token) = server_ctx
+            .login_bearer("bearer_issue@example.com", pass)
+            .await
+            .unwrap();
+        assert_eq!(authed_user, user);
+        assert!(!raw_token.is_empty());
+        assert!(
+            !raw_token.contains("="),
+            "raw token must not be a Set-Cookie header"
+        );
+
+        // The raw token must be usable as a Bearer credential
+        let auth_header = format!("Bearer {raw_token}");
+        let current = server_ctx
+            .current_user(None, None, Some(&auth_header))
+            .await
+            .unwrap();
+        assert_eq!(current, Some(user));
+    }
+
+    /// Spec 14: `login` returns a `Set-Cookie` header (for custom flows),
+    /// `login_bearer` returns the raw token (for native/API clients).
+    /// Both end up in the same session store; the difference is only the
+    /// wire format the client receives.
+    #[tokio::test(flavor = "current_thread")]
+    async fn login_bearer_and_login_produce_different_wire_formats() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "wire_format_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "wire@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "wire@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+
+        // login returns a Set-Cookie header
+        let (_, set_cookie) = server_ctx.login("wire@example.com", pass).await.unwrap();
+        assert!(
+            set_cookie.contains("test_sess="),
+            "login must return Set-Cookie"
+        );
+        assert!(set_cookie.contains("HttpOnly"), "cookie must be HttpOnly");
+
+        // login_bearer returns a raw token (not a Set-Cookie header)
+        let (user2, raw_token) = server_ctx
+            .login_bearer("wire@example.com", pass)
+            .await
+            .unwrap();
+        assert!(
+            !raw_token.contains("="),
+            "raw token must not be a Set-Cookie header"
+        );
+        assert!(!raw_token.is_empty());
+
+        // Both tokens authenticate via their respective transports
+        let cookie_header = format!("foo=bar; {set_cookie}");
+        assert!(
+            server_ctx
+                .current_user(Some(&cookie_header), None, None)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        let auth_header = format!("Bearer {raw_token}");
+        assert!(
+            server_ctx
+                .current_user(None, None, Some(&auth_header))
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // Same user authenticated
+        assert_eq!(user, user2);
     }
 }

@@ -11,7 +11,7 @@
 * Automatic session revocation on password change
 * Dioxus-native auth state (`AuthProvider`, `use_auth`, `RouteGate`, `SignedIn`/`SignedOut`)
 * Server-side extraction (`ServerAuthContext`) — auto-extracts cookies, origin, and bearer tokens
-* `fullstack_server_fns!` macro — generates `#[server]` login, logout, restore, and require functions
+* `fullstack_server_fns!` macro — generates `\[server\]` login, logout, restore, and require functions
 * Token persistence (`TokenStorage` trait with `WebTokenStorage` and `FileTokenStorage`)
 * Event hooks (`on_sign_in`, `on_sign_out`, `on_session_validated`)
 * Sliding TTL and token rotation
@@ -64,13 +64,12 @@ let engine = AuthEngine::builder(store.clone(), store.clone())
 
 ```rust,ignore
 use dioxus::prelude::*;
-use dioxus_auth::{AuthProvider, AuthStatus, use_auth, use_auth_restore, use_token_storage, WebTokenStorage};
+use dioxus_auth::{AuthProvider, AuthStatus, use_auth, use_auth_restore};
 
 fn App() -> Element {
     rsx! {
         AuthProvider::<User> {
             initial_status: AuthStatus::Loading,
-            token_storage: WebTokenStorage::default(),
             AuthRestore {}
             Router::<Route> {}
         }
@@ -143,7 +142,7 @@ async fn get_current_user() -> Result<Option<User>, ServerFnError> {
 
 #### 7. Full server-side setup (end-to-end)
 
-For a complete fullstack app, you need three pieces: a shared engine/store, `#[server]` functions, and client-side restore.
+For a complete fullstack app, you need three pieces: a shared engine/store, `\[server\]` functions, and client-side restore.
 
 ```rust,ignore
 // 1. Shared server state (usually a LazyLock)
@@ -181,15 +180,35 @@ fn AuthRestore() -> Element {
 }
 ```
 
-The `fullstack_server_fns!` macro generates four `#[server]` functions:
-- `login_server(identifier: String, password: String) -> Result<(User, String), ServerFnError>`
+The `fullstack_server_fns!` macro generates four `\[server\]` functions:
+- `login_server(identifier: String, password: String) -> Result<User, ServerFnError>`
 - `logout_server() -> Result<(), ServerFnError>`
 - `get_current_user() -> Result<Option<User>, ServerFnError>`
 - `require_user() -> Result<User, ServerFnError>`
 
+`login_server` is **cookie-only** — it sets an `HttpOnly` session cookie on the response and returns the authenticated user. The raw session token never reaches JavaScript. `logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active.
+
 #### 8. Bearer token support
 
-`ServerAuthContext` supports both cookies and `Authorization: Bearer` headers. Bearer tokens take precedence:
+`ServerAuthContext` supports both cookies and `Authorization: Bearer` headers. Bearer tokens take precedence. Bearer is for **native / API clients** (desktop, mobile, scripts); the web flow is cookie-only.
+
+For native clients, use `login_bearer` instead of `login_cookie`:
+
+```rust,ignore
+#[server]
+async fn login_bearer(
+    identifier: String,
+    password: String,
+) -> Result<(User, String), ServerFnError> {
+    let (engine, cookie_config) = /* ... */;
+    let ctx = ServerAuthContext::new(&engine, &cookie_config);
+    ctx.login_bearer(&identifier, &password)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+```
+
+`login_bearer` returns the raw session token for the client to persist via `TokenStorage` (file, keychain, in-memory). It does **not** set a cookie.
 
 ```rust,ignore
 #[server]
@@ -228,15 +247,38 @@ The middleware inserts `AuthenticatedUser(user)` into request extensions. Handle
 use dioxus_auth::{ServerAuthContext, AuthEngine, CookieConfig};
 
 #[server]
-async fn login(email: String, password: String) -> Result<(User, String), ServerFnError> {
+async fn login(email: String, password: String) -> Result<User, ServerFnError> {
     let (engine, cookie_config) = /* ... */;
     let ctx = ServerAuthContext::from_request(&engine, &cookie_config)
         .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-    ctx.login_and_set_cookie(&email, &password)
-        .await
+    ctx.login_cookie(&email, &password)
         .map_err(|e| ServerFnError::new(e.to_string()))
 }
+```
 
+#### 10. Logout
+
+`logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active. On the client, call `logout_server()` then `auth.logout()` to reset local state:
+
+```rust,ignore
+spawn(async move {
+    logout_server().await.ok();
+    auth.logout();
+});
+```
+
+#### 10. Logout
+
+`logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active. On the client, call `logout_server()` then `auth.logout()` to reset local state:
+
+```rust,ignore
+spawn(async move {
+    logout_server().await.ok();
+    auth.logout();
+});
+```
+
+```rust,ignore
 #[server]
 async fn logout() -> Result<(), ServerFnError> {
     let (engine, cookie_config) = /* ... */;
@@ -279,8 +321,8 @@ A complete working example with a real `rusqlite` store is in [`examples/sqlite-
 
 - `SqliteStore` implementing `UserStore`, `PasswordUserStore`, and `SessionStore`
 - Full Dioxus fullstack wiring: login, logout, restore, route protection
-- `ServerAuthContext::login_and_set_cookie` / `logout_and_clear_cookie`
-- `AuthProvider` with `TokenStorageRef`
+- `ServerAuthContext::login_cookie` / `logout_current`
+- `AuthProvider` with `AuthRestore`
 
 Run it with:
 

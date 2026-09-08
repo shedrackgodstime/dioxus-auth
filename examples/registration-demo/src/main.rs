@@ -495,7 +495,7 @@ fn Login() -> Element {
                     let nav = nav;
                     spawn(async move {
                         match login_server(em, pw).await {
-                            Ok((user, _)) => {
+                            Ok(user) => {
                                 auth.set_user(user);
                                 nav.push(Route::Dashboard {});
                             }
@@ -669,25 +669,25 @@ fn AuthRestore() -> Element {
 }
 
 #[server]
-async fn login_server(
-    email: String,
-    password: String,
-) -> Result<(AppUser, String), ServerFnError> {
-    #[cfg(feature = "server")]
-    {
-        let (_, engine, cookie_config, _) = init_server_state().await;
-        let ctx = ServerAuthContext::from_request(engine, cookie_config)
-            .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-        ctx.login_and_set_cookie(&email, &password)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))
+    async fn login_server(
+        email: String,
+        password: String,
+    ) -> Result<AppUser, ServerFnError> {
+        #[cfg(feature = "server")]
+        {
+            let (_, engine, cookie_config, _) = init_server_state().await;
+            let ctx = ServerAuthContext::from_request(engine, cookie_config)
+                .ok_or_else(|| ServerFnError::new("not in a request context"))?;
+            ctx.login_cookie(&email, &password)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))
+        }
+        #[cfg(not(feature = "server"))]
+        {
+            let _ = (email, password);
+            Err(ServerFnError::new("Server only"))
+        }
     }
-    #[cfg(not(feature = "server"))]
-    {
-        let _ = (email, password);
-        Err(ServerFnError::new("Server only"))
-    }
-}
 
 #[server]
 async fn logout_server() -> Result<(), ServerFnError> {

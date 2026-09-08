@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_auth::{
-    fullstack_server_fns, require_auth, use_auth, use_auth_restore, use_token_storage, AuthProvider,
-    AuthUser, RouteGate, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef,
+    fullstack_server_fns, require_auth, use_auth, use_auth_restore, AuthProvider,
+    AuthUser, RouteGate, ServerAuthContext, SignedIn, SignedOut,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -127,7 +127,6 @@ fn App() -> Element {
             document::Link { rel: "stylesheet", href: MAIN_CSS }
             AuthProvider::<AppUser> {
                 initial_status: None,
-                token_storage: TokenStorageRef::new(Arc::new(dioxus_auth::MemoryTokenStorage::default())),
                 AuthRestore {}
                 Router::<Route> {}
             }
@@ -177,10 +176,9 @@ fn Navbar() -> Element {
                             let mut auth = auth;
                             let nav = nav;
                             spawn(async move {
+                                // logout_server revokes the server session and clears
+                                // the cookie (cookie-only web flow — no JS token).
                                 logout_server().await.ok();
-                                if let Some(storage) = use_token_storage() {
-                                    storage.clear();
-                                }
                                 auth.logout();
                                 nav.push(Route::Home {});
                             });
@@ -250,10 +248,7 @@ fn Login() -> Element {
             error_msg.set(None);
 
             match login_server(em, pw).await {
-                Ok((user, raw_token)) => {
-                    if let Some(storage) = use_token_storage() {
-                        let _ = storage.save(&raw_token);
-                    }
+                Ok(user) => {
                     auth.set_user(user);
                     nav.push(Route::Dashboard {});
                 }
@@ -379,7 +374,7 @@ mod tests {
         let server_ctx = ServerAuthContext::new(engine, cookie_config);
 
         let (user, raw_token) = server_ctx
-            .login_and_set_cookie("admin@example.com", "password123")
+            .login_bearer("admin@example.com", "password123")
             .await
             .expect("login must succeed");
         assert_eq!(user.email, "admin@example.com");

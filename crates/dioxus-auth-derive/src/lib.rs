@@ -42,12 +42,9 @@ pub fn derive_auth_user(input: TokenStream) -> TokenStream {
     let data = match input.data {
         syn::Data::Struct(data) => data,
         _ => {
-            return syn::Error::new_spanned(
-                input.ident,
-                "AuthUser derive only supports structs",
-            )
-            .to_compile_error()
-            .into();
+            return syn::Error::new_spanned(input.ident, "AuthUser derive only supports structs")
+                .to_compile_error()
+                .into();
         }
     };
 
