@@ -296,25 +296,25 @@ fn get_server_state(
 }
 
 #[server]
-async fn login_server(
-    email: String,
-    password: String,
-) -> Result<(AppUser, String), ServerFnError> {
-    #[cfg(feature = "server")]
-    {
-        let (_, engine, cookie_config) = get_server_state();
-        let ctx = ServerAuthContext::from_request(engine, cookie_config)
-            .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-        ctx.login_and_set_cookie(&email, &password)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))
+    async fn login_server(
+        email: String,
+        password: String,
+    ) -> Result<AppUser, ServerFnError> {
+        #[cfg(feature = "server")]
+        {
+            let (_, engine, cookie_config) = get_server_state();
+            let ctx = ServerAuthContext::from_request(engine, cookie_config)
+                .ok_or_else(|| ServerFnError::new("not in a request context"))?;
+            ctx.login_cookie(&email, &password)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))
+        }
+        #[cfg(not(feature = "server"))]
+        {
+            let _ = (email, password);
+            Err(ServerFnError::new("Server only"))
+        }
     }
-    #[cfg(not(feature = "server"))]
-    {
-        let _ = (email, password);
-        Err(ServerFnError::new("Server only"))
-    }
-}
 
 #[server]
 async fn logout_server() -> Result<(), ServerFnError> {
@@ -445,10 +445,7 @@ fn Login() -> Element {
                         is_submitting.set(true);
                         error_msg.set(None);
                         match login_server(em, pw).await {
-                            Ok((user, raw_token)) => {
-                                if let Some(storage) = dioxus_auth::use_token_storage() {
-                                    let _ = storage.save(&raw_token);
-                                }
+                            Ok(user) => {
                                 auth.set_user(user);
                                 nav.push(Route::Dashboard {});
                             }

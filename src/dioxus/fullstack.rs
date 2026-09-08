@@ -1,14 +1,19 @@
-/// Generate ready-made `#[server]` authentication functions for a Dioxus fullstack app.
+/// Generate ready-made `\[server\]` authentication functions for a Dioxus fullstack app.
 ///
 /// This macro expands to four common server functions that wrap [`ServerAuthContext`]:
 ///
-/// - `login_server(identifier: String, password: String) -> Result<(User, String), ServerFnError>`
+/// - `login_server(identifier: String, password: String) -> Result<User, ServerFnError>`
 /// - `logout_server() -> Result<(), ServerFnError>`
 /// - `get_current_user() -> Result<Option<User>, ServerFnError>`
 /// - `require_user() -> Result<User, ServerFnError>`
 ///
+/// The generated `login_server` is **cookie-only** — it sets an `HttpOnly` session cookie
+/// and returns the user. The raw token never reaches JavaScript. The generated
+/// `logout_server` revokes the current session (cookie or bearer) and clears the cookie
+/// if a cookie session was active.
+///
 /// The generated functions use [`crate::dioxus::ServerAuthContext::from_request`] internally when the
-/// `dioxus-fullstack` feature is enabled, so they must be called from within a `#[server]` function
+/// `dioxus-fullstack` feature is enabled, so they must be called from within a `\[server\]` function
 /// context. For unit tests or non-request contexts, use [`crate::dioxus::ServerAuthContext::new`] directly.
 ///
 /// # Requirements
@@ -39,10 +44,10 @@ macro_rules! fullstack_server_fns {
         pub async fn login_server(
             identifier: String,
             password: String,
-        ) -> ::core::result::Result<($user, String), ServerFnError> {
+        ) -> ::core::result::Result<$user, ServerFnError> {
             let ctx = $crate::dioxus::ServerAuthContext::from_request($engine, $cookie_config)
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-            ctx.login_and_set_cookie(&identifier, &password)
+            ctx.login_cookie(&identifier, &password)
                 .await
                 .map_err(|e| ServerFnError::new(format!("login failed: {e}")))
         }
@@ -51,12 +56,9 @@ macro_rules! fullstack_server_fns {
         pub async fn logout_server() -> ::core::result::Result<(), ServerFnError> {
             let ctx = $crate::dioxus::ServerAuthContext::from_request($engine, $cookie_config)
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-            if let Some(session_id) = ctx.session_id() {
-                ctx.logout_and_clear_cookie(&session_id)
-                    .await
-                    .map_err(|e| ServerFnError::new(format!("logout failed: {e}")))?;
-            }
-            Ok(())
+            ctx.logout_current()
+                .await
+                .map_err(|e| ServerFnError::new(format!("logout failed: {e}")))
         }
 
         #[server]
