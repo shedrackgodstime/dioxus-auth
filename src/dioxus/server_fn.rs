@@ -127,28 +127,40 @@ where
         let origin_header = origin_header.or(self.origin_header.as_deref());
         let authorization_header = authorization_header.or(self.authorization_header.as_deref());
 
-        let session_id = if let Some(auth_header) = authorization_header {
+        let (session_id, used_cookie) = if let Some(auth_header) = authorization_header {
             if let Some(token) = crate::transport::extract_session_token(
                 Some(auth_header),
-                cookie_header,
+                None,
                 self.cookie_config.name.as_str(),
+                self.cookie_config.host_only,
             ) {
-                SessionId::new(token)
+                // Bearer token extracted (cookie arg was None, so this is bearer-only)
+                (SessionId::new(token), false)
+            } else if let Some(cookie) = cookie_header {
+                match self.cookie_config.extract_session_id(cookie) {
+                    Some(id) => (id, true),
+                    None => return Ok(None),
+                }
             } else {
                 return Ok(None);
             }
         } else if let Some(cookie) = cookie_header {
             match self.cookie_config.extract_session_id(cookie) {
-                Some(id) => id,
+                Some(id) => (id, true),
                 None => return Ok(None),
             }
         } else {
             return Ok(None);
         };
 
-        let origin_validation = self.cookie_config.validate_origin(origin_header);
-        if matches!(origin_validation, OriginValidation::Mismatch { .. }) {
-            return Err(AuthError::Csrf);
+        // Origin/CSRF validation applies ONLY to cookie credentials (Spec 15).
+        // Bearer credentials are request credentials — attacker cannot forge
+        // a Bearer header cross-site, so Origin is irrelevant.
+        if used_cookie {
+            let origin_validation = self.cookie_config.validate_origin(origin_header);
+            if matches!(origin_validation, OriginValidation::Mismatch { .. }) {
+                return Err(AuthError::Csrf);
+            }
         }
 
         self.engine.validate_session(&session_id).await
@@ -232,8 +244,13 @@ where
     /// leaves the server response. The cookie jar is the credential store.
     ///
     /// Requires the `dioxus-fullstack` feature.
+    ///
+    /// Enforces Origin/CSRF validation when `expected_origins` is configured
+    /// (Spec 15): a state-changing cookie operation requires a matching Origin.
     #[cfg(feature = "dioxus-fullstack")]
     pub async fn login_cookie(&self, identifier: &str, password: &str) -> AuthResult<U::User> {
+        self.cookie_config
+            .validate_cookie_origin(self.origin_header.as_deref())?;
         let (user, session) = self.engine.login(identifier, password).await?;
         let cookie_header = self.cookie_config.build_set_cookie_header(session.id());
         if let Some(ctx) = dioxus::fullstack::FullstackContext::current() {
@@ -280,6 +297,9 @@ where
     /// the cookie if a cookie session was active.
     ///
     /// Requires the `dioxus-fullstack` feature.
+    ///
+    /// Enforces Origin/CSRF validation when `expected_origins` is configured
+    /// (Spec 15) and the credential is a cookie. Bearer logouts skip Origin.
     #[cfg(feature = "dioxus-fullstack")]
     pub async fn logout_current(&self) -> AuthResult<()> {
         use dioxus::fullstack::FullstackContext;
@@ -315,10 +335,18 @@ where
                 Some(auth),
                 cookie_header.as_deref(),
                 self.cookie_config.name.as_str(),
+                self.cookie_config.host_only,
             )
         } else {
             None
         };
+
+        // If using cookie credentials (no bearer), enforce Origin for state-changing op
+        let using_cookie = wire_token.is_none() && cookie_header.is_some();
+        if using_cookie {
+            self.cookie_config
+                .validate_cookie_origin(self.origin_header.as_deref())?;
+        }
 
         let session_id = if let Some(token) = wire_token {
             SessionId::new(token)
@@ -666,5 +694,197 @@ mod tests {
 
         // Same user authenticated
         assert_eq!(user, user2);
+    }
+
+    /// Spec 15: `current_user` with cookie + matching Origin → Ok.
+    #[tokio::test(flavor = "current_thread")]
+    async fn current_user_cookie_with_matching_origin_ok() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "origin_ok_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "origin_ok@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "origin_ok@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+        let (_, set_cookie) = server_ctx.login("origin_ok@example.com", pass).await.unwrap();
+
+        let cookie_header = format!("foo=bar; {set_cookie}");
+        let result = server_ctx
+            .current_user(Some(&cookie_header), Some("https://app.example.com"), None)
+            .await;
+        assert_eq!(result.unwrap(), Some(user));
+    }
+
+    /// Spec 15: `current_user` with cookie + mismatched Origin → Csrf.
+    #[tokio::test(flavor = "current_thread")]
+    async fn current_user_cookie_with_mismatched_origin_rejected() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "origin_mismatch_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "origin_mismatch@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "origin_mismatch@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+        let (_, set_cookie) = server_ctx
+            .login("origin_mismatch@example.com", pass)
+            .await
+            .unwrap();
+
+        let cookie_header = format!("foo=bar; {set_cookie}");
+        let result = server_ctx
+            .current_user(Some(&cookie_header), Some("https://evil.example.com"), None)
+            .await;
+        assert_eq!(result.unwrap_err(), AuthError::Csrf);
+    }
+
+    /// Spec 15: `current_user` with cookie + no Origin (safe GET) → Ok.
+    #[tokio::test(flavor = "current_thread")]
+    async fn current_user_cookie_with_no_origin_ok_for_safe_request() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "origin_absent_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "origin_absent@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "origin_absent@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+        let (_, set_cookie) = server_ctx
+            .login("origin_absent@example.com", pass)
+            .await
+            .unwrap();
+
+        let cookie_header = format!("foo=bar; {set_cookie}");
+        let result = server_ctx
+            .current_user(Some(&cookie_header), None, None)
+            .await;
+        assert_eq!(result.unwrap(), Some(user));
+    }
+
+    /// Spec 15: Bearer + mismatched Origin → Ok (bearer never Origin-checked).
+    #[tokio::test(flavor = "current_thread")]
+    async fn bearer_with_mismatched_origin_ok() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "bearer_origin_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "bearer_origin@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "bearer_origin@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+        let (_, raw_token) = server_ctx
+            .login_bearer("bearer_origin@example.com", pass)
+            .await
+            .unwrap();
+
+        let auth_header = format!("Bearer {raw_token}");
+        let result = server_ctx
+            .current_user(None, Some("https://evil.example.com"), Some(&auth_header))
+            .await;
+        assert_eq!(result.unwrap(), Some(user));
+    }
+
+    /// Spec 15: `expected_origins=None` → no Origin enforcement anywhere.
+    #[tokio::test(flavor = "current_thread")]
+    async fn no_origin_enforcement_when_expected_origins_none() {
+        let store = Arc::new(MemoryStore::<MockUser>::new());
+        let hasher = Argon2Hasher::new();
+        let pass = "no_origin_pw";
+        let pass_hash = hasher.hash_password(pass).unwrap();
+
+        let user = MockUser {
+            id: 1,
+            email: "no_origin@example.com".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "no_origin@example.com", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .build();
+
+        let cookie_config = CookieConfig {
+            name: "test_sess".into(),
+            ..Default::default()
+        };
+
+        let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
+        let (_, set_cookie) = server_ctx.login("no_origin@example.com", pass).await.unwrap();
+
+        let cookie_header = format!("foo=bar; {set_cookie}");
+        let result = server_ctx
+            .current_user(
+                Some(&cookie_header),
+                Some("https://anything.example.com"),
+                None,
+            )
+            .await;
+        assert_eq!(result.unwrap(), Some(user.clone()));
+
+        let result2 = server_ctx
+            .current_user(Some(&cookie_header), None, None)
+            .await;
+        assert_eq!(result2.unwrap(), Some(user));
     }
 }

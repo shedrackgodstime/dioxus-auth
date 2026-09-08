@@ -1,3 +1,4 @@
+use crate::error::{AuthError, AuthResult};
 use crate::session::SessionId;
 
 /// SameSite policy for session cookies.
@@ -84,11 +85,14 @@ impl CookieConfig {
             self.name.clone()
         };
 
+        // __Host- cookies MUST use Path=/ (RFC 6265bis §5)
+        let path = if self.host_only { "/" } else { &self.path };
+
         let mut header = format!(
             "{}={}; Path={}",
             cookie_name,
             session_id.as_str(),
-            self.path
+            path
         );
 
         // __Host- cookies forbid Domain attribute
@@ -142,9 +146,16 @@ impl CookieConfig {
 
     /// Extract the session ID from an incoming HTTP `Cookie` header string.
     ///
-    /// When `host_only` is enabled, the cookie name is prefixed with `__Host-`
-    /// in `Set-Cookie` headers, so this method also checks for that prefix.
+    /// When `host_only` is `true`, only the `__Host-<name>` form is accepted —
+    /// the bare `<name>` is rejected (Spec 15). When `host_only` is `false`,
+    /// only the bare `<name>` is accepted — the `__Host-` prefixed form is
+    /// rejected. This prevents cookie-name confusion attacks.
     pub fn extract_session_id(&self, cookie_header: &str) -> Option<SessionId> {
+        let expected_name = if self.host_only {
+            format!("__Host-{}", self.name)
+        } else {
+            self.name.clone()
+        };
         for pair in cookie_header.split(';') {
             let mut parts = pair.trim().splitn(2, '=');
             if let (Some(name), Some(val)) = (parts.next(), parts.next()) {
@@ -152,8 +163,7 @@ impl CookieConfig {
                 if val.is_empty() {
                     continue;
                 }
-                let trimmed_name = name.trim();
-                if trimmed_name == self.name || trimmed_name == format!("__Host-{}", self.name) {
+                if name.trim() == expected_name {
                     return Some(SessionId::new(val));
                 }
             }
@@ -168,6 +178,10 @@ impl CookieConfig {
     /// if the Origin matches one of the expected values.
     ///
     /// Returns [`OriginValidation::Mismatch`] if the Origin is present but does not match.
+    ///
+    /// This is used for **safe** requests (GET/HEAD/OPTIONS) where Origin may be absent.
+    /// For state-changing cookie operations, use [`validate_cookie_origin`] which
+    /// requires Origin to be present when `expected_origins` is configured.
     pub fn validate_origin(&self, origin: Option<&str>) -> OriginValidation {
         let Some(expected) = &self.expected_origins else {
             return OriginValidation::Valid;
@@ -184,5 +198,27 @@ impl CookieConfig {
             expected: expected.join(", "),
             received: received.to_string(),
         }
+    }
+
+    /// Validate Origin for state-changing cookie operations (login, logout).
+    ///
+    /// When `expected_origins` is configured, the Origin header **must** be present
+    /// and match one of the expected values. Returns `Err(AuthError::Csrf)` on
+    /// mismatch or absence. When `expected_origins` is `None`, all origins are allowed.
+    ///
+    /// Bearer credentials never need Origin validation — this is only for cookie ops.
+    pub fn validate_cookie_origin(&self, origin: Option<&str>) -> AuthResult<()> {
+        let Some(expected) = &self.expected_origins else {
+            return Ok(());
+        };
+        let Some(received) = origin else {
+            return Err(AuthError::Csrf);
+        };
+        for exp in expected {
+            if exp == received {
+                return Ok(());
+            }
+        }
+        Err(AuthError::Csrf)
     }
 }

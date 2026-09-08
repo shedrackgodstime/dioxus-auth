@@ -2,6 +2,7 @@
 //!
 //! Bearer wins over cookie. Missing both → None. Malformed bearer falls through
 //! to cookie. Empty values are ignored. Cookie name is exact match.
+//! Spec 15: host_only enforces strict cookie-name matching.
 
 use dioxus_auth::extract_session_token;
 
@@ -11,6 +12,7 @@ fn bearer_wins_over_cookie() {
         Some("Bearer bearer_token_xyz"),
         Some("dioxus_session=cookie_token_abc"),
         "dioxus_session",
+        false,
     );
     assert_eq!(token.as_deref(), Some("bearer_token_xyz"));
 }
@@ -21,6 +23,7 @@ fn cookie_used_when_no_bearer() {
         None,
         Some("foo=bar; dioxus_session=cookie_token_abc; baz=qux"),
         "dioxus_session",
+        false,
     );
     assert_eq!(token.as_deref(), Some("cookie_token_abc"));
 }
@@ -31,19 +34,20 @@ fn cookie_used_when_bearer_malformed() {
         Some("Basic dXNlcjpwYXNz"),
         Some("dioxus_session=cookie_token_abc"),
         "dioxus_session",
+        false,
     );
     assert_eq!(token.as_deref(), Some("cookie_token_abc"));
 }
 
 #[test]
 fn missing_both_returns_none() {
-    let token = extract_session_token(None, Some("foo=bar; baz=qux"), "dioxus_session");
+    let token = extract_session_token(None, Some("foo=bar; baz=qux"), "dioxus_session", false);
     assert_eq!(token, None);
 }
 
 #[test]
 fn empty_cookie_value_ignored() {
-    let token = extract_session_token(None, Some("dioxus_session=; foo=bar"), "dioxus_session");
+    let token = extract_session_token(None, Some("dioxus_session=; foo=bar"), "dioxus_session", false);
     assert_eq!(token, None);
 }
 
@@ -53,6 +57,7 @@ fn empty_bearer_value_falls_through() {
         Some("Bearer "),
         Some("dioxus_session=cookie_token_abc"),
         "dioxus_session",
+        false,
     );
     assert_eq!(token.as_deref(), Some("cookie_token_abc"));
 }
@@ -63,18 +68,55 @@ fn cookie_name_is_exact_match() {
         None,
         Some("session=other; dioxus_session=mine"),
         "dioxus_session",
+        false,
     );
     assert_eq!(token.as_deref(), Some("mine"));
 }
 
 #[test]
 fn custom_cookie_name() {
-    let token = extract_session_token(None, Some("app_session=my_app_token"), "app_session");
+    let token = extract_session_token(None, Some("app_session=my_app_token"), "app_session", false);
     assert_eq!(token.as_deref(), Some("my_app_token"));
 }
 
 #[test]
 fn bearer_with_lowercase_scheme() {
-    let token = extract_session_token(Some("bearer lower_bearer_token"), None, "dioxus_session");
+    let token = extract_session_token(Some("bearer lower_bearer_token"), None, "dioxus_session", false);
     assert_eq!(token.as_deref(), Some("lower_bearer_token"));
+}
+
+#[test]
+fn host_only_rejects_bare_cookie_name() {
+    // Spec 15: when host_only=true, bare name is rejected
+    let token = extract_session_token(
+        None,
+        Some("dioxus_session=bare_token_abc"),
+        "dioxus_session",
+        true,
+    );
+    assert_eq!(token, None);
+}
+
+#[test]
+fn host_only_accepts_prefixed_cookie_name() {
+    // Spec 15: when host_only=true, __Host- prefixed form is accepted
+    let token = extract_session_token(
+        None,
+        Some("__Host-dioxus_session=host_token_abc"),
+        "dioxus_session",
+        true,
+    );
+    assert_eq!(token.as_deref(), Some("host_token_abc"));
+}
+
+#[test]
+fn non_host_only_rejects_prefixed_cookie_name() {
+    // Spec 15: when host_only=false, __Host- prefixed form is rejected
+    let token = extract_session_token(
+        None,
+        Some("__Host-dioxus_session=host_token_abc"),
+        "dioxus_session",
+        false,
+    );
+    assert_eq!(token, None);
 }

@@ -79,6 +79,11 @@ where
         .get(http::header::COOKIE)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
+    let origin_header = req
+        .headers()
+        .get(http::header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let authorization_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -89,7 +94,7 @@ where
     let user = ctx
         .current_user(
             cookie_header.as_deref(),
-            None,
+            origin_header.as_deref(),
             authorization_header.as_deref(),
         )
         .await
@@ -140,6 +145,11 @@ where
         .get(http::header::COOKIE)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
+    let origin_header = req
+        .headers()
+        .get(http::header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let authorization_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -150,7 +160,7 @@ where
     let user = match ctx
         .current_user(
             cookie_header.as_deref(),
-            None,
+            origin_header.as_deref(),
             authorization_header.as_deref(),
         )
         .await
@@ -205,6 +215,11 @@ where
         .get(http::header::COOKIE)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
+    let origin_header = req
+        .headers()
+        .get(http::header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let authorization_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -215,7 +230,7 @@ where
     let user = match ctx
         .current_user(
             cookie_header.as_deref(),
-            None,
+            origin_header.as_deref(),
             authorization_header.as_deref(),
         )
         .await
