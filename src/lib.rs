@@ -964,6 +964,104 @@ mod tests {
         assert!(!delete.contains("Domain="));
     }
 
+    /// Spec 15: `host_only=true` forces `Path=/` even when a custom path is configured.
+    #[test]
+    fn cookie_config_host_only_forces_root_path() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            path: "/custom".into(),
+            domain: None,
+            secure: true,
+            http_only: true,
+            same_site: SameSite::Lax,
+            max_age_secs: Some(3600),
+            host_only: true,
+            expected_origins: None,
+        };
+
+        let session_id = SessionId::new("token-abc");
+        let header = config.build_set_cookie_header(&session_id);
+        assert!(
+            header.contains("Path=/"),
+            "host_only must force Path=/: {header}"
+        );
+        assert!(
+            !header.contains("Path=/custom"),
+            "host_only must override custom path: {header}"
+        );
+    }
+
+    /// Spec 15: `host_only=false` uses the configured path (not forced to `/`).
+    #[test]
+    fn cookie_config_non_host_only_uses_configured_path() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            path: "/app".into(),
+            domain: None,
+            secure: true,
+            http_only: true,
+            same_site: SameSite::Lax,
+            max_age_secs: Some(3600),
+            host_only: false,
+            expected_origins: None,
+        };
+
+        let session_id = SessionId::new("token-abc");
+        let header = config.build_set_cookie_header(&session_id);
+        assert!(
+            header.contains("Path=/app"),
+            "non-host_only must use configured path: {header}"
+        );
+    }
+
+    /// Spec 15: `host_only=true` rejects bare cookie name on read.
+    #[test]
+    fn cookie_config_host_only_rejects_bare_name_on_read() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            host_only: true,
+            ..Default::default()
+        };
+
+        // Bare name rejected when host_only
+        assert_eq!(
+            config.extract_session_id("sess=token-abc"),
+            None,
+            "bare name must be rejected when host_only"
+        );
+
+        // __Host- prefixed accepted when host_only
+        assert_eq!(
+            config.extract_session_id("__Host-sess=token-abc"),
+            Some(SessionId::new("token-abc")),
+            "__Host- prefixed must be accepted when host_only"
+        );
+    }
+
+    /// Spec 15: `host_only=false` rejects `__Host-` prefixed cookie name on read.
+    #[test]
+    fn cookie_config_non_host_only_rejects_prefixed_name_on_read() {
+        let config = CookieConfig {
+            name: "sess".into(),
+            host_only: false,
+            ..Default::default()
+        };
+
+        // __Host- prefixed rejected when not host_only
+        assert_eq!(
+            config.extract_session_id("__Host-sess=token-abc"),
+            None,
+            "__Host- prefixed must be rejected when not host_only"
+        );
+
+        // Bare name accepted when not host_only
+        assert_eq!(
+            config.extract_session_id("sess=token-abc"),
+            Some(SessionId::new("token-abc")),
+            "bare name must be accepted when not host_only"
+        );
+    }
+
     /// Phase F: `__Host-` cookies can be emitted and then extracted back from a
     /// `Cookie` header, closing the round-trip bug where the server emitted
     /// `__Host-session=...` but later looked for `session=...`.
