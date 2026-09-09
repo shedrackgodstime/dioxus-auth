@@ -175,8 +175,8 @@ impl CookieConfig {
     /// Returns [`OriginValidation::Mismatch`] if the Origin is present but does not match.
     ///
     /// This is used for **safe** requests (GET/HEAD/OPTIONS) where Origin may be absent.
-    /// For state-changing cookie operations, use [`validate_cookie_origin`] which
-    /// requires Origin to be present when `expected_origins` is configured.
+    /// For state-changing cookie operations, use [`CookieConfig::validate_cookie_origin`]
+    /// which requires Origin to be present when `expected_origins` is configured.
     pub fn validate_origin(&self, origin: Option<&str>) -> OriginValidation {
         let Some(expected) = &self.expected_origins else {
             return OriginValidation::Valid;
