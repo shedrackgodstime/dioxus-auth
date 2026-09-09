@@ -6,7 +6,7 @@
 
 ### Features
 
-* Argon2id password hashing with constant-time timing defense
+* Argon2id password hashing with user-enumeration timing mitigation (dummy-hash verification on unknown identifiers; lookup is variable-time, not constant-time)
 * Opaque session tokens hashed at rest (`sha256(raw)`)
 * Automatic session revocation on password change
 * Dioxus-native auth state (`AuthProvider`, `use_auth`, `RouteGate`, `SignedIn`/`SignedOut`)
@@ -14,7 +14,7 @@
 * `fullstack_server_fns!` macro — generates `\[server\]` login, logout, restore, and require functions
 * Token persistence (`TokenStorage` trait with `WebTokenStorage` and `FileTokenStorage`)
 * Event hooks (`on_sign_in`, `on_sign_out`, `on_session_validated`)
-* Sliding TTL and token rotation
+* Absolute session TTL + optional idle timeout; optional single-active-session
 * Hardened cookies — `__Host-` prefix, `HttpOnly`, `SameSite`, CSRF/Origin validation
 * Axum middleware (`auth_middleware`)
 * Pluggable storage — implement `UserStore`, `PasswordUserStore`, and `SessionStore` against any backend
@@ -368,6 +368,13 @@ async fn my_store_follows_contract() {
 ```
 
 See [`src/storage/tests.rs`](src/storage/tests.rs) for the full list of test helpers.
+
+> **Warning: keep secrets out of the wire user.** `#[server]` functions serialize
+> their return value to the client. Your `AuthUser` type — or anything containing
+> `password_hash` / `session_auth_hash` — must **not** be returned from a server
+> function. Return a public user view instead (id, email, name, roles) and keep
+> the hash row server-side only. The examples use hash-free public types for
+> exactly this reason.
 
 ### Minimal setup
 
