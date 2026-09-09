@@ -68,6 +68,7 @@ impl SqliteStore {
                 user_id INTEGER NOT NULL,
                 created_at_unix INTEGER NOT NULL,
                 expires_at_unix INTEGER NOT NULL,
+                last_active_at_unix INTEGER,
                 auth_hash TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             );
@@ -162,10 +163,11 @@ impl SessionStore<i64> for SqliteStore {
             .map_err(|e| AuthError::Store(e.to_string()))?;
         conn.execute(
             "
-            INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, auth_hash)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(id) DO UPDATE SET
                 expires_at_unix = excluded.expires_at_unix,
+                last_active_at_unix = excluded.last_active_at_unix,
                 auth_hash = excluded.auth_hash
             ",
             params![
@@ -173,6 +175,7 @@ impl SessionStore<i64> for SqliteStore {
                 session.user_id(),
                 session.created_at_unix() as i64,
                 session.expires_at_unix() as i64,
+                session.last_active_at_unix().map(|v| v as i64),
                 session.auth_hash(),
             ],
         )
@@ -188,16 +191,20 @@ impl SessionStore<i64> for SqliteStore {
             .map_err(|e| AuthError::Store(e.to_string()))?;
         let session = conn
             .query_row(
-                "SELECT id, user_id, created_at_unix, expires_at_unix, auth_hash FROM sessions WHERE id = ?1",
+                "SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE id = ?1",
                 params![id.as_str()],
                 |row| {
                     let sess_id = SessionId::new(row.get::<_, String>(0)?);
                     let user_id = row.get::<_, i64>(1)?;
                     let created_at = row.get::<_, i64>(2)?;
                     let expires_at = row.get::<_, i64>(3)?;
-                    let auth_hash = row.get::<_, Option<String>>(4)?;
+                    let last_active: Option<i64> = row.get(4)?;
+                    let auth_hash = row.get::<_, Option<String>>(5)?;
 
                     let mut s = Session::new(sess_id, user_id, created_at as u64, expires_at as u64);
+                    if let Some(t) = last_active {
+                        s = s.with_last_active(t as u64);
+                    }
                     if let Some(hash) = auth_hash {
                         s = s.with_auth_hash(hash);
                     }
@@ -236,7 +243,7 @@ impl SessionStore<i64> for SqliteStore {
             .lock()
             .map_err(|e| AuthError::Store(e.to_string()))?;
         let mut stmt = conn
-            .prepare("SELECT id, user_id, created_at_unix, expires_at_unix, auth_hash FROM sessions WHERE user_id = ?1")
+            .prepare("SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE user_id = ?1")
             .map_err(|e| AuthError::Store(e.to_string()))?;
         let rows = stmt
             .query_map(params![user_id], |row| {
@@ -244,8 +251,12 @@ impl SessionStore<i64> for SqliteStore {
                 let uid = row.get::<_, i64>(1)?;
                 let created_at = row.get::<_, i64>(2)?;
                 let expires_at = row.get::<_, i64>(3)?;
-                let auth_hash = row.get::<_, Option<String>>(4)?;
+                let last_active: Option<i64> = row.get(4)?;
+                let auth_hash = row.get::<_, Option<String>>(5)?;
                 let mut s = Session::new(sess_id, uid, created_at as u64, expires_at as u64);
+                if let Some(t) = last_active {
+                    s = s.with_last_active(t as u64);
+                }
                 if let Some(hash) = auth_hash {
                     s = s.with_auth_hash(hash);
                 }
@@ -257,6 +268,26 @@ impl SessionStore<i64> for SqliteStore {
             sessions.push(row.map_err(|e| AuthError::Store(e.to_string()))?);
         }
         Ok(sessions)
+    }
+
+    /// Conditional session touch: update expiry + last_active only if the
+    /// session still exists (prevents logout/rotate resurrection races, Spec 16).
+    async fn touch_session_if_present(
+        &self,
+        id: &SessionId,
+        new_expiry: u64,
+        last_active: u64,
+    ) -> AuthResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AuthError::Store(e.to_string()))?;
+        conn.execute(
+            "UPDATE sessions SET expires_at_unix = ?1, last_active_at_unix = ?2 WHERE id = ?3",
+            params![new_expiry as i64, last_active as i64, id.as_str()],
+        )
+        .map_err(|e| AuthError::Store(e.to_string()))?;
+        Ok(())
     }
 }
 

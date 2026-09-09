@@ -429,6 +429,8 @@ impl SessionStore<u64> for MyStore {
     async fn list_user_sessions(&self, user_id: &u64) -> dioxus_auth::AuthResult<Vec<Session<u64>>> {
         Ok(self.sessions.values().filter(|s| s.user_id() == user_id).cloned().collect())
     }
+    // Default `touch_session_if_present` is a best-effort find-then-save;
+    // override it with a conditional update to close resurrection races.
 }
 
 // 3. Wire the engine

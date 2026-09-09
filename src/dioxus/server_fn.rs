@@ -722,7 +722,10 @@ mod tests {
         };
 
         let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
-        let (_, set_cookie) = server_ctx.login("origin_ok@example.com", pass).await.unwrap();
+        let (_, set_cookie) = server_ctx
+            .login("origin_ok@example.com", pass)
+            .await
+            .unwrap();
 
         let cookie_header = format!("foo=bar; {set_cookie}");
         let result = server_ctx
@@ -870,7 +873,10 @@ mod tests {
         };
 
         let server_ctx = ServerAuthContext::new(&engine, &cookie_config);
-        let (_, set_cookie) = server_ctx.login("no_origin@example.com", pass).await.unwrap();
+        let (_, set_cookie) = server_ctx
+            .login("no_origin@example.com", pass)
+            .await
+            .unwrap();
 
         let cookie_header = format!("foo=bar; {set_cookie}");
         let result = server_ctx

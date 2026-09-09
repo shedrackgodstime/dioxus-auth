@@ -66,6 +66,7 @@ impl SqliteStore {
                 user_id INTEGER NOT NULL,
                 created_at_unix INTEGER NOT NULL,
                 expires_at_unix INTEGER NOT NULL,
+                last_active_at_unix INTEGER,
                 auth_hash TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )",
@@ -161,10 +162,11 @@ impl SessionStore<u64> for SqliteStore {
     async fn save_session(&self, session: dioxus_auth::Session<u64>) -> dioxus_auth::AuthResult<()> {
         sqlx::query(
             "
-            INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, auth_hash)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(id) DO UPDATE SET
                 expires_at_unix = excluded.expires_at_unix,
+                last_active_at_unix = excluded.last_active_at_unix,
                 auth_hash = excluded.auth_hash
             ",
         )
@@ -172,6 +174,7 @@ impl SessionStore<u64> for SqliteStore {
         .bind(*session.user_id() as i64)
         .bind(session.created_at_unix() as i64)
         .bind(session.expires_at_unix() as i64)
+        .bind(session.last_active_at_unix().map(|v| v as i64))
         .bind(session.auth_hash())
         .execute(&*self.pool)
         .await
@@ -184,21 +187,24 @@ impl SessionStore<u64> for SqliteStore {
         &self,
         id: &dioxus_auth::SessionId,
     ) -> dioxus_auth::AuthResult<Option<dioxus_auth::Session<u64>>> {
-        let row = sqlx::query_as::<_, (String, i64, i64, i64, Option<String>)>(
-            "SELECT id, user_id, created_at_unix, expires_at_unix, auth_hash FROM sessions WHERE id = ?1",
+        let row = sqlx::query_as::<_, (String, i64, i64, i64, Option<i64>, Option<String>)>(
+            "SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE id = ?1",
         )
         .bind(id.as_str())
         .fetch_optional(&*self.pool)
         .await
         .map_err(|e| dioxus_auth::AuthError::Store(e.to_string()))?;
 
-        let session = row.map(|(id, user_id, created_at, expires_at, auth_hash)| {
+        let session = row.map(|(id, user_id, created_at, expires_at, last_active, auth_hash)| {
             let mut s = dioxus_auth::Session::new(
                 dioxus_auth::SessionId::new(id),
                 user_id as u64,
                 created_at as u64,
                 expires_at as u64,
             );
+            if let Some(t) = last_active {
+                s = s.with_last_active(t as u64);
+            }
             if let Some(hash) = auth_hash {
                 s = s.with_auth_hash(hash);
             }
@@ -232,8 +238,8 @@ impl SessionStore<u64> for SqliteStore {
         &self,
         user_id: &u64,
     ) -> dioxus_auth::AuthResult<Vec<dioxus_auth::Session<u64>>> {
-        let rows = sqlx::query_as::<_, (String, i64, i64, i64, Option<String>)>(
-            "SELECT id, user_id, created_at_unix, expires_at_unix, auth_hash FROM sessions WHERE user_id = ?1",
+        let rows = sqlx::query_as::<_, (String, i64, i64, i64, Option<i64>, Option<String>)>(
+            "SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE user_id = ?1",
         )
         .bind(*user_id as i64)
         .fetch_all(&*self.pool)
@@ -242,13 +248,16 @@ impl SessionStore<u64> for SqliteStore {
 
         let sessions = rows
             .into_iter()
-            .map(|(id, user_id, created_at, expires_at, auth_hash)| {
+            .map(|(id, user_id, created_at, expires_at, last_active, auth_hash)| {
                 let mut s = dioxus_auth::Session::new(
                     dioxus_auth::SessionId::new(id),
                     user_id as u64,
                     created_at as u64,
                     expires_at as u64,
                 );
+                if let Some(t) = last_active {
+                    s = s.with_last_active(t as u64);
+                }
                 if let Some(hash) = auth_hash {
                     s = s.with_auth_hash(hash);
                 }

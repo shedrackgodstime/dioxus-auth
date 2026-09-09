@@ -23,8 +23,8 @@ where
     sessions: Arc<S>,
     hasher: Option<Arc<dyn PasswordHasher>>,
     session_ttl_secs: u64,
-    sliding_window_secs: Option<u64>,
-    rotate_tokens: bool,
+    idle_timeout_secs: Option<u64>,
+    single_active_session: bool,
     on_sign_in: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     on_sign_out: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     on_session_validated: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
@@ -43,8 +43,8 @@ where
             sessions,
             hasher: None,
             session_ttl_secs: 60 * 60 * 24 * 7, // 7 days
-            sliding_window_secs: None,
-            rotate_tokens: false,
+            idle_timeout_secs: None,
+            single_active_session: false,
             on_sign_in: None,
             on_sign_out: None,
             on_session_validated: None,
@@ -70,21 +70,29 @@ where
         self
     }
 
-    /// Enable sliding TTL.
-    pub fn sliding_window(mut self, duration: Duration) -> Self {
-        self.sliding_window_secs = Some(duration.as_secs());
+    /// Set the idle timeout (max time without validated activity).
+    ///
+    /// When set, a session expires after `duration` seconds without any
+    /// validated activity. Activity advances on each successful validation.
+    /// `None` (default) means no idle timeout — only the absolute `session_ttl`
+    /// applies.
+    pub fn idle_timeout(mut self, duration: Duration) -> Self {
+        self.idle_timeout_secs = Some(duration.as_secs());
         self
     }
 
-    /// Enable sliding TTL in seconds.
-    pub fn sliding_window_secs(mut self, secs: u64) -> Self {
-        self.sliding_window_secs = Some(secs);
+    /// Set the idle timeout in seconds.
+    pub fn idle_timeout_secs(mut self, secs: u64) -> Self {
+        self.idle_timeout_secs = Some(secs);
         self
     }
 
-    /// Invalidate previous sessions on login.
-    pub fn rotate_tokens(mut self, enabled: bool) -> Self {
-        self.rotate_tokens = enabled;
+    /// When enabled, invalidate all previous sessions on login (single-active-session).
+    ///
+    /// This ensures a user can only have one active session at a time.
+    /// `false` (default) allows multiple concurrent sessions.
+    pub fn single_active_session(mut self, enabled: bool) -> Self {
+        self.single_active_session = enabled;
         self
     }
 
@@ -128,8 +136,8 @@ where
             sessions: self.sessions,
             hasher,
             session_ttl_secs: self.session_ttl_secs,
-            sliding_window_secs: self.sliding_window_secs,
-            rotate_tokens: self.rotate_tokens,
+            idle_timeout_secs: self.idle_timeout_secs,
+            single_active_session: self.single_active_session,
             dummy_hash,
             on_sign_in: self.on_sign_in,
             on_sign_out: self.on_sign_out,

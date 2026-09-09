@@ -31,8 +31,8 @@ where
     pub(crate) sessions: Arc<S>,
     pub(crate) hasher: Arc<dyn PasswordHasher>,
     pub(crate) session_ttl_secs: u64,
-    pub(crate) sliding_window_secs: Option<u64>,
-    pub(crate) rotate_tokens: bool,
+    pub(crate) idle_timeout_secs: Option<u64>,
+    pub(crate) single_active_session: bool,
     pub(crate) on_sign_in: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     pub(crate) on_sign_out: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
     pub(crate) on_session_validated: Option<Arc<dyn Fn(&U::User) + Send + Sync>>,
@@ -124,13 +124,25 @@ where
             }
         }
 
-        if let Some(window) = self.sliding_window_secs {
-            let time_since_creation = now - session.created_at_unix();
-            if time_since_creation < window {
-                let extended = session.extend_expiry(now, self.session_ttl_secs);
-                let _ = self.sessions.save_session(extended).await;
+        // Idle timeout: expire if too long since last activity.
+        if let Some(idle) = self.idle_timeout_secs {
+            if let Some(last_active) = session.last_active_at_unix() {
+                if now - last_active >= idle {
+                    let _ = self.sessions.delete_session(&storage_id).await;
+                    return Ok(None);
+                }
             }
         }
+
+        // Conditional touch: extend expiry + update last_active only if the
+        // session still exists. This closes the logout/rotate resurrection race
+        // (Spec 16) — if the session was deleted between our read and this write,
+        // touch_session_if_present is a no-op.
+        let new_expiry = session.created_at_unix() + self.session_ttl_secs;
+        let _ = self
+            .sessions
+            .touch_session_if_present(&storage_id, new_expiry, now)
+            .await;
 
         self.fire_on_session_validated(&user);
         Ok(Some(user))
@@ -159,14 +171,14 @@ where
         self.sessions.delete_user_sessions(user_id).await
     }
 
-    /// Configured sliding window in seconds, if any.
-    pub fn sliding_window_secs(&self) -> Option<u64> {
-        self.sliding_window_secs
+    /// Configured idle timeout in seconds, if any.
+    pub fn idle_timeout_secs(&self) -> Option<u64> {
+        self.idle_timeout_secs
     }
 
-    /// Whether token rotation is enabled on login.
-    pub fn rotate_tokens(&self) -> bool {
-        self.rotate_tokens
+    /// Whether single-active-session is enabled on login.
+    pub fn single_active_session(&self) -> bool {
+        self.single_active_session
     }
 
     /// Access the pre-computed dummy Argon2 hash used for timing defense on unknown-user login.
@@ -282,7 +294,7 @@ where
             .as_secs();
         let expires_at = now + self.session_ttl_secs;
 
-        if self.rotate_tokens {
+        if self.single_active_session {
             let _ = self.sessions.delete_user_sessions(&user.id()).await;
         }
 

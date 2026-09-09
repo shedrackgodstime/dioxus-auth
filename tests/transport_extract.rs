@@ -47,7 +47,12 @@ fn missing_both_returns_none() {
 
 #[test]
 fn empty_cookie_value_ignored() {
-    let token = extract_session_token(None, Some("dioxus_session=; foo=bar"), "dioxus_session", false);
+    let token = extract_session_token(
+        None,
+        Some("dioxus_session=; foo=bar"),
+        "dioxus_session",
+        false,
+    );
     assert_eq!(token, None);
 }
 
@@ -81,7 +86,12 @@ fn custom_cookie_name() {
 
 #[test]
 fn bearer_with_lowercase_scheme() {
-    let token = extract_session_token(Some("bearer lower_bearer_token"), None, "dioxus_session", false);
+    let token = extract_session_token(
+        Some("bearer lower_bearer_token"),
+        None,
+        "dioxus_session",
+        false,
+    );
     assert_eq!(token.as_deref(), Some("lower_bearer_token"));
 }
 

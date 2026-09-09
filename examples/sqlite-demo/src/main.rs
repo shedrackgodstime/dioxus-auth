@@ -82,6 +82,7 @@ impl SqliteStore {
                 user_id INTEGER NOT NULL,
                 created_at_unix INTEGER NOT NULL,
                 expires_at_unix INTEGER NOT NULL,
+                last_active_at_unix INTEGER,
                 auth_hash TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             );
@@ -179,10 +180,11 @@ impl SessionStore<u64> for SqliteStore {
             .map_err(|e| dioxus_auth::AuthError::Store(e.to_string()))?;
         conn.execute(
             "
-            INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, auth_hash)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(id) DO UPDATE SET
                 expires_at_unix = excluded.expires_at_unix,
+                last_active_at_unix = excluded.last_active_at_unix,
                 auth_hash = excluded.auth_hash
             ",
             rusqlite::params![
@@ -190,6 +192,7 @@ impl SessionStore<u64> for SqliteStore {
                 session.user_id(),
                 session.created_at_unix(),
                 session.expires_at_unix(),
+                session.last_active_at_unix().map(|v| v as i64),
                 session.auth_hash(),
             ],
         )
@@ -207,15 +210,19 @@ impl SessionStore<u64> for SqliteStore {
             .map_err(|e| dioxus_auth::AuthError::Store(e.to_string()))?;
         let session = conn
             .query_row(
-                "SELECT id, user_id, created_at_unix, expires_at_unix, auth_hash FROM sessions WHERE id = ?1",
+                "SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE id = ?1",
                 rusqlite::params![id.as_str()],
                 |row| {
                     let sess_id = dioxus_auth::SessionId::new(row.get::<_, String>(0)?);
                     let user_id = row.get::<_, u64>(1)?;
                     let created_at = row.get::<_, u64>(2)?;
                     let expires_at = row.get::<_, u64>(3)?;
-                    let auth_hash = row.get::<_, Option<String>>(4)?;
+                    let last_active: Option<i64> = row.get(4)?;
+                    let auth_hash = row.get::<_, Option<String>>(5)?;
                     let mut s = dioxus_auth::Session::new(sess_id, user_id, created_at, expires_at);
+                    if let Some(t) = last_active {
+                        s = s.with_last_active(t as u64);
+                    }
                     if let Some(hash) = auth_hash {
                         s = s.with_auth_hash(hash);
                     }

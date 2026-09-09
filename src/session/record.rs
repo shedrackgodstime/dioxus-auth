@@ -7,6 +7,7 @@ pub struct Session<UserId> {
     user_id: UserId,
     created_at_unix: u64,
     expires_at_unix: u64,
+    last_active_at_unix: Option<u64>,
     auth_hash: Option<String>,
     ip_address: Option<String>,
     user_agent: Option<String>,
@@ -20,10 +21,25 @@ impl<UserId> Session<UserId> {
             user_id,
             created_at_unix,
             expires_at_unix,
+            last_active_at_unix: None,
             auth_hash: None,
             ip_address: None,
             user_agent: None,
         }
+    }
+
+    /// Set the last-active timestamp (seconds since UNIX epoch).
+    ///
+    /// Used by the engine to track idle timeouts. `None` means "not yet active
+    /// since creation" — the first validation sets it.
+    pub fn with_last_active(mut self, at: u64) -> Self {
+        self.last_active_at_unix = Some(at);
+        self
+    }
+
+    /// Last validation/activity timestamp (seconds since UNIX epoch), if any.
+    pub fn last_active_at_unix(&self) -> Option<u64> {
+        self.last_active_at_unix
     }
 
     /// Attach a hash used to invalidate this session when credentials change.
@@ -89,6 +105,27 @@ impl<UserId> Session<UserId> {
     /// Used for sliding TTL.
     pub fn extend_expiry(mut self, now: u64, ttl_secs: u64) -> Self {
         self.expires_at_unix = now + ttl_secs;
+        self
+    }
+
+    /// Set the expiry timestamp (seconds since UNIX epoch).
+    pub fn set_expires_at_unix(&mut self, expires_at: u64) {
+        self.expires_at_unix = expires_at;
+    }
+
+    /// Set the last-active timestamp (seconds since UNIX epoch).
+    pub fn set_last_active_at_unix(&mut self, last_active: u64) {
+        self.last_active_at_unix = Some(last_active);
+    }
+
+    /// Set the expiry and last-active timestamp in one operation.
+    ///
+    /// Used by [`SessionStore::touch_session_if_present`] implementations to
+    /// conditionally refresh a session without a separate read-modify-write
+    /// that could resurrect a revoked session (Spec 16).
+    pub fn set_expiry_and_last_active(mut self, new_expiry: u64, last_active: u64) -> Self {
+        self.expires_at_unix = new_expiry;
+        self.last_active_at_unix = Some(last_active);
         self
     }
 }

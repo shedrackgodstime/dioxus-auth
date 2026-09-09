@@ -832,31 +832,38 @@ mod tests {
         vdom_components.rebuild_in_place();
     }
 
-    /// Phase F: sliding TTL extends session expiry on validation within the window.
+    /// Spec 16: validation updates last_active_at and refreshes expiry to created_at + ttl.
     #[tokio::test(flavor = "current_thread")]
-    async fn auth_engine_sliding_ttl_extends_expiry() {
+    async fn auth_engine_validation_updates_last_active_and_expiry() {
         let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
         let hasher = Argon2Hasher::new();
-        let password = "sliding_pass";
+        let password = "touch_pass";
         let password_hash = hasher.hash_password(password).unwrap();
 
         let user = TestUser {
             id: 404,
-            name: "Slide".into(),
+            name: "Touch".into(),
             auth_hash: Some(password_hash.clone()),
         };
-        store.insert_user_with_password(user.clone(), "slide@example.com", &password_hash);
+        store.insert_user_with_password(user.clone(), "touch@example.com", &password_hash);
 
         let engine = AuthEngine::builder(store.clone(), store.clone())
             .session_ttl(Duration::from_secs(3600))
-            .sliding_window(Duration::from_secs(1800))
             .build();
 
         let (_, session) = engine
-            .login("slide@example.com", password)
+            .login("touch@example.com", password)
             .await
             .expect("login should succeed");
-        let original_expiry = session.expires_at_unix();
+        let created_at = session.created_at_unix();
+
+        // Before first validation, last_active_at is None
+        let stored_before = store
+            .find_session(&session.id().hash_for_storage())
+            .await
+            .unwrap()
+            .expect("stored session must exist");
+        assert_eq!(stored_before.last_active_at_unix(), None);
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let validated = engine
@@ -870,18 +877,96 @@ mod tests {
             .await
             .unwrap()
             .expect("stored session must exist");
+
+        // last_active_at is set after validation
         assert!(
-            stored.expires_at_unix() > original_expiry,
-            "sliding TTL should extend expiry: {} > {}",
-            stored.expires_at_unix(),
-            original_expiry
+            stored.last_active_at_unix().is_some(),
+            "last_active_at should be set after validation"
         );
+
+        // Expiry is created_at + ttl
+        assert_eq!(stored.expires_at_unix(), created_at + 3600);
         assert_eq!(validated, user);
     }
 
-    /// Phase F: token rotation invalidates old sessions on re-login.
+    /// Spec 16: idle timeout expires sessions without activity.
     #[tokio::test(flavor = "current_thread")]
-    async fn auth_engine_token_rotation_invalidates_old_sessions() {
+    async fn idle_timeout_expires_without_activity() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "idle_pw";
+        let pass_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 1,
+            name: "idle_user".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "idle_user", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .idle_timeout_secs(2) // 2 second idle timeout
+            .build();
+
+        let (_, session) = engine.login("idle_user", password).await.unwrap();
+
+        // First validation succeeds and sets last_active_at
+        engine
+            .validate_session(session.id())
+            .await
+            .unwrap()
+            .expect("should be valid after first validation");
+
+        // Wait past the idle timeout
+        std::thread::sleep(std::time::Duration::from_secs(3));
+
+        // Session should be expired due to idle timeout
+        let result = engine.validate_session(session.id()).await.unwrap();
+        assert!(
+            result.is_none(),
+            "session should be expired due to idle timeout"
+        );
+    }
+
+    /// Spec 16: absolute TTL expires sessions regardless of idle_timeout or activity.
+    /// The `session_ttl` is a hard cap from creation — even an active session
+    /// cannot outlive `created_at + session_ttl`.
+    #[tokio::test(flavor = "current_thread")]
+    async fn absolute_session_ttl_expires_regardless_of_activity() {
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "absolute_pw";
+        let pass_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 1,
+            name: "absolute_user".into(),
+            auth_hash: Some(pass_hash.clone()),
+        };
+        store.insert_user_with_password(user.clone(), "absolute_user", &pass_hash);
+
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(1)) // 1 second absolute TTL
+            .idle_timeout_secs(60) // idle timeout is generous
+            .build();
+
+        let (_, session) = engine.login("absolute_user", password).await.unwrap();
+
+        // Wait past the absolute TTL
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // Session should be expired by absolute TTL, not idle timeout
+        let result = engine.validate_session(session.id()).await.unwrap();
+        assert!(
+            result.is_none(),
+            "session should be expired past absolute TTL"
+        );
+    }
+
+    /// Spec 16: single-active-session invalidates old sessions on re-login.
+    #[tokio::test(flavor = "current_thread")]
+    async fn auth_engine_single_active_session_invalidates_old_sessions() {
         let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
         let hasher = Argon2Hasher::new();
         let password = "rotation_pass";
@@ -896,7 +981,7 @@ mod tests {
 
         let engine = AuthEngine::builder(store.clone(), store.clone())
             .session_ttl(Duration::from_secs(3600))
-            .rotate_tokens(true)
+            .single_active_session(true)
             .build();
 
         let (_, session1) = engine
@@ -1122,13 +1207,13 @@ mod tests {
         let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
         let engine = AuthEngine::builder(store.clone(), store.clone())
             .session_ttl(Duration::from_secs(1234))
-            .sliding_window(Duration::from_secs(567))
-            .rotate_tokens(true)
+            .idle_timeout_secs(567)
+            .single_active_session(true)
             .build();
 
         assert_eq!(engine.session_ttl_secs(), 1234);
-        assert_eq!(engine.sliding_window_secs(), Some(567));
-        assert!(engine.rotate_tokens());
+        assert_eq!(engine.idle_timeout_secs(), Some(567));
+        assert!(engine.single_active_session());
         assert!(engine.user_store().find_by_id(&1).await.unwrap().is_none());
         assert!(
             engine
