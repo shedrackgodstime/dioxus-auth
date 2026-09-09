@@ -114,6 +114,24 @@ where
         Ok(())
     }
 
+    async fn touch_session_if_present(
+        &self,
+        id: &SessionId,
+        new_expiry: u64,
+        last_active: u64,
+    ) -> AuthResult<()> {
+        let mut sessions = Self::write_lock(&self.sessions)?;
+        if let Some(session) = sessions.get_mut(id) {
+            let updated = session
+                .clone()
+                .set_expiry_and_last_active(new_expiry, last_active);
+            *session = updated;
+        }
+        // If the session was deleted (logout/rotate), this is a no-op —
+        // that's exactly what prevents resurrection races (Spec 16).
+        Ok(())
+    }
+
     async fn delete_user_sessions(&self, user_id: &User::Id) -> AuthResult<()> {
         let mut sessions = Self::write_lock(&self.sessions)?;
         sessions.retain(|_, session| session.user_id() != user_id);

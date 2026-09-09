@@ -233,6 +233,55 @@ where
     assert_eq!(listed.len(), 2, "must list only the target user's sessions");
     assert!(listed.iter().any(|s| s.id() == session4.id()));
     assert!(listed.iter().any(|s| s.id() == session5.id()));
+
+    // touch_session_if_present: updates existing session
+    let touch_id = SessionId::new("touch_me");
+    let touch_session = Session::new(touch_id.clone(), user_id, now, expires);
+    store
+        .save_session(touch_session)
+        .await
+        .expect("save for touch test");
+    store
+        .touch_session_if_present(&touch_id, expires + 500, now + 10)
+        .await
+        .expect("touch must not error");
+    let touched = store
+        .find_session(&touch_id)
+        .await
+        .expect("find must not error")
+        .expect("touched session must exist");
+    assert_eq!(touched.expires_at_unix(), expires + 500);
+    assert_eq!(touched.last_active_at_unix(), Some(now + 10));
+
+    // touch_session_if_present on missing id is a no-op, not an error
+    let ghost = SessionId::new("ghost_session");
+    store
+        .touch_session_if_present(&ghost, expires + 500, now + 10)
+        .await
+        .expect("touch of missing session must not error");
+    let still_missing = store
+        .find_session(&ghost)
+        .await
+        .expect("find must not error");
+    assert!(still_missing.is_none());
+
+    // touch after delete does not resurrect (Spec 16 contract)
+    store
+        .delete_session(&touch_id)
+        .await
+        .expect("delete must not error");
+    store
+        .touch_session_if_present(&touch_id, expires + 999, now + 99)
+        .await
+        .expect("touch after delete must not error");
+    let resurrected = store
+        .find_session(&touch_id)
+        .await
+        .expect("find must not error");
+    assert!(
+        resurrected.is_none(),
+        "touch must not resurrect a deleted session"
+    );
 }
 
 // Engine lifecycle tests

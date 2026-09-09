@@ -88,12 +88,7 @@ impl CookieConfig {
         // __Host- cookies MUST use Path=/ (RFC 6265bis §5)
         let path = if self.host_only { "/" } else { &self.path };
 
-        let mut header = format!(
-            "{}={}; Path={}",
-            cookie_name,
-            session_id.as_str(),
-            path
-        );
+        let mut header = format!("{}={}; Path={}", cookie_name, session_id.as_str(), path);
 
         // __Host- cookies forbid Domain attribute
         if !self.host_only {

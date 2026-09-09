@@ -109,7 +109,12 @@ mod tests {
 
     #[test]
     fn empty_cookie_value_ignored() {
-        let token = extract_session_token(None, Some("dioxus_session=; foo=bar"), "dioxus_session", false);
+        let token = extract_session_token(
+            None,
+            Some("dioxus_session=; foo=bar"),
+            "dioxus_session",
+            false,
+        );
         assert_eq!(token, None);
     }
 
