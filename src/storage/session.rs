@@ -11,14 +11,15 @@ use crate::session::{Session, SessionId};
 ///
 /// 1. **find → delete (logout/revoke)**: deleting a session must permanently
 ///    remove it — no validation can resurrect it afterwards. The engine uses
-///    [`touch_session_if_present`] to perform conditional updates that prevent
-///    logout/rotate races from resurrecting a revoked session.
-/// 2. **rotate-on-login**: [`delete_user_sessions`] must also eliminate the
+///    the `touch_session_if_present` method below to perform conditional updates
+///    that prevent logout/rotate races from resurrecting a revoked session.
+/// 2. **rotate-on-login**: `delete_user_sessions` must also eliminate the
 ///    window where a concurrent validate resurrects one. The conditional update
 ///    above closes this race.
 /// 3. **Atomicity**: implementations are encouraged (but not required) to make
-///    [`touch_session_if_present`] atomic with respect to [`delete_session`].
-///    [`MemoryStore`] takes the write lock for the duration of the check-then-write.
+///    `touch_session_if_present` atomic with respect to `delete_session`.
+///    [`MemoryStore`](crate::storage::MemoryStore) takes the write lock for the
+///    duration of the check-then-write.
 pub trait SessionStore<UserId: Send>: Send + Sync + 'static {
     /// Save a newly created session or update an existing one.
     fn save_session(
