@@ -1,0 +1,11 @@
+# cargo-audit configuration.
+#
+# RUSTSEC-2026-0009 — `time` (<0.3.47) Denial of Service via Stack Exhaustion
+# (medium, 6.8). The fixed version `time 0.3.47` requires rust_version = 1.88.0
+# (edition 2024), but this crate's MSRV floor is 1.85 (CI tests 1.85.0), so the
+# fixed version is not resolvable here. `time` is a transitive dependency only:
+# dioxus-fullstack -> reqwest -> cookie_store -> time.
+#
+# Revisit this ignore when the crate's MSRV floor is raised past 1.88.
+[advisories]
+ignore = ["RUSTSEC-2026-0009"]
