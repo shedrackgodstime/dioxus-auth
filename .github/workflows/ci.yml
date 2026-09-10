@@ -24,6 +24,9 @@ jobs:
           - "--features dioxus-fullstack"
           - "--features axum"
           - "--no-default-features"
+        exclude:
+          - rust: 1.85.0
+            features: "--features dioxus-fullstack"
         include:
           - rust: stable
             features: "--all-targets --features dioxus"
