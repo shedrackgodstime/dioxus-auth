@@ -1,0 +1,23 @@
+[advisories]
+# RUSTSEC-2026-0009 — time <0.3.47 (DoS via stack exhaustion). The fix version
+# requires Rust >=1.88; this crate's MSRV floor is 1.85 (CI tests 1.85.0), so
+# the fix is not resolvable here. time is transitive-only:
+# dioxus-fullstack -> reqwest -> cookie_store -> time.
+# Revisit when the MSRV floor is raised past 1.88.
+ignore = ["RUSTSEC-2026-0009"]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Zlib",
+]
+
+[licenses.private]
+registries = []

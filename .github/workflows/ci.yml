@@ -32,7 +32,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Check format
         run: cargo fmt -- --check
       - name: Check clippy
