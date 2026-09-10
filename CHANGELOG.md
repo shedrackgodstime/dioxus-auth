@@ -10,25 +10,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `fullstack_server_fns!` macro — generates ready-made `#[server]` login, logout, restore, and require functions
-- `ServerAuthContext::login_and_set_cookie` and `logout_and_clear_cookie` for automatic cookie handling in `#[server]` functions
+- `ServerAuthContext::login_cookie` (cookie-only web flow) and `login_bearer` (native/API flow returning the raw token) — Spec 14
 - `login_with_options` — login with optional IP address and user agent metadata
-- Axum middleware (`auth_middleware`, `require_auth_middleware`, `permission_middleware`)
+- Axum middleware (`auth_middleware`, `require_auth_middleware`, `permission_middleware`) — all read the request's `Origin` header (Spec 15)
 - Event hooks (`on_sign_in`, `on_sign_out`, `on_session_validated`) on `AuthEngineBuilder`
-- Sliding TTL — session expiry extends on validation within configured window
-- Token rotation — re-login invalidates existing sessions when enabled
-- `__Host-` cookie prefix support with enforced constraints
-- CSRF/Origin validation for cookie-based authentication
+- Idle timeout (`idle_timeout` / `idle_timeout_secs`) — session expiry advances on validated activity; absolute TTL remains `created_at + session_ttl` (Spec 16)
+- Single-active-session policy (`single_active_session`) — re-login revokes the user's other sessions (Spec 16)
+- `SessionStore::touch_session_if_present` — conditional expiry/activity update that closes logout/rotate resurrection races; documented store contract (Spec 16)
+- `Session::last_active_at_unix` + setters
+- Rate limiting — `RateLimiter` trait, `InMemoryRateLimiter` (sliding window), `with_rate_limiter` on the builder; attempts are keyed on a normalized (trim + lowercase) identifier so case/whitespace variants share one budget
+- `__Host-` cookie prefix support with enforced constraints on **write and read** (Spec 15)
+- Origin/CSRF validation for cookie credentials — state-changing cookie ops (`login`, `logout`) require a matching `Origin` when `expected_origins` is configured; bearer is never Origin-checked
 - `extract_session_token` — dual-extract helper preferring `Authorization: Bearer`, falling back to `Cookie`
 - `use_token_storage()` and `TokenStorageRef` for client-side token persistence
-- SQLite-backed demo (`examples/sqlite-demo/`) with `SqliteStore`
+- SQLite-backed demos (`examples/sqlite-demo/`, `examples/sqlx-sqlite/`) with `SqliteStore`
 - Store test suite helpers in `dioxus_auth::tests`
+- Standing security review (`docs/20-security-review.md`)
 
-### Changed
+### Changed (breaking)
 
+- **`fullstack_server_fns!`**: `login_server` now returns `Result<User, _>` — cookie-only, the raw session token never reaches JavaScript. Use a separate `login_bearer` server fn for native clients.
+- **Builder renames**: `sliding_window` → `idle_timeout` (semantics changed — see Spec 16; the old sliding window stopped extending once `now - created >= window`), `rotate_tokens` → `single_active_session`.
+- **`extract_session_token`** gained a `host_only: bool` parameter — strict cookie-name matching (`__Host-<name>` when true, bare `<name>` when false; the other form is rejected either way).
+- **`CookieConfig`**: `host_only` now forces `Path=/` on write and rejects the unprefixed name on read (cookie-name confusion closed).
+- **`auth_middleware`** now returns `403 Forbidden` on `AuthError::Csrf` instead of treating it as anonymous (parity with `require_auth_middleware`/`permission_middleware`).
 - Simplified and tightened all doc comments across the crate
 - Extracted shared login logic in `AuthEngine` to reduce duplication
 - Consolidated hook firing into a single helper
-- Trimmed verbose README feature list and module-level documentation
 - `AuthEngine::dummy_hash` is now private with `pub(crate)` getter for tests
 
 ### Security
@@ -36,7 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bearer tokens bypass CSRF/Origin checks (not susceptible to cross-site request forgery)
 - File-backed `FileTokenStorage` enforces 0600 permissions on Unix
 - Session tokens are hashed at rest with SHA-256
-- Constant-time dummy Argon2 verification on unknown-user login
+- Timing defense corrected in docs: the dummy-hash verification on unknown identifiers mitigates user enumeration, but the lookup is **variable-time, not constant-time** (the earlier "constant-time" wording was an overclaim)
+- `SameSite=None` now documented as **requiring** `expected_origins` (see README "Secure configuration") — with `SameSite=None` the Origin check is the only real CSRF defense on cookie state-changing ops
+- Rate limiter documented as a per-process approximation (multi-instance deployments need a distributed `RateLimiter`)
+- `RUSTSEC-2026-0009` (`time <0.3.47`) accepted and documented in `.cargo/audit.toml` — the fix requires Rust ≥1.88, above this crate's 1.85 MSRV floor; `time` is transitive-only (dioxus-fullstack → reqwest → cookie_store)
 
 ## [0.1.0] - 2026-09-04
 
