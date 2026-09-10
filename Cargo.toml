@@ -55,3 +55,15 @@ web-sys = { version = "0.3", features = ["BroadcastChannel", "Window", "Storage"
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 dioxus-auth-derive = { path = "./crates/dioxus-auth-derive" }
+
+[[example]]
+name = "basic_auth"
+required-features = ["dioxus"]
+
+[[example]]
+name = "sqlite_adapter"
+required-features = ["dioxus"]
+
+[[test]]
+name = "auth_lifecycle_integration"
+required-features = ["dioxus"]
