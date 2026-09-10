@@ -223,7 +223,7 @@ where
     }
 }
 
-impl<'a, U, S> ServerAuthContext<'a, U, S>
+impl<U, S> ServerAuthContext<'_, U, S>
 where
     U: PasswordUserStore,
     S: SessionStore<<U::User as AuthUser>::Id>,
