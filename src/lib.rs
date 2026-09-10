@@ -1514,7 +1514,7 @@ mod tests {
         engine.logout(session.id()).await.unwrap();
     }
 
-        #[test]
+    #[test]
     #[cfg(feature = "dioxus")]
     fn auth_provider_creates_context() {
         use ::dioxus::prelude::*;
