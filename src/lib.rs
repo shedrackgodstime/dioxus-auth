@@ -1641,4 +1641,46 @@ mod tests {
         let result2 = engine.login("rateok@example.com", password).await;
         assert!(result2.is_ok());
     }
+
+    /// Security review 1.2: case/whitespace variants must share the rate-limit
+    /// budget. The engine normalizes (trim + lowercase) the identifier before
+    /// keying the limiter, so an attacker cannot bypass brute-force throttling
+    /// by rotating `User@x.com` / `user@x.com` / ` user@x.com`.
+    #[tokio::test(flavor = "current_thread")]
+    async fn rate_limit_key_is_normalized_across_case_and_whitespace() {
+        use crate::security::InMemoryRateLimiter;
+        use std::time::Duration;
+
+        let store = std::sync::Arc::new(MemoryStore::<TestUser>::new());
+        let hasher = Argon2Hasher::new();
+        let password = "rate_norm_pw";
+        let password_hash = hasher.hash_password(password).unwrap();
+
+        let user = TestUser {
+            id: 503,
+            name: "RateNorm".into(),
+            auth_hash: Some(password_hash.clone()),
+        };
+        // Store indexed under the canonical lowercase form.
+        store.insert_user_with_password(user.clone(), "ratenorm@example.com", &password_hash);
+
+        // Budget of 1: the very first (bad-password) attempt consumes it.
+        let limiter = InMemoryRateLimiter::new(1, Duration::from_secs(60));
+        let engine = AuthEngine::builder(store.clone(), store.clone())
+            .session_ttl(Duration::from_secs(3600))
+            .with_rate_limiter(limiter)
+            .build();
+
+        // Attempt 1 — wrong password, uppercase variant of the identifier.
+        let _ = engine.login("RateNorm@example.com", "wrong").await;
+
+        // Attempt 2 — same user, different case + leading whitespace. Must be
+        // rate-limited via the same normalized budget key, NOT a fresh one.
+        let result = engine.login(" ratenorm@example.com", password).await;
+        assert_eq!(
+            result,
+            Err(AuthError::RateLimited),
+            "case/whitespace variants must share the same rate-limit budget"
+        );
+    }
 }

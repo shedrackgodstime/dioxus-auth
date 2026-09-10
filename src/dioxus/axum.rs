@@ -91,15 +91,21 @@ where
         .map(|s| s.to_string());
 
     let ctx = ServerAuthContext::new(&engine, &cookie_config);
-    let user = ctx
+    let user = match ctx
         .current_user(
             cookie_header.as_deref(),
             origin_header.as_deref(),
             authorization_header.as_deref(),
         )
         .await
-        .ok()
-        .flatten();
+    {
+        Ok(user) => user,
+        // Security note (spec 15): a CSRF mismatch on a cookie credential is a
+        // state-changing rule violation, not mere absence of auth. Return 403 so
+        // callers can distinguish "anonymous" from "suspicious cross-site".
+        Err(AuthError::Csrf) => return Err(StatusCode::FORBIDDEN),
+        Err(_) => None,
+    };
 
     req.extensions_mut().insert(AuthenticatedUser(user));
 

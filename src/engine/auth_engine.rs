@@ -262,8 +262,14 @@ where
         password: &str,
         options: LoginOptions<'_>,
     ) -> AuthResult<(U::User, Session<<U::User as AuthUser>::Id>)> {
+        // Normalize the identifier so rate-limiting and the (usually
+        // case-insensitive) store lookup agree on a canonical accounting key.
+        // Without this, an attacker could rotate `User@x.com` / `user@x.com` /
+        // ` user@x.com` to get a fresh attempt budget per spelling variant.
+        let limiter_key = identifier.trim().to_lowercase();
+
         if let Some(limiter) = &self.rate_limiter {
-            limiter.check(identifier)?;
+            limiter.check(&limiter_key)?;
         }
 
         let user_entry = self.users.find_by_identifier(identifier).await?;
@@ -272,7 +278,7 @@ where
             Some((u, hash)) => (Some(u), hash),
             None => {
                 if let Some(limiter) = &self.rate_limiter {
-                    limiter.record_attempt(identifier);
+                    limiter.record_attempt(&limiter_key);
                 }
                 let _ = self.hasher.verify_password(password, &self.dummy_hash);
                 return Err(AuthError::Unauthenticated);
@@ -282,7 +288,7 @@ where
         let is_valid = self.hasher.verify_password(password, &password_hash)?;
         if !is_valid {
             if let Some(limiter) = &self.rate_limiter {
-                limiter.record_attempt(identifier);
+                limiter.record_attempt(&limiter_key);
             }
             return Err(AuthError::Unauthenticated);
         }
@@ -320,7 +326,7 @@ where
         }
         self.fire_on_sign_in(&user);
         if let Some(limiter) = &self.rate_limiter {
-            limiter.record_success(identifier);
+            limiter.record_success(&limiter_key);
         }
         Ok((user, wire_session))
     }

@@ -457,6 +457,23 @@ fn main() {
 
 Replace `MyStore` with your actual database (SQLite, PostgreSQL, etc.). See [`examples/sqlite-demo/`](examples/sqlite-demo/) for a `rusqlite` implementation or [`examples/sqlx-sqlite/`](examples/sqlx-sqlite/) for an async `sqlx` implementation with connection pooling.
 
+### Secure configuration
+
+These settings interact and must be considered together before you ship:
+
+| Setting | Guidance |
+|---|---|
+| `host_only` | Prefer `true` in production: forces `Path=/`, forbids `Domain`, enforces `Secure`, and (Spec 15) the server **rejects** the bare unprefixed cookie name on read. Requires HTTPS. |
+| `same_site` | Keep `Lax` (default) unless you genuinely need cross-site cookies. |
+| **`same_site = None`** | **Mandatory** `expected_origins`. With `SameSite=None` a cross-site request can carry the ambient session cookie, so `expected_origins` becomes the **only** real CSRF defense on cookie state-changing ops (`login`, `logout`). If you set `None`, you must set `expected_origins` to your exact origin(s). |
+| `expected_origins` | Origin/CSRF checks apply **only to cookie credentials** (Bearer never needs Origin). Set this to your production origin(s) (`https://app.example.com`). Default `None` disables it — fine for a vanilla `SameSite=Lax` same-origin app, unsafe with `SameSite=None`. |
+| `secure` | Emitted automatically with `host_only`; default `true` in release builds. Do not set the cookie over plain HTTP. |
+
+> The sliding-window rate limiter is a **per-process approximation**. For a
+> multi-instance deployment, implement `RateLimiter` against a shared store
+> (Redis, Memcached). It counts attempts per normalized identifier and is not a
+> lockout policy.
+
 ### Philosophy
 
 > **Your application owns the data and infrastructure. `dioxus-auth` owns the authentication lifecycle.**
