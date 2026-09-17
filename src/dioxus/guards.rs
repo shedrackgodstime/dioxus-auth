@@ -1,4 +1,5 @@
-use dioxus::prelude::*;
+//! Pure routing-guard logic: outcome evaluation and declarative guard rules.
+//! The rendering component lives in [`crate::dioxus::components::RouteGate`].
 
 use crate::session::AuthStatus;
 
@@ -87,39 +88,5 @@ pub struct RedirectIfAuthed<R>(pub R);
 impl<R: Clone + Send + Sync + 'static, User: 'static> RouteGuard<R, User> for RedirectIfAuthed<R> {
     fn evaluate(&self, status: &AuthStatus<User>) -> GuardOutcome<R> {
         redirect_if_authed(status, self.0.clone())
-    }
-}
-
-/// Component that gates access to child routes based on a [`GuardOutcome`].
-///
-/// If allowed, renders `Outlet::<R> {}`.
-/// If pending, renders the optional `fallback` element (or a default loading indicator).
-/// If redirect, navigates to the target route using [`use_navigator`].
-#[component]
-pub fn RouteGate<R: Routable + Clone + PartialEq + 'static>(
-    outcome: GuardOutcome<R>,
-    #[props(default)] fallback: Option<Element>,
-) -> Element {
-    let nav = use_navigator();
-
-    match outcome {
-        GuardOutcome::Allow => rsx! {
-            Outlet::<R> {}
-        },
-        GuardOutcome::Pending => {
-            if let Some(fb) = fallback {
-                rsx! { {fb} }
-            } else {
-                rsx! {
-                    div { class: "dioxus-auth-pending", "Loading session..." }
-                }
-            }
-        }
-        GuardOutcome::Redirect(target) => {
-            use_effect(move || {
-                nav.replace(target.clone());
-            });
-            rsx! {}
-        }
     }
 }

@@ -1,8 +1,10 @@
+//! Components that render or hide children based on authentication state.
+
 use std::marker::PhantomData;
 
 use dioxus::prelude::*;
 
-use crate::dioxus::context::use_auth;
+use crate::dioxus::hooks::use_auth;
 
 /// Props for [`SignedIn`] and [`SignedOut`] components.
 #[derive(Props, Clone, PartialEq)]

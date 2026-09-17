@@ -10,5 +10,8 @@ pub use memory::MemoryStore;
 pub use session::SessionStore;
 pub use user::{PasswordUserStore, UserStore};
 
+/// Conformance suite for store authors: replicate these tests against your
+/// backend to prove it upholds the [`UserStore`], [`PasswordUserStore`], and
+/// [`SessionStore`] contracts.
 #[cfg(any(test, doc))]
-pub mod tests;
+pub mod conformance;

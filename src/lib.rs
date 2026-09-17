@@ -19,7 +19,52 @@ pub mod user;
 #[cfg(feature = "dioxus")]
 pub mod dioxus;
 
-// Top-level re-exports
+/// The curated import surface — `use dioxus_auth::prelude::*;` and you have
+/// everything the library expects you to touch, feature-gated per item
+/// (dioxus facade pattern: `#[doc(inline)]` so rustdoc shows real docs).
+pub mod prelude {
+    // Core domain (always available)
+    #[doc(inline)]
+    pub use crate::error::{AuthError, AuthResult};
+    #[doc(inline)]
+    pub use crate::security::{Argon2Hasher, CookieConfig, PasswordHasher, SameSite};
+    #[doc(inline)]
+    pub use crate::session::{AuthStatus, SessionId};
+    #[doc(inline)]
+    pub use crate::storage::{MemoryStore, PasswordUserStore, SessionStore, UserStore};
+    #[doc(inline)]
+    pub use crate::transport::{MemoryTokenStorage, TokenStorage, extract_session_token};
+    #[doc(inline)]
+    pub use crate::user::AuthUser;
+
+    // Platform-appropriate token persistence
+    #[cfg(not(target_arch = "wasm32"))]
+    #[doc(inline)]
+    pub use crate::transport::FileTokenStorage;
+    #[cfg(target_arch = "wasm32")]
+    #[doc(inline)]
+    pub use crate::transport::WebTokenStorage;
+
+    // Dioxus runtime integration
+    #[cfg(feature = "dioxus")]
+    #[doc(inline)]
+    pub use crate::dioxus::*;
+
+    // Axum middleware
+    #[cfg(all(feature = "dioxus", feature = "axum"))]
+    #[doc(inline)]
+    pub use crate::dioxus::{
+        AuthenticatedUser, RequireAuthUser, auth_middleware, permission_middleware,
+        require_auth_middleware,
+    };
+
+    // Cross-tab sync (wasm only)
+    #[cfg(all(feature = "dioxus", target_arch = "wasm32"))]
+    #[doc(inline)]
+    pub use crate::dioxus::CrossTabSync;
+}
+
+// Top-level re-exports (flat convenience, mirrors the prelude)
 pub use engine::{AuthEngine, AuthEngineBuilder};
 pub use error::{AuthError, AuthResult};
 pub use security::{
@@ -27,7 +72,7 @@ pub use security::{
 };
 pub use session::{AuthStatus, Session, SessionId};
 #[cfg(any(test, doc))]
-pub use storage::tests::{
+pub use storage::conformance::{
     TestUser, run_engine_lifecycle_tests, run_password_user_store_tests, run_session_store_tests,
     run_user_store_tests, seeded_test_user,
 };

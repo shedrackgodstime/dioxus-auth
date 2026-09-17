@@ -1,11 +1,20 @@
 //! Dioxus runtime integration: auth context/hooks, route guards, cross-tab
 //! sync, and server-function/axum extraction helpers.
+//!
+//! Organized by role, following the dioxus-router convention:
+//! - [`hooks`] — `use_*` reactive surfaces (one file per hook)
+//! - `components` — declarative components (`RouteGate`, `SignedIn`, `SignedOut`)
+//! - `context` — the [`Auth`] handle (reactive state wrapper)
+//! - `guards` — pure guard logic (outcomes, predicates)
+//! - `provider` — [`AuthProvider`] tree setup
 
 mod components;
 mod context;
 #[cfg(feature = "dioxus-fullstack")]
 mod fullstack;
 mod guards;
+pub mod helpers;
+pub mod hooks;
 mod provider;
 mod server_fn;
 
@@ -20,14 +29,13 @@ pub use axum::{
     AuthenticatedUser, RequireAuthUser, auth_middleware, permission_middleware,
     require_auth_middleware,
 };
-pub use components::{SignedIn, SignedOut};
-pub use context::{
-    Auth, clear_persisted_token, persist_token, use_auth, use_auth_restore, use_token_storage,
-};
+pub use components::{RouteGate, SignedIn, SignedOut};
+pub use context::Auth;
 pub use guards::{
-    GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate, RouteGuard, redirect_if_authed,
-    require_auth,
+    GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGuard, redirect_if_authed, require_auth,
 };
+pub use helpers::{clear_persisted_token, persist_token};
+pub use hooks::{use_auth, use_auth_restore, use_token_storage};
 pub use provider::{AuthProvider, TokenStorageRef};
 pub use server_fn::ServerAuthContext;
 
