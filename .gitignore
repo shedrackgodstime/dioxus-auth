@@ -4,3 +4,4 @@
 /.agent-rules
 /.cargo
 /examples/*/target
+/examples/utmelab/

@@ -642,10 +642,12 @@ dependencies = [
  "rand_core 0.6.4",
  "rusqlite",
  "serde",
+ "serde_json",
  "sha2",
  "thiserror 2.0.20",
  "tokio",
  "tower",
+ "wasm-bindgen",
  "web-sys",
 ]
 

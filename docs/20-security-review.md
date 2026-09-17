@@ -64,6 +64,58 @@
 
 ---
 
+## 2a. Adversarial verification pass (2026-09-17, LLM as hardened adversary)
+
+Assumed every §2 claim broken and re-derived each defense from source. Results per scenario, sorted at the end.
+
+| # | Verdict | Evidence (file:line, verified 2026-09-17) | Hole found? |
+|---|---|---|---|
+| S1 | ✅ HOLDS | limiter key normalized then checked **before** lookup+Argon2: `auth_engine.rs:269-272`; `find_by_identifier` after check at `:275`; dummy Argon2 only reached after limiter (`:283`); failures recorded on normalized key `:281`/`:291`; success resets `:329` | See **F1** — rate limiter is opt-in (`rate_limiter: None` default, `builder.rs:37`) |
+| S2 | ✅ HOLDS | miss runs real Argon2 on pre-computed PHC dummy hash: `auth_engine.rs:283`; dummy built at `builder.rs:113-116` (real PHC string); malformed store hash → `Ok(false)` at `password.rs:58-68` (no error oracle) | Residual (already documented): lookup dispatch (`find_by_identifier` hit vs miss) is variable-time — accepted, README honest |
+| S3 | ✅ HOLDS | store key = `sha256(raw)`: `id.rs:25-29`; engine always hashes before store calls (`auth_engine.rs:107`, `:164`, `:210`, `:307-308`); `SessionId::generate()` = 256-bit OsRNG (`id.rs:15-21`) — preimage/replay infeasible | None. DB leak yields unreplayable digests |
+| S4 | ✅ HOLDS | cookie flow returns user only, cookie set server-side on response headers (`server_fn.rs:251-268`); `HttpOnly` always emitted (`cookie.rs:136-138`); bearer raw token goes only to native `login_bearer` clients (`server_fn.rs:270-283`) | See **F2** — `WebTokenStorage` puts the raw token in `localStorage`, readable by XSS (native/legacy path) |
+| S5 | ✅ HOLDS | `login_cookie` enforces `validate_cookie_origin` **before** engine login (`server_fn.rs:259-261`); `logout_current` enforces it when cookie creds are in use (`server_fn.rs:333-339`); `validate_cookie_origin` requires Origin **present + matching** (`cookie.rs:210-222`); `SameSite=Lax` default (`cookie.rs:60`) | See **F3** — if `expected_origins = None`, `validate_cookie_origin` short-circuits `Ok(())` (`cookie.rs:211-213`) — mandatory-origins rule for `SameSite=None` is doc-enforced only (finding 1.1) |
+| S6 | ✅ HOLDS | validate reads session, checks expiry/user/auth-hash/idle, then `touch_session_if_present` (`auth_engine.rs:141-146`) — a delete landing between read and touch makes the touch a no-op; contract #1 spelled out in `storage/session.rs:9-24`; barrier tests `tests/concurrency_stress.rs` green | None for contract-following stores. **F4** — the trait's *default* `touch_session_if_present` (`storage/session.rs:37-49`) is find-then-save and does **not** close the race; custom stores must override (documented, not enforced) |
+| S7 | ✅ HOLDS (library) | engine/store layer never serializes anything; wire exposure is app-owned. README warning present (`README.md` "keep secrets out of the wire user") | See **F5** — README quickstart §1 & §5 model `User` with `password_hash` and render `auth.user()`, inviting the exact mistake the warning forbids |
+| S8 | ✅ HOLDS | single-active login wipes prior sessions pre-issuance (`auth_engine.rs:303-305`); conditional touch covers the rotate-vs-validate race; race test `spec16_rotate_vs_validate` green | Same F4 caveat for default-touch custom stores |
+| S9 | ✅ HOLDS | extract-only-expected-name logic in `cookie.rs:141-167` and `transport/extract.rs:36-63`; exact-name match (no prefix/suffix confusion); unit tests: bare rejected when `host_only` (`extract.rs:139-149`), prefixed rejected when not (`extract.rs:151-161`) | None |
+| S10 | ✅ HOLDS | `splitn(2,'=')` + trim + exact compare (`extract.rs:36-63`); empty value skipped (`extract.rs:56-59`, test `:111-122`); empty `Bearer ` falls through to cookie (test `:124-135`); malformed `Basic` header falls through (test `:86-97`) | None |
+
+### New findings from this pass (3-way sorted)
+
+**F1 — rate limiter is opt-in (document-as-limitation).**
+`AuthEngineBuilder` defaults `rate_limiter: None` (`builder.rs:37`); S1 protection exists only if the app calls `.with_rate_limiter(...)` (`builder.rs:133-136`). The README's feature list mentions the limiter but no setup doc says "do this or brute force is unthrottled."
+→ *Action:* one sentence in README "Secure configuration" table. Not a code change.
+
+**F2 — `WebTokenStorage` = raw bearer token in `localStorage` (document-as-limitation).**
+`transport/web.rs:5-33` stores the raw token in `localStorage` under `dioxus_auth_session`. Any XSS can read it; `HttpOnly` cookie protection does not apply to this path. This is the known trade-off for token persistence on web (cookie flow is the XSS-resistant default and never touches `TokenStorage`).
+→ *Action:* warning on `WebTokenStorage` + in README bearer section: prefer cookie flow on web; bearer+localStorage only for apps that accept XSS-token-theft risk.
+
+**F3 — no runtime WARN when `SameSite=None` + `expected_origins: None` (out-of-scope-defer, matches 1.1's optional variant).**
+`CookieConfig::default()` is `Lax`/`None`-origins (`cookie.rs:60-66`) and `validate_cookie_origin` allows all when origins unset (`cookie.rs:211-213`). Doc-enforced today; the debug-WARN idea from finding 1.1 remains unimplemented.
+→ *Action:* defer; revisit post-v0.1.
+
+**F4 — default `touch_session_if_present` does not close the resurrection race (document-as-limitation).**
+The trait default is find-then-save (`storage/session.rs:37-49`) and its own doc says so; `MemoryStore` overrides it atomically (`storage/memory.rs`). Spec 16 tests cover `MemoryStore`, not hypothetical third-party stores that keep the default. Risk is app-induced, not library-induced.
+→ *Action:* strengthen the trait doc contract wording is already there; consider a compile-time nudge (rename default / make required) post-v0.1.
+
+**F5 — README quickstart contradicts the wire-hygiene warning (must-fix before v0.1, doc-only).**
+README §1 defines `User { password_hash }` implementing `AuthUser`, and §5 renders `auth.user().unwrap().email` — i.e. the type flowing to the client carries the hash. Later, the README warns verbatim against returning hash-bearing types from `#[server]` fns. The on-ramp example teaches the anti-pattern the library's own docs forbid.
+→ *Action:* restructure README quickstart to a public `UserView` (id/email/name) + a server-side `UserRecord` with the hash, matching what `examples/*` already do.
+
+**F6 — duplicate "#### 10. Logout" sections in README (must-fix, cosmetic).**
+README contains the `#### 10. Logout` section twice verbatim; section numbering after it is off-by-one (Event hooks = 10, sqlite demos = 11/12).
+→ *Action:* dedupe and renumber.
+
+### Pass conclusion
+
+- 9/10 scenarios hold exactly as claimed with no new must-fix code defects.
+- Code must-fix: **none**. Doc must-fix: **F5, F6** (README only).
+- Document-as-limitation: F1, F2, F4. Deferred: F3.
+- The **human second pair of eyes** (§ "How to run" step 2) remains open and is the only remaining gate element before v0.1.0.
+
+---
+
 ## 3. Scorecard (mirrors research/18 §5)
 
 | Item | Checked | Evidence |
@@ -79,6 +131,14 @@
 | 1.2 Rate-limit key normalization | [x] | `do_login` trim+lowercase; test green |
 | 1.8 auth_middleware CSRF→403 parity | [x] | implemented (option b) |
 | 1.3 sliding-window approximation documented | [x] | README rate-limiter note |
+| §2 adversarial verification pass (S1–S10) | [x] | §2a (2026-09-17); 9/10 hold, doc-only must-fixes F5/F6 |
+| F5 README quickstart vs wire-hygiene warning | [ ] | §2a F5 — restructure quickstart to hash-free wire user |
+| F6 README duplicate Logout section | [ ] | §2a F6 — dedupe + renumber |
+| F1 rate-limiter opt-in documented | [ ] | §2a F1 — one README sentence |
+| F2 WebTokenStorage/localStorage risk documented | [ ] | §2a F2 — warning on type + README bearer section |
+| F4 default touch_session_if_present caveat | [x] | already documented in trait doc (`storage/session.rs:37-49`); revisit post-v0.1 |
+| F3 SameSite=None runtime WARN | [ ] | deferred post-v0.1 (matches 1.1 optional variant) |
+| **Human second pair of eyes** | [ ] | § "How to run" step 2 — the last open gate item |
 
 ---
 
