@@ -1,3 +1,7 @@
+//! Storage contracts the engine drives (`UserStore`, `PasswordUserStore`,
+//! `SessionStore`) plus an in-memory reference implementation for tests and
+//! examples.
+
 mod memory;
 mod session;
 mod user;

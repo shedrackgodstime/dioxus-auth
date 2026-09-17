@@ -1,3 +1,6 @@
+//! Security primitives: cookie issuance/CSRF validation, password hashing,
+//! and login rate limiting.
+
 mod cookie;
 mod password;
 mod rate_limit;

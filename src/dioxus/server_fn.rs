@@ -213,11 +213,13 @@ where
     }
 
     /// Generate the `Set-Cookie` header value to clear a session cookie.
+    #[must_use = "the header value must be attached to the HTTP response"]
     pub fn build_delete_cookie_header(&self) -> String {
         self.cookie_config.build_delete_cookie_header()
     }
 
     /// Generate the `Set-Cookie` header value to establish a session cookie.
+    #[must_use = "the header value must be attached to the HTTP response"]
     pub fn build_set_cookie_header(&self, session_id: &SessionId) -> String {
         self.cookie_config.build_set_cookie_header(session_id)
     }
@@ -321,11 +323,10 @@ where
                 .get(http::header::AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string());
-            let had_cookie = cookie_header.is_some()
-                && self
-                    .cookie_config
-                    .extract_session_id(cookie_header.as_deref().unwrap())
-                    .is_some();
+            let had_cookie = cookie_header
+                .as_deref()
+                .map(|c| self.cookie_config.extract_session_id(c).is_some())
+                .unwrap_or(false);
             (cookie_header, authorization_header, had_cookie)
         };
 

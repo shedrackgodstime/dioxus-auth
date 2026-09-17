@@ -1,11 +1,36 @@
 # cargo-audit configuration.
 #
-# RUSTSEC-2026-0009 — `time` (<0.3.47) Denial of Service via Stack Exhaustion
-# (medium, 6.8). The fixed version `time 0.3.47` requires rust_version = 1.88.0
-# (edition 2024), but this crate's MSRV floor is 1.85 (CI tests 1.85.0), so the
-# fixed version is not resolvable here. `time` is a transitive dependency only:
-# dioxus-fullstack -> reqwest -> cookie_store -> time.
-#
-# Revisit this ignore when the crate's MSRV floor is raised past 1.88.
+# Each ignore entry must carry its full justification and a revisit trigger.
+# Policy: transitive-deps advisories are ignored ONLY when the fixed version
+# is unresolvable at the crate's MSRV floor (1.85) AND the vulnerable code
+# path is unreachable from dioxus-auth's usage. Re-audit on every MSRV bump.
+
 [advisories]
-ignore = ["RUSTSEC-2026-0009"]
+ignore = [
+  # RUSTSEC-2026-0009 — `time` (<0.3.47) Denial of Service via Stack Exhaustion
+  # (medium, 6.8). The fixed version `time 0.3.47` requires rust_version = 1.88.0
+  # (edition 2024), but this crate's MSRV floor is 1.85 (CI tests 1.85.0), so the
+  # fixed version is not resolvable here. `time` is a transitive dependency only:
+  # dioxus-fullstack -> reqwest -> cookie_store -> time.
+  #
+  # Revisit this ignore when the crate's MSRV floor is raised past 1.88.
+  "RUSTSEC-2026-0009",
+
+  # RUSTSEC-2026-0253 — `lru` 0.16.4 unsoundness: use-after-free in
+  # `LruCache::pop()` if a KEY's `Drop` panics while unwinding is caught by
+  # `catch_unwind` (Info severity, unsound — not a vuln by itself).
+  # Fixed in lru >=0.18.2, which is unresolvable here: `cargo update -p lru`
+  # locks 0.16.4 as the newest 1.85-compatible version (0.17+/0.18 either
+  # exceed MSRV 1.85 or fall outside dioxus-fullstack's version req).
+  # Unreachable path: lru is dioxus-fullstack's internal cache; triggering
+  # requires a panicking-`Drop` key type popped under `catch_unwind`, which
+  # framework-internal keys do not have. Note: after the 2026-09-17 hardening
+  # removed `panic = "abort"` (to make the engine's hook containment work),
+  # unwinding in release became possible again — but the trigger still needs a
+  # panicking key Drop inside the framework's own cache, which is not a
+  # reachable state.
+  #
+  # Revisit with RUSTSEC-2026-0009 when the MSRV floor rises past 1.88, or
+  # when dioxus-fullstack bumps its own lru requirement.
+  "RUSTSEC-2026-0253",
+]

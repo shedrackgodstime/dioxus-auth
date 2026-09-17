@@ -14,9 +14,8 @@ use crate::transport::token::TokenStorage;
 ///
 /// On Unix, the file is created with mode `0600` (owner read/write only) so that
 /// other processes running as the same user cannot read the raw session token.
-/// If the file already exists with looser permissions, the implementation does
-/// not chmod it; the caller is responsible for fixing the permissions on
-/// existing files.
+/// If the file already exists with looser permissions, every write defensively
+/// restores `0600` before the contents land.
 ///
 /// On non-Unix platforms the mode bits are best-effort (the file is written
 /// with default permissions) — the test suite gates on Unix.
@@ -76,28 +75,42 @@ impl TokenStorage for FileTokenStorage {
     }
 }
 
+/// Persist `contents` atomically: write a sibling `.tmp` file, then rename it
+/// over `path`. Rename is atomic within a filesystem, so a crash or power loss
+/// mid-write can never leave a truncated token file behind.
 #[cfg(unix)]
 fn write_secret(path: &Path, contents: &str) -> io::Result<()> {
     use io::Write;
+    let tmp = sibling_tmp_path(path);
     let mut file = fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .mode(0o600)
-        .open(path)?;
+        .open(&tmp)?;
     file.write_all(contents.as_bytes())?;
-    // Defensive: ensure the file mode is 0600 even if it pre-existed with looser
-    // permissions. The `mode(0o600)` above only applies at create time.
+    // Defensive: ensure the file mode is 0600 even if a `.tmp` file pre-existed
+    // with looser permissions. The `mode(0o600)` above only applies at create time.
     let metadata = file.metadata()?;
     let mut perms = metadata.permissions();
     perms.set_mode(0o600);
-    fs::set_permissions(path, perms)?;
-    Ok(())
+    fs::set_permissions(&tmp, perms)?;
+    fs::rename(&tmp, path)
 }
 
+/// Non-Unix variant: no `0600` enforcement, but still atomic via rename.
 #[cfg(not(unix))]
 fn write_secret(path: &Path, contents: &str) -> io::Result<()> {
-    fs::write(path, contents)
+    let tmp = sibling_tmp_path(path);
+    fs::write(&tmp, contents)?;
+    fs::rename(&tmp, path)
+}
+
+/// `secret.bin` -> `secret.bin.tmp` in the same directory (same filesystem, so rename is atomic).
+fn sibling_tmp_path(path: &Path) -> std::path::PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    path.with_file_name(name)
 }
 
 #[cfg(test)]

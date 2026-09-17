@@ -2,15 +2,23 @@ use crate::error::{AuthError, AuthResult};
 use crate::session::SessionId;
 
 /// SameSite policy for session cookies.
+///
+/// Maps to the `SameSite` cookie attribute; see [MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie)
+/// for browser behavior details.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum SameSite {
+    /// Send the cookie on same-site requests and top-level cross-site navigation (default).
     #[default]
     Lax,
+    /// Send the cookie only on same-site requests.
     Strict,
+    /// Send the cookie on cross-site requests; requires the `Secure` flag.
     None,
 }
 
 impl SameSite {
+    /// Canonical `SameSite` attribute string for `Set-Cookie` headers.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Lax => "Lax",
@@ -21,12 +29,20 @@ impl SameSite {
 }
 
 /// Result of origin validation.
+///
+/// `Mismatch` carries both sides of the comparison so the caller can log the
+/// event without the validator itself performing I/O.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OriginValidation {
     /// Origin is valid (matches expected origin or origin is not required).
     Valid,
     /// Origin is present but does not match expected origins.
-    Mismatch { expected: String, received: String },
+    Mismatch {
+        /// The origin(s) the server was configured to accept.
+        expected: String,
+        /// The `Origin` header value the client actually sent.
+        received: String,
+    },
 }
 
 /// Configuration for session cookie issuance and validation.
@@ -78,6 +94,7 @@ impl Default for CookieConfig {
 
 impl CookieConfig {
     /// Format a `Set-Cookie` HTTP header value for establishing an active session.
+    #[must_use = "the header value must be attached to the HTTP response"]
     pub fn build_set_cookie_header(&self, session_id: &SessionId) -> String {
         let cookie_name = if self.host_only {
             format!("__Host-{}", self.name)
@@ -112,6 +129,7 @@ impl CookieConfig {
     }
 
     /// Format a `Set-Cookie` HTTP header value to immediately invalidate and delete the cookie.
+    #[must_use = "the header value must be attached to the HTTP response"]
     pub fn build_delete_cookie_header(&self) -> String {
         let cookie_name = if self.host_only {
             format!("__Host-{}", self.name)

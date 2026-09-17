@@ -14,6 +14,7 @@ use crate::user::AuthUser;
 const DUMMY_PASSWORD: &str = "dioxus-auth-timing-defense-dummy-password-do-not-use";
 
 /// Fluent builder for constructing an [`AuthEngine`].
+#[must_use = "call `.build()` to construct the engine"]
 pub struct AuthEngineBuilder<U, S>
 where
     U: UserStore,
@@ -124,6 +125,15 @@ where
     ///
     /// Pre-computes a real Argon2 hash of the internal dummy password so the
     /// unknown-user timing defense runs an actual verification on miss.
+    ///
+    /// # Panics
+    ///
+    /// Only if the configured [`PasswordHasher`] cannot hash the internal
+    /// dummy password. With the default [`Argon2Hasher`] this is
+    /// unreachable; a custom hasher that fails on plain ASCII input is a
+    /// constructor-time misconfiguration surfaced immediately rather than
+    /// at first login.
+    #[must_use = "the built engine must be used to handle authentication"]
     pub fn build(self) -> AuthEngine<U, S> {
         let hasher = self.hasher.unwrap_or_else(|| Arc::new(Argon2Hasher::new()));
 

@@ -1,7 +1,28 @@
+//! Derive macro for `dioxus_auth::AuthUser`.
+//!
+//! Maps a struct's fields onto the `AuthUser` contract declaratively:
+//!
+//! ```ignore
+//! #[derive(AuthUser)]
+//! #[auth_user(id = "id", session_auth_hash = "password_hash")]
+//! struct User { id: String, password_hash: String }
+//! ```
+#![warn(missing_docs)]
+// dioxus 0.7's own tree depends on both syn 2 (darling) and syn 3 (async-trait);
+// upstream duplication, not resolvable from this crate.
+#![allow(unknown_lints)]
+#![allow(clippy::multiple_crate_versions)]
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
+/// Derive `dioxus_auth::AuthUser` for a struct.
+///
+/// Attributes (via `#[auth_user(...)]`):
+/// - `id = "field"` (required): field used as the stable unique identifier.
+/// - `session_auth_hash = "field"` (optional): field whose value binds
+///   sessions to a known credential state; omit to return `None`.
 #[proc_macro_derive(AuthUser, attributes(auth_user))]
 pub fn derive_auth_user(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

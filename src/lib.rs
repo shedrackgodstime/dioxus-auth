@@ -1,4 +1,9 @@
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
+// dioxus 0.7's own tree depends on both syn 2 (darling) and syn 3 (async-trait);
+// upstream duplication, not resolvable from this crate.
+#![allow(unknown_lints)]
+#![allow(clippy::multiple_crate_versions)]
 #![doc = include_str!("../README.md")]
 
 //! Core types, traits, cryptographic hashing, and Dioxus runtime components for `dioxus-auth`.

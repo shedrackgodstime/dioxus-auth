@@ -3,6 +3,7 @@ use crate::user::AuthUser;
 
 /// Storage interface for loading users by unique ID.
 pub trait UserStore: Send + Sync + 'static {
+    /// The application user type this store loads.
     type User: AuthUser;
 
     /// Retrieve a user by their unique identifier.

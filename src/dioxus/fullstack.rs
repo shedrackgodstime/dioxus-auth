@@ -4,7 +4,7 @@
 ///
 /// - `login_server(identifier: String, password: String) -> Result<User, ServerFnError>`
 /// - `logout_server() -> Result<(), ServerFnError>`
-/// - `get_current_user() -> Result<Option<User>, ServerFnError>`
+/// - `current_user() -> Result<Option<User>, ServerFnError>`
 /// - `require_user() -> Result<User, ServerFnError>`
 ///
 /// The generated `login_server` is **cookie-only** — it sets an `HttpOnly` session cookie
@@ -62,7 +62,7 @@ macro_rules! fullstack_server_fns {
         }
 
         #[server]
-        pub async fn get_current_user() -> ::core::result::Result<Option<$user>, ServerFnError> {
+        pub async fn current_user() -> ::core::result::Result<Option<$user>, ServerFnError> {
             let ctx = $crate::dioxus::ServerAuthContext::from_request($engine, $cookie_config)
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
             ctx.current_user_from_request()

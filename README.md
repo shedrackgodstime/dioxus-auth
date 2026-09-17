@@ -78,7 +78,7 @@ fn App() -> Element {
 
 #[component]
 fn AuthRestore() -> Element {
-    let whoami = use_resource(get_current_user);
+    let whoami = use_resource(current_user);
     use_auth_restore(whoami.read().clone());
     rsx! {}
 }
@@ -130,7 +130,7 @@ fn Navbar() -> Element {
 use dioxus_auth::{ServerAuthContext, AuthEngine, CookieConfig};
 
 #[server]
-async fn get_current_user() -> Result<Option<User>, ServerFnError> {
+async fn current_user() -> Result<Option<User>, ServerFnError> {
     let (engine, cookie_config) = /* ... */;
     let ctx = ServerAuthContext::from_request(&engine, &cookie_config)
         .ok_or_else(|| ServerFnError::new("not in a request context"))?;
@@ -174,7 +174,7 @@ fullstack_server_fns! {
 // 3. Client-side restore
 #[component]
 fn AuthRestore() -> Element {
-    let whoami = use_resource(get_current_user);
+    let whoami = use_resource(current_user);
     use_auth_restore(whoami.read().clone());
     rsx! {}
 }
@@ -183,7 +183,7 @@ fn AuthRestore() -> Element {
 The `fullstack_server_fns!` macro generates four `\[server\]` functions:
 - `login_server(identifier: String, password: String) -> Result<User, ServerFnError>`
 - `logout_server() -> Result<(), ServerFnError>`
-- `get_current_user() -> Result<Option<User>, ServerFnError>`
+- `current_user() -> Result<Option<User>, ServerFnError>`
 - `require_user() -> Result<User, ServerFnError>`
 
 `login_server` is **cookie-only** — it sets an `HttpOnly` session cookie on the response and returns the authenticated user. The raw session token never reaches JavaScript. `logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active.

@@ -133,7 +133,7 @@ fn App() -> Element {
         }
 }
 
-/// Child of `AuthProvider` that drives the 3-state from a `get_current_user` resource.
+/// Child of `AuthProvider` that drives the 3-state from a `current_user` resource.
 ///
 /// Starts in `Loading` (the `AuthProvider` default). Once the resource resolves:
 /// - `Some(Ok(Some(user)))` → `Authenticated(user)`
@@ -142,7 +142,7 @@ fn App() -> Element {
 /// Only mutates while still `Loading`, so a manual login elsewhere is never overwritten.
 #[component]
 fn AuthRestore() -> Element {
-    let whoami = use_resource(get_current_user);
+    let whoami = use_resource(current_user);
     use_auth_restore(whoami.read().clone());
     rsx! {}
 }

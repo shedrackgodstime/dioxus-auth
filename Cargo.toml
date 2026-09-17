@@ -13,7 +13,7 @@ keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
 include = [
     "src/**",
-    "examples/**",
+    "crates/**",
     "Cargo.toml",
     "README.md",
     "LICENSE*",
@@ -22,11 +22,26 @@ include = [
 [workspace]
 members = ["crates/dioxus-auth-derive"]
 
+[workspace.lints.rust]
+# missing_docs is enforced via #![warn(missing_docs)] inside each lib target
+# (src/lib.rs, crates/dioxus-auth-derive/src/lib.rs) so tests and examples
+# are not held to library documentation standards.
+
+[workspace.lints.clippy]
+correctness = "deny"
+suspicious = "warn"
+style = "warn"
+complexity = "warn"
+perf = "warn"
+cargo = "warn"
+# Note: dioxus 0.7's own tree depends on both syn 2 (darling) and syn 3
+# (async-trait). clippy::multiple_crate_versions is allowed in src/lib.rs
+# because upstream duplication is not resolvable from this crate.
+
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
 strip = true
 
 [features]
@@ -34,6 +49,9 @@ default = ["dioxus"]
 dioxus = ["dep:dioxus"]
 dioxus-fullstack = ["dioxus", "dioxus/fullstack", "dep:http"]
 axum = ["dep:axum", "dep:tower", "dep:http"]
+
+[lints]
+workspace = true
 
 [dependencies]
 argon2 = { version = "0.5", default-features = false, features = ["std", "password-hash", "alloc"] }

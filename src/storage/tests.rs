@@ -39,8 +39,11 @@ use crate::user::AuthUser;
 /// Minimal `AuthUser` for store conformance tests.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TestUser {
+    /// Stable unique identifier.
     pub id: u64,
+    /// Login identifier (unique per user).
     pub email: String,
+    /// Pre-computed password hash; doubles as the session auth hash.
     pub password_hash: String,
 }
 

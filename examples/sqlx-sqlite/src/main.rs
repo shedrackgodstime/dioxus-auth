@@ -346,7 +346,7 @@ async fn logout_server() -> Result<(), ServerFnError> {
 }
 
 #[server]
-async fn get_current_user() -> Result<Option<AppUser>, ServerFnError> {
+async fn current_user() -> Result<Option<AppUser>, ServerFnError> {
     #[cfg(feature = "server")]
     {
         let (_, engine, cookie_config) = get_server_state();
@@ -553,7 +553,7 @@ fn App() -> Element {
 
 #[component]
 fn AuthRestore() -> Element {
-    let whoami = use_resource(get_current_user);
+    let whoami = use_resource(current_user);
     dioxus_auth::use_auth_restore(whoami.read().clone());
     rsx! {}
 }

@@ -1,3 +1,6 @@
+//! Dioxus runtime integration: auth context/hooks, route guards, cross-tab
+//! sync, and server-function/axum extraction helpers.
+
 mod components;
 mod context;
 #[cfg(feature = "dioxus-fullstack")]

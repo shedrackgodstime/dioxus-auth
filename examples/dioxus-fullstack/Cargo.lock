@@ -1097,8 +1097,10 @@ dependencies = [
  "http",
  "rand_core 0.6.4",
  "serde",
+ "serde_json",
  "sha2",
  "thiserror 2.0.20",
+ "wasm-bindgen",
  "web-sys",
 ]
 
