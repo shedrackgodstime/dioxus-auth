@@ -46,6 +46,20 @@ jobs:
         if: matrix.features == '--all-targets --features dioxus' || matrix.features == '--all-targets --features dioxus-fullstack'
         run: cargo test --doc --features dioxus
 
+  wasm:
+    name: wasm32 check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # Mirrors the local release gate: wasm-only code (cross-tab sync,
+      # broadcaster emit, return-to capture, token storage) is invisible to
+      # host builds — sync.rs shipped broken once because of exactly that.
+      - name: Check wasm32 (dioxus feature)
+        run: cargo check --target wasm32-unknown-unknown --features dioxus
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -68,4 +82,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
-        run: RUSTDOFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus
+        run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus

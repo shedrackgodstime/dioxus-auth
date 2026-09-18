@@ -120,7 +120,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Err(AuthError::Unauthenticated)    => /* session-state problem */
   ```
 
-## [0.2.0] - 2026-09-06
+<!-- The entries below were previously mislabeled "[0.2.0]" (a version that
+     was never released — its tag existed only locally and no crates.io
+     publish accompanied it). They are part of the upcoming real 0.1.0. -->
 
 ### Added
 
@@ -164,7 +166,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rate limiter documented as a per-process approximation (multi-instance deployments need a distributed `RateLimiter`)
 - `RUSTSEC-2026-0009` (`time <0.3.47`) accepted and documented in `.cargo/audit.toml` — the fix requires Rust ≥1.88, above this crate's 1.85 MSRV floor; `time` is transitive-only (dioxus-fullstack → reqwest → cookie_store)
 
-## [0.1.0] - 2026-09-04
+## [0.0.1] - 2026-09-01
+
+> **Historical relabel (2026-09-18):** this content shipped to crates.io as
+> **`0.0.1`** — the only version ever published there. It was previously
+> mislabeled `[0.1.0]` here; the GitHub `v0.1.0` tag of the same era was a
+> phantom (no crates.io release ever accompanied it) and has been deleted.
+> Semver counts published versions, so the next release is the real `0.1.0`.
 
 ### Added
 
