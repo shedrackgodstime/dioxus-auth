@@ -32,26 +32,31 @@ impl<User: Clone + 'static> Auth<User> {
     }
 
     /// Current [`AuthStatus`].
+    #[must_use]
     pub fn status(&self) -> AuthStatus<User> {
         (self.status)()
     }
 
     /// Whether authentication is resolving.
+    #[must_use]
     pub fn is_loading(&self) -> bool {
         self.status().is_loading()
     }
 
     /// Whether the user is authenticated.
+    #[must_use]
     pub fn is_authenticated(&self) -> bool {
         self.status().is_authenticated()
     }
 
     /// Whether the user is unauthenticated.
+    #[must_use]
     pub fn is_unauthenticated(&self) -> bool {
         self.status().is_unauthenticated()
     }
 
     /// Authenticated user, if signed in.
+    #[must_use]
     pub fn user(&self) -> Option<User> {
         self.status().into_user()
     }
@@ -72,6 +77,7 @@ impl<User: Clone + 'static> Auth<User> {
     }
 
     /// Underlying `Signal<AuthStatus<User>>`.
+    #[must_use]
     pub fn signal(&self) -> Signal<AuthStatus<User>> {
         self.status
     }

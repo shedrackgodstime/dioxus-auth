@@ -39,8 +39,8 @@ pub fn AuthProvider<User: Clone + PartialEq + 'static>(
 ) -> Element {
     let status_signal = use_context_provider(|| Signal::new(initial_status.unwrap_or_default()));
     let auth = Auth::new(status_signal);
-    provide_context(auth);
-    provide_context(token_storage.map(|r| r.into_inner()));
+    let _auth = use_context_provider(|| auth);
+    let _storage = use_context_provider(|| token_storage.map(|r| r.into_inner()));
 
     rsx! {
         {children}

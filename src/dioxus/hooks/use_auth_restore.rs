@@ -10,6 +10,13 @@ use crate::session::AuthStatus;
 ///
 /// Only mutates while still `Loading`, so a manual login/logout is never
 /// overwritten by a late or failed restore.
+///
+/// # Rules of hooks
+/// Must be called unconditionally at the top level of a component (it reads
+/// context internally). It is intentionally *not* reactive to its argument:
+/// pass the current resource value each render (`whoami.read().clone()`), and
+/// the hook applies it only while the status is still `Loading`.
+#[doc(alias = "use_session_restore")]
 pub fn use_auth_restore<User, E>(restored: Option<Result<Option<User>, E>>)
 where
     User: Clone + 'static,

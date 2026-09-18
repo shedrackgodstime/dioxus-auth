@@ -58,7 +58,8 @@ type ExtractFn =
 
 type LogoutFuture = Pin<Box<dyn Future<Output = AuthResult<String>> + Send>>;
 
-type LogoutFn = Arc<dyn Fn(Option<String>) -> LogoutFuture + Send + Sync>;
+type LogoutFn =
+    Arc<dyn Fn(Option<String>, Option<String>, Option<String>) -> LogoutFuture + Send + Sync>;
 
 /// The type-erased registry contents (dioxus-context-style).
 struct Registry {
@@ -105,16 +106,18 @@ where
 
     let engine_for_logout = Arc::clone(&engine);
     let cookie_for_logout = Arc::clone(&cookie_config);
-    let logout: LogoutFn = Arc::new(move |cookie| {
+    let logout: LogoutFn = Arc::new(move |cookie, origin, authorization| {
         let engine = Arc::clone(&engine_for_logout);
         let cookie_config = Arc::clone(&cookie_for_logout);
         Box::pin(async move {
-            let ctx = ServerAuthContext::new(&engine, &cookie_config);
-            match ctx.extract_session_id(cookie.as_deref()) {
-                Some(id) => ctx.logout(&id).await,
-                // No credential presented: logout is idempotent — still clear the cookie.
-                None => Ok(ctx.build_delete_cookie_header()),
-            }
+            logout_with_headers(
+                &engine,
+                &cookie_config,
+                cookie.as_deref(),
+                origin.as_deref(),
+                authorization.as_deref(),
+            )
+            .await
         })
     });
 
@@ -180,8 +183,13 @@ where
 /// - if [`server_init`] was not called at startup
 /// - if called outside a `#[server]` function (no request context)
 pub async fn logout_current() -> AuthResult<String> {
-    let (cookie, _origin, _authorization) = request_headers();
-    logout_from_headers(cookie.as_deref()).await
+    let (cookie, origin, authorization) = request_headers();
+    logout_from_headers(
+        cookie.as_deref(),
+        origin.as_deref(),
+        authorization.as_deref(),
+    )
+    .await
 }
 
 /// Header-explicit core of [`current_user`] — the unit-testable seam.
@@ -203,10 +211,67 @@ where
     Ok(erased.map(|boxed| downcast_user::<U>(boxed)))
 }
 
+/// Header-explicit logout used by the registry closure — the unit-testable
+/// seam.
+///
+/// Credential precedence matches validation (spec 14/15): bearer first, then
+/// cookie. Origin/CSRF applies ONLY to cookie credentials (spec 15 §1.2), and
+/// logout is state-changing — so a cookie logout with a mismatched Origin is
+/// rejected and the session stays alive. No credential at all → idempotent
+/// clear-cookie header.
+async fn logout_with_headers<U, S>(
+    engine: &Arc<AuthEngine<U, S>>,
+    cookie_config: &Arc<CookieConfig>,
+    cookie: Option<&str>,
+    origin: Option<&str>,
+    authorization: Option<&str>,
+) -> AuthResult<String>
+where
+    U: UserStore + Send + Sync + 'static,
+    U::User: AuthUser + Send + Sync + 'static,
+    S: SessionStore<<U::User as AuthUser>::Id> + Send + Sync + 'static,
+{
+    let ctx = ServerAuthContext::new(engine, cookie_config);
+    // Bearer wins ONLY when an Authorization header is actually present —
+    // identical to `ServerAuthContext::logout_current`. Without this guard the
+    // extractor would classify the cookie value itself as a token and skip the
+    // Origin check below.
+    let bearer = authorization.and_then(|auth| {
+        crate::transport::extract_session_token(
+            Some(auth),
+            cookie,
+            cookie_config.name.as_str(),
+            cookie_config.host_only,
+        )
+    });
+    if let Some(token) = bearer {
+        return ctx.logout(&crate::session::SessionId::new(token)).await;
+    }
+    let cookie_id = cookie.and_then(|c| cookie_config.extract_session_id(c));
+    if let Some(id) = cookie_id {
+        cookie_config.validate_cookie_origin(origin)?;
+        return ctx.logout(&id).await;
+    }
+    Ok(ctx.build_delete_cookie_header())
+}
+
 /// Header-explicit core of [`logout_current`] — the unit-testable seam.
-async fn logout_from_headers(cookie: Option<&str>) -> AuthResult<String> {
+///
+/// Credential precedence matches validation (bearer first), and cookie
+/// credentials are Origin/CSRF-checked (spec 15) before the session is
+/// revoked; a rejected logout leaves the session alive.
+async fn logout_from_headers(
+    cookie: Option<&str>,
+    origin: Option<&str>,
+    authorization: Option<&str>,
+) -> AuthResult<String> {
     let registry = REGISTRY.get().expect(REGISTRY_UNINITIALIZED);
-    (registry.logout)(cookie.map(str::to_string)).await
+    (registry.logout)(
+        cookie.map(str::to_string),
+        origin.map(str::to_string),
+        authorization.map(str::to_string),
+    )
+    .await
 }
 
 /// Downcast with a message that names the mistake instead of the type IDs.
@@ -371,7 +436,9 @@ mod tests {
         ensure_registry();
 
         let cookie = login_cookie_header().await;
-        let clear = logout_from_headers(Some(&cookie)).await.unwrap();
+        let clear = logout_from_headers(Some(&cookie), None, None)
+            .await
+            .unwrap();
         assert!(
             clear.contains("reg_test_sess"),
             "must clear the cookie: {clear}"
@@ -381,6 +448,128 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(after, None, "session must be revoked");
+    }
+
+    // The registry is a process-global OnceLock with one cookie config, so the
+    // Origin/CSRF tests below exercise `logout_with_headers` directly with a
+    // config that has `expected_origins` set — same code path the closure runs.
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cookie_logout_with_mismatched_origin_is_rejected_and_session_survives() {
+        let (_engine, cookie, store) = test_engine_and_cookie();
+        let cookie_config = Arc::new(CookieConfig {
+            name: "reg_test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        });
+
+        // Log in through a matching-origin context to get a live session.
+        let ctx = ServerAuthContext::new(&_engine, &cookie);
+        let (_user, set_cookie) = ctx.login("reg@example.com", "registry_pw").await.unwrap();
+        let raw = set_cookie
+            .split(';')
+            .next()
+            .unwrap()
+            .split("reg_test_sess=")
+            .nth(1)
+            .unwrap()
+            .to_string();
+
+        // Mismatched Origin → CSRF rejection, session must still authenticate.
+        let err = logout_with_headers(
+            &_engine,
+            &cookie_config,
+            Some(&format!("reg_test_sess={raw}")),
+            Some("https://evil.example.com"),
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err, AuthError::Csrf);
+
+        let alive = store
+            .find_session(&crate::session::SessionId::new(raw.clone()).hash_for_storage())
+            .await
+            .unwrap();
+        assert!(
+            alive.is_some(),
+            "rejected logout must not revoke the session"
+        );
+
+        // Matching Origin → revokes.
+        logout_with_headers(
+            &_engine,
+            &cookie_config,
+            Some(&format!("reg_test_sess={raw}")),
+            Some("https://app.example.com"),
+            None,
+        )
+        .await
+        .unwrap();
+        let gone = store
+            .find_session(&crate::session::SessionId::new(raw).hash_for_storage())
+            .await
+            .unwrap();
+        assert!(gone.is_none(), "matching-origin logout must revoke");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn bearer_logout_skips_origin_validation() {
+        let (engine, _cookie, _store) = test_engine_and_cookie();
+        let cookie_config = Arc::new(CookieConfig {
+            name: "reg_test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        });
+
+        let ctx = ServerAuthContext::new(&engine, &cookie_config);
+        let (_user, token) = ctx
+            .login_bearer("reg@example.com", "registry_pw")
+            .await
+            .unwrap();
+
+        // Arbitrary/absent Origin is irrelevant for bearer credentials.
+        logout_with_headers(
+            &engine,
+            &cookie_config,
+            None,
+            Some("https://evil.example.com"),
+            Some(&format!("Bearer {token}")),
+        )
+        .await
+        .unwrap();
+
+        let (_e, _c, store) = test_engine_and_cookie();
+        let gone = store
+            .find_session(&crate::session::SessionId::new(token).hash_for_storage())
+            .await
+            .unwrap();
+        assert!(gone.is_none(), "bearer session must be revoked");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn logout_without_credentials_is_idempotent() {
+        let (_engine, _cookie, _store) = test_engine_and_cookie();
+        let cookie_config = Arc::new(CookieConfig {
+            name: "reg_test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        });
+
+        // No cookie, no bearer: no Origin requirement may apply.
+        let clear = logout_with_headers(
+            &_engine,
+            &cookie_config,
+            None,
+            Some("https://evil.example.com"),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(
+            clear.contains("reg_test_sess"),
+            "no-credential logout still clears the cookie: {clear}"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

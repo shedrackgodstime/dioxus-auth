@@ -18,6 +18,7 @@ pub mod hooks;
 mod provider;
 #[cfg(feature = "dioxus-fullstack")]
 mod registry;
+mod return_to;
 mod server_fn;
 
 #[cfg(target_arch = "wasm32")]
@@ -37,10 +38,13 @@ pub use guards::{
     GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGuard, redirect_if_authed, require_auth,
 };
 pub use helpers::{clear_persisted_token, persist_token};
-pub use hooks::{use_auth, use_auth_restore, use_token_storage};
+pub use hooks::{try_use_auth, use_auth, use_auth_restore, use_token_storage};
 pub use provider::{AuthProvider, TokenStorageRef};
 #[cfg(feature = "dioxus-fullstack")]
 pub use registry::{current_user, logout_current, require_user, server_init};
+pub use return_to::{
+    AUTH_INTENT_KEY, capture_return_to, clear_return_to, consume_return_to, is_safe_return_to,
+};
 pub use server_fn::ServerAuthContext;
 
 #[cfg(target_arch = "wasm32")]

@@ -42,6 +42,7 @@ If you already know Dioxus, the API is predictable:
 | Session restore on mount | `use_resource` | `use_auth_restore` |
 | Auth provider | context | `AuthProvider::<User> { .. }` |
 | Protected UI | router guard | `require_auth(&status, route)` + `RouteGate { .. }`, or `SignedIn::<User>` / `SignedOut::<User>` |
+| Return-to after login | — | automatic with `RouteGate` (`preserve_intent` default) + `consume_return_to()` at login |
 | Protected server operation | `#[server]` fn | `require_user().await?` (or `ServerAuthContext::require_user`) |
 | Native / API clients | — | `login_bearer` + `TokenStorage` |
 
@@ -143,6 +144,21 @@ fn ProtectedLayout() -> Element {
     }
 }
 ```
+
+By default, `RouteGate` **preserves intent**: when it bounces an unauthenticated visitor, the URL they were heading for is parked (browser `localStorage`, open-redirect-filtered). Pop it after a successful login to land them back on their original destination:
+
+```rust,ignore
+// in the login component, after login succeeds:
+auth.set_user(user);
+if let Some(dest) = consume_return_to() {
+    // dest is a safe relative path like "/app/exam/cbt"
+    navigator.push(dest);
+} else {
+    navigator.push(Route::Dashboard {});
+}
+```
+
+`capture_return_to` / `clear_return_to` / `is_safe_return_to` are exported for custom guard flows; off-browser targets are no-ops.
 
 #### 5. Conditional rendering
 

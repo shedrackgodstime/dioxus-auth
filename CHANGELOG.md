@@ -7,8 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Registry one-liner `logout_current` now enforces Origin/CSRF validation on
+  cookie-credential logouts (spec 15): previously the registry's logout path
+  dropped the `Origin` header, so a cross-site request could revoke a
+  cookie-session despite `expected_origins` being configured. Rejection leaves
+  the session alive; bearer logouts skip Origin per the credential-specific
+  rule; no-credential logouts stay idempotent. Plan + tests:
+  `scratch/plans/0a-cookie-transport-completion.md`.
+
 ### Added
 
+- **Return-to navigation** (spec 17 §3): `RouteGate` gains
+  `preserve_intent: bool` (default `true`) — when it redirects an
+  unauthenticated visitor, the target URL is parked in `localStorage`
+  (`dioxus_auth_intent`) and the login flow can pop it with
+  `consume_return_to()` (single read, open-redirect-filtered). Also exported:
+  `capture_return_to`, `clear_return_to`, `is_safe_return_to`,
+  `AUTH_INTENT_KEY`. Storage is browser-only; SSR/native are no-ops.
+  Deviation from the spec sketch: consumption is free functions, not a method
+  on `Auth` — `Auth` stays a pure `Copy` signal handle (spec 13 rule 2).
+- `try_use_auth::<User>() -> Option<Auth<User>>` — non-panicking variant of
+  `use_auth`, following dioxus's `try_use_context`/`use_context` pairing
+  convention. Returns `None` outside an `AuthProvider` tree (embeds, test
+  shells, SSR probes) instead of panicking. Hooks and `Auth` query methods
+  also gained dioxus-standard hygiene: `#[must_use]`, `#[track_caller]` on
+  panicking hooks, rules-of-hooks doc sections, `#[doc(alias)]` entries, and
+  `AuthProvider` now provisions contexts via `use_context_provider`.
 - Server registry + one-liner helpers (requires `dioxus-fullstack`):
   `server_init(engine, cookie_config)` called once at boot, then
   `require_user::<AppUser>().await?`, `current_user::<AppUser>().await`, and

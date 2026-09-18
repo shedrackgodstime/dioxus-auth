@@ -88,9 +88,10 @@ pub use user::AuthUser;
 pub use dioxus::CrossTabSync;
 #[cfg(feature = "dioxus")]
 pub use dioxus::{
-    Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate, RouteGuard,
-    ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, clear_persisted_token, persist_token,
-    redirect_if_authed, require_auth, use_auth, use_auth_restore, use_token_storage,
+    AUTH_INTENT_KEY, Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate,
+    RouteGuard, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, capture_return_to,
+    clear_persisted_token, clear_return_to, consume_return_to, is_safe_return_to, persist_token,
+    redirect_if_authed, require_auth, try_use_auth, use_auth, use_auth_restore, use_token_storage,
 };
 #[cfg(all(feature = "dioxus", feature = "axum"))]
 pub use dioxus::{
@@ -592,6 +593,34 @@ mod tests {
             rsx! { div {} }
         });
 
+        vdom.rebuild_in_place();
+    }
+
+    #[cfg(feature = "dioxus")]
+    #[test]
+    fn try_use_auth_resolves_provider_presence() {
+        use ::dioxus::prelude::*;
+
+        #[allow(non_snake_case)]
+        fn Probe() -> Element {
+            match try_use_auth::<TestUser>() {
+                Some(auth) => assert!(auth.is_loading()),
+                None => panic!("try_use_auth returned None under AuthProvider"),
+            }
+            rsx! { div {} }
+        }
+
+        // Under an AuthProvider: Some(handle), no panic.
+        let mut vdom = VirtualDom::new(|| {
+            rsx! { AuthProvider::<TestUser> { Probe {} } }
+        });
+        vdom.rebuild_in_place();
+
+        // Outside a provider: None, no panic.
+        let mut vdom = VirtualDom::new(|| {
+            assert!(try_use_auth::<TestUser>().is_none());
+            rsx! { div {} }
+        });
         vdom.rebuild_in_place();
     }
 
