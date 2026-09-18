@@ -281,7 +281,7 @@ where
                     limiter.record_attempt(&limiter_key);
                 }
                 let _ = self.hasher.verify_password(password, &self.dummy_hash);
-                return Err(AuthError::Unauthenticated);
+                return Err(AuthError::InvalidCredentials);
             }
         };
 
@@ -290,7 +290,7 @@ where
             if let Some(limiter) = &self.rate_limiter {
                 limiter.record_attempt(&limiter_key);
             }
-            return Err(AuthError::Unauthenticated);
+            return Err(AuthError::InvalidCredentials);
         }
 
         let user = user.expect("user exists");

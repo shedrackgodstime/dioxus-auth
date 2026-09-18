@@ -13,6 +13,15 @@ pub type AuthResult<T> = Result<T, AuthError>;
 #[derive(Clone, Debug, Error, PartialEq)]
 #[non_exhaustive]
 pub enum AuthError {
+    /// The presented identifier/password pair was rejected at login.
+    ///
+    /// Returned for **both** an unknown identifier and a wrong password — the
+    /// two are deliberately indistinguishable so the error channel cannot be
+    /// used to enumerate registered accounts (the timing side-channel is
+    /// already closed by the dummy-hash verification; this closes the
+    /// error-matching side door).
+    #[error("invalid credentials")]
+    InvalidCredentials,
     /// No session credential was presented where one is required.
     #[error("missing authentication session")]
     MissingSession,
@@ -22,8 +31,12 @@ pub enum AuthError {
     /// The session credential exceeded its absolute or idle lifetime.
     #[error("expired authentication session")]
     ExpiredSession,
-    /// The user behind the session no longer satisfies authentication
-    /// requirements (deleted, deactivated, or credential-mismatched).
+    /// A session-state problem, not a login failure.
+    ///
+    /// The user behind a session no longer satisfies authentication
+    /// requirements (deleted, deactivated, or credential-mismatched), or a
+    /// required session is absent/invalid in a context that is not a login
+    /// attempt. Login credential rejections use [`AuthError::InvalidCredentials`].
     #[error("user is not authenticated")]
     Unauthenticated,
     /// A state-changing request failed cross-site request forgery validation.

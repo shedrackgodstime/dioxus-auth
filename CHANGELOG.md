@@ -5,6 +5,40 @@ All notable changes to `dioxus-auth` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Server registry + one-liner helpers (requires `dioxus-fullstack`):
+  `server_init(engine, cookie_config)` called once at boot, then
+  `require_user::<AppUser>().await?`, `current_user::<AppUser>().await`, and
+  `logout_current().await` inside any `#[server]` function — no per-endpoint
+  wiring. State is stored type-erased (dioxus-context pattern) and downcast at
+  the call site; app code stays fully typed. Panics are documented for the
+  three misuse cases (not initialized, no request context, wrong user type).
+  Login stays on `ServerAuthContext` (needs `LoginOptions` + wire tokens).
+- `AuthError::InvalidCredentials` — returned when a login's identifier/password
+  pair is rejected. Covers both an unknown identifier and a wrong password;
+  the two are deliberately indistinguishable so the error channel cannot be
+  used to enumerate registered accounts.
+
+### Changed
+
+- **BREAKING:** `AuthEngine::login`/`login_with_options` now return
+  `AuthError::InvalidCredentials` on rejected credentials instead of
+  `AuthError::Unauthenticated`. `Unauthenticated` now means session-state
+  problems only (absent/invalid session, user behind a session no longer
+  eligible). Match on `InvalidCredentials` for inline form errors and on
+  `Unauthenticated` for redirects:
+
+  ```rust
+  // before
+  Err(AuthError::Unauthenticated) => /* form error or redirect? */
+  // after
+  Err(AuthError::InvalidCredentials) => /* inline "wrong email or password" */,
+  Err(AuthError::Unauthenticated)    => /* session-state problem */
+  ```
+
 ## [0.2.0] - 2026-09-06
 
 ### Added

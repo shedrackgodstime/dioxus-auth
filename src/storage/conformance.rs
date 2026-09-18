@@ -319,7 +319,7 @@ where
 
     // Login failure — wrong password
     let bad_login = engine.login("alice@example.com", "wrong").await;
-    assert_eq!(bad_login.unwrap_err(), crate::AuthError::Unauthenticated);
+    assert_eq!(bad_login.unwrap_err(), crate::AuthError::InvalidCredentials);
 
     // Logout
     engine

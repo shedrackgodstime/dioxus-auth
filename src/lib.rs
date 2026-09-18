@@ -97,6 +97,8 @@ pub use dioxus::{
     AuthenticatedUser, RequireAuthUser, auth_middleware, permission_middleware,
     require_auth_middleware,
 };
+#[cfg(all(feature = "dioxus", feature = "dioxus-fullstack"))]
+pub use dioxus::{current_user, logout_current, require_user, server_init};
 
 #[cfg(test)]
 mod tests {
@@ -276,13 +278,15 @@ mod tests {
 
         // 1. Failed login: wrong password
         let err = engine.login("evelyn@example.com", "wrong_pass").await;
-        assert_eq!(err.unwrap_err(), AuthError::Unauthenticated);
+        assert_eq!(err.unwrap_err(), AuthError::InvalidCredentials);
 
         // 2. Failed login: unknown user (runs constant-time dummy verification)
+        //    Same variant as wrong password — the error channel must not become
+        //    an account-enumeration oracle.
         let err = engine
             .login("nonexistent@example.com", "any_password")
             .await;
-        assert_eq!(err.unwrap_err(), AuthError::Unauthenticated);
+        assert_eq!(err.unwrap_err(), AuthError::InvalidCredentials);
 
         // 3. Successful login: valid credentials
         let (authed_user, session) = engine

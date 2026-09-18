@@ -4,6 +4,47 @@
 
 `dioxus-auth` is a composable authentication system for Dioxus fullstack applications. It handles the authentication lifecycle while allowing applications to keep control of their own data, storage, infrastructure, and UI.
 
+## Authentication in Dioxus
+
+`dioxus-auth` follows three principles:
+
+1. **Authentication state is reactive.** One `Signal<AuthStatus<User>>` drives every component. Sign out anywhere and the whole UI updates — no manual invalidation.
+2. **The server is the security authority.** Client state drives *rendering* only. Every protected operation re-validates the session server-side; a component can be wrong safely, an endpoint cannot.
+3. **Sessions are transport-independent.** The engine neither knows nor cares whether the credential arrived as an `HttpOnly` cookie (web) or a bearer token (native/API). Same `SessionStore`, same lifecycle.
+
+The whole client model fits in one diagram — `use_auth()` hides all of it:
+
+```text
+            Dioxus Application
+                   │
+            use_auth::<User>()
+                   │
+        Signal<AuthStatus<User>>
+         /         |          \
+    Loading   Authenticated   Unauthenticated
+                  (User)
+                   │  (sign in / sign out / restore)
+         [server fn — cookie or bearer]
+                   │
+           ServerAuthContext → AuthEngine
+                   │
+              SessionStore
+```
+
+If you already know Dioxus, the API is predictable:
+
+| If you want… | Dioxus way | dioxus-auth way |
+|---|---|---|
+| Authentication state | reactive signal | `use_auth::<User>()` → `auth.status()` (`AuthStatus`) |
+| Current user | `.read()` | `auth.user()` → `Option<User>` |
+| Sign in | server function | `login_server(identifier, password)` (sets `HttpOnly` cookie) |
+| Sign out | server function | `logout_server()` + `auth.logout()` |
+| Session restore on mount | `use_resource` | `use_auth_restore` |
+| Auth provider | context | `AuthProvider::<User> { .. }` |
+| Protected UI | router guard | `require_auth(&status, route)` + `RouteGate { .. }`, or `SignedIn::<User>` / `SignedOut::<User>` |
+| Protected server operation | `#[server]` fn | `require_user().await?` (or `ServerAuthContext::require_user`) |
+| Native / API clients | — | `login_bearer` + `TokenStorage` |
+
 ### Features
 
 * Argon2id password hashing with user-enumeration timing mitigation (dummy-hash verification on unknown identifiers; lookup is variable-time, not constant-time)

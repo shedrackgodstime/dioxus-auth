@@ -314,7 +314,7 @@ async fn main() {
 
     // 4. Test failed login
     let failed = engine.login("charlie@example.com", "wrong_password").await;
-    assert_eq!(failed.unwrap_err(), AuthError::Unauthenticated);
+    assert_eq!(failed.unwrap_err(), AuthError::InvalidCredentials);
     println!("Wrong password correctly rejected by AuthEngine");
 
     // 5. Test successful login

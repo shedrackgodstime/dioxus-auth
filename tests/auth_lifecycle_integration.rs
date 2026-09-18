@@ -45,7 +45,7 @@ async fn full_auth_lifecycle_external_test() {
 
     // 1. Invalid login attempt
     let err = engine.login("enterprise@corp.com", "incorrect_pwd").await;
-    assert_eq!(err.unwrap_err(), AuthError::Unauthenticated);
+    assert_eq!(err.unwrap_err(), AuthError::InvalidCredentials);
 
     // 2. Successful login
     let (authed_user, session1) = engine
