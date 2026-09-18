@@ -61,6 +61,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cross-tab emit half** — `use_auth_broadcaster::<User>()` returns an
+  `AuthBroadcaster` with `login(&user)` / `logout()` / `broadcast(&msg)`;
+  each emit opens a short-lived `BroadcastChannel` (default channel
+  `dioxus-auth-sync`, exposed as `DEFAULT_CROSS_TAB_CHANNEL`). Channel parity
+  with a mounted `CrossTabSync` is automatic, even for custom channel names.
+  Emit needs `User: Serialize` only. `CrossTabSync` is no longer
+  wasm32-gated at the module level (it was already a documented no-op
+  off-browser) and its stale "broadcasts" doc is corrected. Wire format is
+  unchanged and now pinned by tests (`{"Login":{"user":…}}` / `"Logout"`).
+- Cross-tab sync (`CrossTabSyncHost`) now logs a console warning when a
+  received broadcast message is malformed (typically deploy skew between tabs
+  with different `User` serializations) instead of dropping it silently, and
+  documents the deliberate `Closure::forget` lifetime.
 - **Return-to navigation** (spec 17 §3): `RouteGate` gains
   `preserve_intent: bool` (default `true`) — when it redirects an
   unauthenticated visitor, the target URL is parked in `localStorage`

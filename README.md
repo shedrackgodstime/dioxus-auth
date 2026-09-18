@@ -174,7 +174,29 @@ if let Some(dest) = consume_return_to() {
 
 `capture_return_to` / `clear_return_to` / `is_safe_return_to` are exported for custom guard flows; off-browser targets are no-ops.
 
-#### 5. Conditional rendering
+#### 5. Cross-tab sync
+
+Sign in on one tab, stay in sync on the rest. Mount the receiver near the root, emit from your login/logout flows:
+
+```rust,ignore
+rsx! {
+    AuthProvider::<User> {
+        CrossTabSync::<User> {}          // receive: applies other tabs' changes
+        Router::<Route> {}
+    }
+}
+
+// in the login flow, after auth.set_user(user):
+let broadcaster = use_auth_broadcaster::<User>();
+broadcaster.login(&user);                // other tabs sign in too
+
+// in the logout flow:
+broadcaster.logout();
+```
+
+Messages ride a `BroadcastChannel` (`dioxus-auth-sync` by default; override via `CrossTabSync`'s `channel_name` prop — the broadcaster picks it up automatically). Off-browser targets are no-ops.
+
+#### 6. Conditional rendering
 
 ```rust,ignore
 use dioxus_auth::{use_auth, SignedIn, SignedOut};
@@ -195,7 +217,7 @@ fn Navbar() -> Element {
 }
 ```
 
-#### 6. Server-side extraction
+#### 7. Server-side extraction
 
 ```rust,ignore
 use dioxus_auth::{ServerAuthContext, AuthEngine, CookieConfig};
@@ -211,7 +233,7 @@ async fn current_user() -> Result<Option<User>, ServerFnError> {
 }
 ```
 
-#### 7. Full server-side setup (end-to-end)
+#### 8. Full server-side setup (end-to-end)
 
 For a complete fullstack app, you need three pieces: a shared engine/store, `\[server\]` functions, and client-side restore.
 
@@ -259,7 +281,7 @@ The `fullstack_server_fns!` macro generates four `\[server\]` functions:
 
 `login_server` is **cookie-only** — it sets an `HttpOnly` session cookie on the response and returns the authenticated user. The raw session token never reaches JavaScript. `logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active.
 
-#### 8. Bearer token support
+#### 9. Bearer token support
 
 `ServerAuthContext` supports both cookies and `Authorization: Bearer` headers. Bearer tokens take precedence. Bearer is for **native / API clients** (desktop, mobile, scripts); the web flow is cookie-only.
 
@@ -294,7 +316,7 @@ async fn api_get_user(
 }
 ```
 
-#### 9. Axum middleware
+#### 10. Axum middleware
 
 For raw Axum routes, use `auth_middleware` to validate sessions and insert the user into request extensions:
 
@@ -327,18 +349,7 @@ async fn login(email: String, password: String) -> Result<User, ServerFnError> {
 }
 ```
 
-#### 10. Logout
-
-`logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active. On the client, call `logout_server()` then `auth.logout()` to reset local state:
-
-```rust,ignore
-spawn(async move {
-    logout_server().await.ok();
-    auth.logout();
-});
-```
-
-#### 10. Logout
+#### 11. Logout
 
 `logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active. On the client, call `logout_server()` then `auth.logout()` to reset local state:
 
@@ -364,7 +375,7 @@ async fn logout() -> Result<(), ServerFnError> {
 }
 ```
 
-#### 10. Event hooks
+#### 12. Event hooks
 
 ```rust,ignore
 use std::sync::Arc;
@@ -386,7 +397,7 @@ let engine = AuthEngine::builder(store.clone(), store.clone())
     .build();
 ```
 
-#### 11. SQLite-backed demo (rusqlite)
+#### 13. SQLite-backed demo (rusqlite)
 
 A complete working example with a real `rusqlite` store is in [`examples/sqlite-demo/`](examples/sqlite-demo/). It demonstrates:
 
@@ -401,7 +412,7 @@ Run it with:
 cargo run --example dioxus-auth-sqlite-demo --features server
 ```
 
-#### 12. SQLite-backed demo (SQLx)
+#### 14. SQLite-backed demo (SQLx)
 
 A production-pattern example using `sqlx` with `SqlitePool` is in [`examples/sqlx-sqlite/`](examples/sqlx-sqlite/). It demonstrates:
 
@@ -416,7 +427,7 @@ Run it with:
 cargo run -p dioxus-auth-sqlx-sqlite --features server
 ```
 
-#### 13. Store test suite
+#### 15. Store test suite
 
 The crate ships a `dioxus_auth::tests` module with conformance tests for `UserStore`, `PasswordUserStore`, and `SessionStore` implementations. Use them to verify your custom store works with `AuthEngine`:
 

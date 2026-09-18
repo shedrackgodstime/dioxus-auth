@@ -36,6 +36,10 @@ use crate::session::AuthStatus;
 /// `Unknown` verdicts should be **retried**, not rendered as a guest state —
 /// restart the probe on window focus / `visibilitychange`
 /// (`whoami.restart()`) while the status is `Loading`.
+///
+/// A probe that never resolves keeps the app `Loading` forever (guards stay
+/// `Pending`, `SignedIn`/`SignedOut` render nothing) — retrying is not
+/// optional. See [`crate::AuthProvider`]'s Loading-forever note.
 #[doc(alias = "use_session_restore")]
 pub fn use_auth_restore<User, E>(restored: Option<Result<Option<User>, E>>)
 where

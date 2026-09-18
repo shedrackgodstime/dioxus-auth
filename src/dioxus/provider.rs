@@ -31,6 +31,20 @@ impl TokenStorageRef {
 }
 
 /// Inject the reactive authentication context into the component tree.
+///
+/// # Loading-forever footgun (G5)
+///
+/// The initial status defaults to [`AuthStatus::Loading`], and the restore
+/// flow only leaves `Loading` when the whoami probe returns a *decided*
+/// result — a network-classified error deliberately keeps the app loading so
+/// a boot-time blip can't log anyone out (research 23 §2.1). The flip side:
+/// if the probe never resolves and the app never retries, guards stay
+/// `Pending` and [`crate::SignedIn`]/[`crate::SignedOut`] render **nothing**
+/// for as long as the status is `Loading`. Always pair the restore probe
+/// with a retry affordance (e.g. restart it on window focus or
+/// `visibilitychange`), and render explicit pending UI via
+/// [`crate::RouteGate`]'s `fallback` so "still deciding" never looks like a
+/// blank screen.
 #[component]
 pub fn AuthProvider<User: Clone + PartialEq + 'static>(
     #[props(default)] initial_status: Option<AuthStatus<User>>,

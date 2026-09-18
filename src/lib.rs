@@ -84,15 +84,14 @@ pub use transport::WebTokenStorage;
 pub use transport::{MemoryTokenStorage, TokenStorage, extract_session_token};
 pub use user::AuthUser;
 
-#[cfg(all(feature = "dioxus", target_arch = "wasm32"))]
-pub use dioxus::CrossTabSync;
 #[cfg(feature = "dioxus")]
 pub use dioxus::{
-    AUTH_INTENT_KEY, Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth,
-    RestoreClassify, RestoreVerdict, RouteGate, RouteGuard, ServerAuthContext, SignedIn, SignedOut,
-    TokenStorageRef, capture_return_to, clear_persisted_token, clear_return_to, consume_return_to,
+    AUTH_INTENT_KEY, Auth, AuthBroadcaster, AuthProvider, CrossTabMessage, CrossTabSync,
+    DEFAULT_CROSS_TAB_CHANNEL, GuardOutcome, RedirectIfAuthed, RequireAuth, RestoreClassify,
+    RestoreVerdict, RouteGate, RouteGuard, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef,
+    capture_return_to, clear_persisted_token, clear_return_to, consume_return_to,
     is_safe_return_to, persist_token, redirect_if_authed, require_auth, try_use_auth, use_auth,
-    use_auth_restore, use_token_storage,
+    use_auth_broadcaster, use_auth_restore, use_token_storage,
 };
 #[cfg(all(feature = "dioxus", feature = "axum"))]
 pub use dioxus::{

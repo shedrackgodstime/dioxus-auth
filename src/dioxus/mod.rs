@@ -22,7 +22,8 @@ pub mod restore;
 mod return_to;
 mod server_fn;
 
-#[cfg(target_arch = "wasm32")]
+// Not target-gated: the component is a documented no-op off-wasm, and the
+// broadcaster API must exist on all targets so apps compile unchanged.
 mod sync;
 
 #[cfg(feature = "axum")]
@@ -49,5 +50,6 @@ pub use return_to::{
 };
 pub use server_fn::ServerAuthContext;
 
-#[cfg(target_arch = "wasm32")]
-pub use sync::CrossTabSync;
+pub use sync::{
+    AuthBroadcaster, CrossTabMessage, CrossTabSync, DEFAULT_CROSS_TAB_CHANNEL, use_auth_broadcaster,
+};
