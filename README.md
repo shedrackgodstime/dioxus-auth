@@ -104,6 +104,20 @@ let engine = AuthEngine::builder(store.clone(), store.clone())
 
 #### 3. Wire the client lifecycle
 
+Restore is **cookie-first and network-aware**: the probe rides the `HttpOnly`
+session cookie, and its error is classified — a definitive server rejection
+(401/403) signs the user out, but a network failure (DNS down, Wi-Fi blip,
+timeout) leaves the app in `Loading` so nobody gets logged out by a bad
+connection. Retry the probe on window focus while loading:
+
+```rust,ignore
+let whoami = use_resource(current_user);
+use_effect(move || {
+    let w = window();
+    // restart the probe when the tab regains focus and still Loading
+});
+```
+
 ```rust,ignore
 use dioxus::prelude::*;
 use dioxus_auth::{AuthProvider, AuthStatus, use_auth, use_auth_restore};

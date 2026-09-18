@@ -137,7 +137,12 @@ impl CookieConfig {
             self.name.clone()
         };
 
-        let mut header = format!("{}=; Path={}; Max-Age=0", cookie_name, self.path);
+        // Mirrors build_set_cookie_header: a delete header only clears a
+        // cookie with the same Path, and __Host- cookies are always written
+        // with Path=/ (RFC 6265bis §5) — emit nothing else or logout
+        // silently fails to clear the session cookie.
+        let path = if self.host_only { "/" } else { &self.path };
+        let mut header = format!("{}=; Path={}; Max-Age=0", cookie_name, path);
 
         // __Host- cookies forbid Domain attribute
         if !self.host_only {
@@ -233,5 +238,77 @@ impl CookieConfig {
             }
         }
         Err(AuthError::Csrf)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Extract the `Path=` attribute value from a Set-Cookie header string.
+    fn path_of(header: &str) -> &str {
+        header
+            .split(';')
+            .map(str::trim)
+            .find_map(|a| a.strip_prefix("Path="))
+            .expect("header must carry a Path attribute")
+    }
+
+    /// G6 regression: the delete header must target the exact cookie the set
+    /// header wrote — same name AND same Path — or logout silently fails.
+    #[test]
+    fn delete_header_is_symmetric_with_set_header() {
+        // The trap config: host_only forces Path=/ on set, so delete must
+        // emit Path=/ too — not the configured custom path.
+        let cfg = CookieConfig {
+            name: "app_sess".into(),
+            path: "/app".into(),
+            host_only: true,
+            ..Default::default()
+        };
+        let set = cfg.build_set_cookie_header(&SessionId::new("tok"));
+        let del = cfg.build_delete_cookie_header();
+        assert!(
+            set.starts_with("__Host-app_sess="),
+            "set uses prefix: {set}"
+        );
+        assert_eq!(path_of(&set), "/", "host_only set forces Path=/");
+        assert!(
+            del.starts_with("__Host-app_sess="),
+            "delete uses prefix: {del}"
+        );
+        assert_eq!(
+            path_of(&del),
+            "/",
+            "host_only delete must also force Path=/"
+        );
+        assert_eq!(
+            path_of(&set),
+            path_of(&del),
+            "delete must match set exactly"
+        );
+
+        // Default path with host_only: both sides "/", symmetric.
+        let cfg = CookieConfig {
+            name: "app_sess".into(),
+            host_only: true,
+            ..Default::default()
+        };
+        let set = cfg.build_set_cookie_header(&SessionId::new("tok"));
+        let del = cfg.build_delete_cookie_header();
+        assert_eq!(path_of(&set), "/");
+        assert_eq!(path_of(&set), path_of(&del));
+
+        // Non-host-only custom path: unchanged behavior, still symmetric.
+        let cfg = CookieConfig {
+            name: "app_sess".into(),
+            path: "/app".into(),
+            ..Default::default()
+        };
+        let set = cfg.build_set_cookie_header(&SessionId::new("tok"));
+        let del = cfg.build_delete_cookie_header();
+        assert!(set.starts_with("app_sess="), "no prefix without host_only");
+        assert_eq!(path_of(&set), "/app");
+        assert_eq!(path_of(&set), path_of(&del), "custom path stays symmetric");
     }
 }

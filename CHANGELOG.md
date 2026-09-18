@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `CookieConfig::build_delete_cookie_header` now forces `Path=/` when
+  `host_only` is enabled, mirroring `build_set_cookie_header` (RFC 6265bis §5).
+  Previously the delete header used the configured `path` unforced, so with
+  `host_only: true` and a custom `path` the clear-cookie header could not
+  match the cookie the set header wrote — logout appeared to succeed while
+  the session cookie survived in the browser. Latent until now (the default
+  config is `host_only: false`); guarded by a set/delete symmetry test.
+
 ### Security
 
 - Registry one-liner `logout_current` now enforces Origin/CSRF validation on
@@ -16,6 +26,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the session alive; bearer logouts skip Origin per the credential-specific
   rule; no-credential logouts stay idempotent. Plan + tests:
   `scratch/plans/0a-cookie-transport-completion.md`.
+
+### Changed
+
+- **BREAKING:** `use_auth_restore` now requires the error type to implement
+  the new `RestoreClassify` trait (one method: `restore_verdict() ->
+  RestoreVerdict`). The hook no longer treats every restore error as logout:
+  a definitive server rejection (`RestoreVerdict::Unauthenticated`, i.e. an
+  HTTP 401/403-class answer) signs the user out, but a network failure
+  (`RestoreVerdict::Unknown` — DNS, timeout, offline, 5xx) **stays in
+  `Loading`** instead of rendering a guest session (research 23 §2.1).
+  `dioxus_auth::RestoreClassify` is implemented for `ServerFnError`
+  (`dioxus-fullstack` feature); for custom whoami errors, implement the one
+  method:
+
+  ```rust
+  impl dioxus_auth::RestoreClassify for MyError {
+      fn restore_verdict(&self) -> dioxus_auth::RestoreVerdict {
+          dioxus_auth::RestoreVerdict::Unknown
+      }
+  }
+  ```
+
+  Migration: if your error type previously relied on `Err(_) → logout`, return
+  `RestoreVerdict::Unauthenticated` for your definitive-rejection shapes.
+
+### Security
+
+- `AuthError::into_server_fn_error()` (new) maps auth failures to HTTP status
+  codes (`401` rejections, `403` CSRF, `429` rate-limited) instead of
+  `format!`-flattening, so clients can distinguish "rejected" from "server
+  error"; the `fullstack_server_fns!` generated functions now use it
+  (research 23 §3.2).
 
 ### Added
 

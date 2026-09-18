@@ -49,3 +49,35 @@ pub enum AuthError {
     #[error("authentication store error: {0}")]
     Store(String),
 }
+
+#[cfg(feature = "dioxus-fullstack")]
+impl AuthError {
+    /// Convert into a [`ServerFnError`] that **preserves the HTTP semantics**
+    /// of the auth failure (research 23 §3.2: `format!`-flattening destroys
+    /// error identity, so clients cannot tell a rejection from an outage).
+    ///
+    /// Mapping: `Unauthenticated | InvalidSession | MissingSession |
+    /// ExpiredSession | InvalidCredentials → 401`; `Csrf → 403`;
+    /// `RateLimited → 429`; everything else → 500. The Display message is
+    /// carried through as the `message` field.
+    #[must_use]
+    pub fn into_server_fn_error(self) -> dioxus::fullstack::ServerFnError {
+        use dioxus::fullstack::ServerFnError;
+
+        let code = match &self {
+            AuthError::Unauthenticated
+            | AuthError::InvalidSession
+            | AuthError::MissingSession
+            | AuthError::ExpiredSession
+            | AuthError::InvalidCredentials => 401,
+            AuthError::Csrf => 403,
+            AuthError::RateLimited => 429,
+            AuthError::Store(_) => 500,
+        };
+        ServerFnError::ServerError {
+            message: self.to_string(),
+            code,
+            details: None,
+        }
+    }
+}

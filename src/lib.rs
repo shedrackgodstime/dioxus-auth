@@ -88,10 +88,11 @@ pub use user::AuthUser;
 pub use dioxus::CrossTabSync;
 #[cfg(feature = "dioxus")]
 pub use dioxus::{
-    AUTH_INTENT_KEY, Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth, RouteGate,
-    RouteGuard, ServerAuthContext, SignedIn, SignedOut, TokenStorageRef, capture_return_to,
-    clear_persisted_token, clear_return_to, consume_return_to, is_safe_return_to, persist_token,
-    redirect_if_authed, require_auth, try_use_auth, use_auth, use_auth_restore, use_token_storage,
+    AUTH_INTENT_KEY, Auth, AuthProvider, GuardOutcome, RedirectIfAuthed, RequireAuth,
+    RestoreClassify, RestoreVerdict, RouteGate, RouteGuard, ServerAuthContext, SignedIn, SignedOut,
+    TokenStorageRef, capture_return_to, clear_persisted_token, clear_return_to, consume_return_to,
+    is_safe_return_to, persist_token, redirect_if_authed, require_auth, try_use_auth, use_auth,
+    use_auth_restore, use_token_storage,
 };
 #[cfg(all(feature = "dioxus", feature = "axum"))]
 pub use dioxus::{
@@ -113,6 +114,16 @@ mod tests {
         id: u64,
         name: String,
         auth_hash: Option<String>,
+    }
+
+    /// Test whoami error: definitively rejected (used by restore tests that
+    /// expect the guest outcome).
+    struct TestRestoreErr;
+
+    impl crate::dioxus::restore::RestoreClassify for TestRestoreErr {
+        fn restore_verdict(&self) -> crate::dioxus::restore::RestoreVerdict {
+            crate::dioxus::restore::RestoreVerdict::Unauthenticated
+        }
     }
 
     impl AuthUser for TestUser {
@@ -626,6 +637,82 @@ mod tests {
 
     #[cfg(feature = "dioxus")]
     #[test]
+    fn restore_error_classification_drives_status() {
+        use crate::dioxus::restore::{RestoreClassify, RestoreVerdict};
+        use ::dioxus::prelude::*;
+
+        /// The two behaviors any app's whoami error must distinguish.
+        struct TestErr(RestoreVerdict);
+
+        impl RestoreClassify for TestErr {
+            fn restore_verdict(&self) -> RestoreVerdict {
+                self.0
+            }
+        }
+
+        // Definitive server rejection → guest.
+        let mut vdom = VirtualDom::new(|| {
+            let auth_signal = use_context_provider(|| Signal::new(AuthStatus::<TestUser>::Loading));
+            let auth = Auth::new(auth_signal);
+            provide_context(auth);
+
+            use_auth_restore::<TestUser, TestErr>(Some(Err(TestErr(
+                RestoreVerdict::Unauthenticated,
+            ))));
+            assert!(
+                auth.is_unauthenticated(),
+                "definitive rejection demotes to guest"
+            );
+
+            rsx! { div {} }
+        });
+        vdom.rebuild_in_place();
+
+        // Network unknown → stays Loading (the research 23 §2.1 fix — a blip
+        // must never log the user out).
+        let mut vdom = VirtualDom::new(|| {
+            let auth_signal = use_context_provider(|| Signal::new(AuthStatus::<TestUser>::Loading));
+            let auth = Auth::new(auth_signal);
+            provide_context(auth);
+
+            use_auth_restore::<TestUser, TestErr>(Some(Err(TestErr(RestoreVerdict::Unknown))));
+            assert!(
+                auth.is_loading(),
+                "unknown verdict must not log the user out"
+            );
+
+            rsx! { div {} }
+        });
+        vdom.rebuild_in_place();
+
+        // A definitive rejection ALSO cannot clobber an already-signed-in state
+        // (Loading-guard still protects manual logins).
+        let mut vdom = VirtualDom::new(|| {
+            let user = TestUser {
+                id: 3,
+                name: "Live".into(),
+                auth_hash: None,
+            };
+            let auth_signal = use_context_provider(|| Signal::new(AuthStatus::<TestUser>::Loading));
+            let mut auth = Auth::new(auth_signal);
+            provide_context(auth);
+
+            auth.set_user(user);
+            use_auth_restore::<TestUser, TestErr>(Some(Err(TestErr(
+                RestoreVerdict::Unauthenticated,
+            ))));
+            assert!(
+                auth.is_authenticated(),
+                "guard must survive definitive rejections too"
+            );
+
+            rsx! { div {} }
+        });
+        vdom.rebuild_in_place();
+    }
+
+    #[cfg(feature = "dioxus")]
+    #[test]
     fn route_guards_evaluate_outcomes_correctly() {
         let user = TestUser {
             id: 1,
@@ -696,7 +783,9 @@ mod tests {
             let auth = Auth::new(auth_signal);
             provide_context(auth);
 
-            use_auth_restore(Some(Ok::<Option<TestUser>, &str>(Some(user.clone()))));
+            use_auth_restore(Some(Ok::<Option<TestUser>, TestRestoreErr>(Some(
+                user.clone(),
+            ))));
             assert!(auth.is_authenticated());
             assert_eq!(auth.user(), Some(user));
 
@@ -710,20 +799,20 @@ mod tests {
             let auth = Auth::new(auth_signal);
             provide_context(auth);
 
-            use_auth_restore(Some(Ok::<Option<TestUser>, &str>(None)));
+            use_auth_restore(Some(Ok::<Option<TestUser>, TestRestoreErr>(None)));
             assert!(auth.is_unauthenticated());
 
             rsx! { div {} }
         });
         vdom_none.rebuild_in_place();
 
-        // Case 3: resource errors → Unauthenticated
+        // Case 3: definitive rejection → Unauthenticated
         let mut vdom_err = VirtualDom::new(|| {
             let auth_signal = use_context_provider(|| Signal::new(AuthStatus::<TestUser>::Loading));
             let auth = Auth::new(auth_signal);
             provide_context(auth);
 
-            use_auth_restore::<TestUser, &str>(Some(Err("network down")));
+            use_auth_restore::<TestUser, TestRestoreErr>(Some(Err(TestRestoreErr)));
             assert!(auth.is_unauthenticated());
 
             rsx! { div {} }
@@ -736,7 +825,7 @@ mod tests {
             let auth = Auth::new(auth_signal);
             provide_context(auth);
 
-            use_auth_restore::<TestUser, &str>(None);
+            use_auth_restore::<TestUser, TestRestoreErr>(None);
             assert!(auth.is_loading());
 
             rsx! { div {} }
@@ -759,7 +848,7 @@ mod tests {
             assert!(auth.is_authenticated());
 
             // A late restore arriving after login must NOT wipe the live session.
-            use_auth_restore(Some(Ok::<Option<TestUser>, &str>(None)));
+            use_auth_restore(Some(Ok::<Option<TestUser>, TestRestoreErr>(None)));
             assert!(auth.is_authenticated());
             assert_eq!(auth.user(), Some(user));
 
@@ -853,7 +942,9 @@ mod tests {
             let auth_signal =
                 use_context_provider(|| Signal::new(AuthStatus::<StringIdUser>::Loading));
             provide_context(Auth::new(auth_signal));
-            use_auth_restore(Some(Ok::<Option<StringIdUser>, &str>(Some(user.clone()))));
+            use_auth_restore(Some(Ok::<Option<StringIdUser>, TestRestoreErr>(Some(
+                user.clone(),
+            ))));
             let auth = use_auth::<StringIdUser>();
             let outcome = require_auth(&auth.status(), MockRoute::Login);
             assert_eq!(outcome, GuardOutcome::Allow);
@@ -868,7 +959,7 @@ mod tests {
             let auth_signal =
                 use_context_provider(|| Signal::new(AuthStatus::<StringIdUser>::Loading));
             provide_context(Auth::new(auth_signal));
-            use_auth_restore(Some(Ok::<Option<StringIdUser>, &str>(None)));
+            use_auth_restore(Some(Ok::<Option<StringIdUser>, TestRestoreErr>(None)));
             let auth = use_auth::<StringIdUser>();
             let outcome = require_auth(&auth.status(), MockRoute::Login);
             assert_eq!(outcome, GuardOutcome::Redirect(MockRoute::Login));
@@ -883,7 +974,7 @@ mod tests {
             let auth_signal =
                 use_context_provider(|| Signal::new(AuthStatus::<StringIdUser>::Loading));
             provide_context(Auth::new(auth_signal));
-            use_auth_restore::<StringIdUser, &str>(None);
+            use_auth_restore::<StringIdUser, TestRestoreErr>(None);
             let auth = use_auth::<StringIdUser>();
             let outcome = require_auth(&auth.status(), MockRoute::Login);
             assert_eq!(outcome, GuardOutcome::Pending);

@@ -49,7 +49,7 @@ macro_rules! fullstack_server_fns {
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
             ctx.login_cookie(&identifier, &password)
                 .await
-                .map_err(|e| ServerFnError::new(format!("login failed: {e}")))
+                .map_err($crate::AuthError::into_server_fn_error)
         }
 
         #[server]
@@ -58,7 +58,7 @@ macro_rules! fullstack_server_fns {
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
             ctx.logout_current()
                 .await
-                .map_err(|e| ServerFnError::new(format!("logout failed: {e}")))
+                .map_err($crate::AuthError::into_server_fn_error)
         }
 
         #[server]
@@ -67,7 +67,7 @@ macro_rules! fullstack_server_fns {
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
             ctx.current_user_from_request()
                 .await
-                .map_err(|e| ServerFnError::new(format!("restore failed: {e}")))
+                .map_err($crate::AuthError::into_server_fn_error)
         }
 
         #[server]
@@ -76,7 +76,7 @@ macro_rules! fullstack_server_fns {
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
             ctx.require_user_from_request()
                 .await
-                .map_err(|e| ServerFnError::new(format!("unauthorized: {e}")))
+                .map_err($crate::AuthError::into_server_fn_error)
         }
     };
 }

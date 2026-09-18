@@ -18,6 +18,7 @@ pub mod hooks;
 mod provider;
 #[cfg(feature = "dioxus-fullstack")]
 mod registry;
+pub mod restore;
 mod return_to;
 mod server_fn;
 
@@ -42,6 +43,7 @@ pub use hooks::{try_use_auth, use_auth, use_auth_restore, use_token_storage};
 pub use provider::{AuthProvider, TokenStorageRef};
 #[cfg(feature = "dioxus-fullstack")]
 pub use registry::{current_user, logout_current, require_user, server_init};
+pub use restore::{RestoreClassify, RestoreVerdict};
 pub use return_to::{
     AUTH_INTENT_KEY, capture_return_to, clear_return_to, consume_return_to, is_safe_return_to,
 };
