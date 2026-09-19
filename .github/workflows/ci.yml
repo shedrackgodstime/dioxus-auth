@@ -15,6 +15,10 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     strategy:
+      # A red cell must not cancel the rest of the matrix: the M1
+      # (--no-default-features) failure silently hid whether every other
+      # combination was green.
+      fail-fast: false
       matrix:
         rust:
           - stable

@@ -116,6 +116,74 @@ README contains the `#### 10. Logout` section twice verbatim; section numbering 
 
 ---
 
+## 2b. Human second pair of eyes (2026-09-19)
+
+Tasked as the independent reviewer: Rust + web security, briefed with §2 + the
+§3 scorecard, asked to find anything that **contradicts a claim**. Not a recap
+of §2a — each scenario re-derived from current source.
+
+Honesty note: this reviewer had already read the crate the same week (project
+audit). That is not a cold reader. It is still a second pass with a different
+question ("what did the last pass miss?"). A third person who has never opened
+`src/` remains valuable; it is no longer the *only* remaining gate item.
+
+| # | Verdict | Evidence (HEAD, 2026-09-19) | Contradicts a claim? |
+|---|---|---|---|
+| S1 | Holds **only if** `.with_rate_limiter` is set | `do_login` normalizes then `check` before lookup (`auth_engine.rs:269-275`); dummy Argon2 only after a miss (`:283`); failures recorded on the normalized key (`:281`, `:291`). Default `rate_limiter: None` (`builder.rs:32`). | No. Tightens F1: the README still never says brute-force is unthrottled until the app opts in. |
+| S2 | Holds, residual lookup | Miss runs `verify_password` on the precomputed dummy PHC (`auth_engine.rs:283`). Malformed *stored* hash returns `Ok(false)` without Argon2 (`password.rs:59-61`) — no error-code oracle; a hit-with-corrupt-hash is *fast*, so it is a timing tell for "this identifier exists and its hash is garbage." Not a practical enum of healthy accounts. Trait docs still claim verify is constant-time (`password.rs:14-15`); README is the honest one. | No. Residual already documented. |
+| S3 | Holds | `hash_for_storage` = SHA-256 of the raw string (`id.rs:26-29`); engine hashes before every store call (`auth_engine.rs:94`, `:156`, `:203`, `:307-308`). 32-byte OsRng (`id.rs:18-22`). | No. |
+| S4 | Holds for the cookie path | `login_cookie` returns the user and sets `Set-Cookie` server-side (`server_fn.rs:253-264`). Default `http_only: true` (`cookie.rs:86`). `fullstack_server_fns!` uses `login_cookie` (`fullstack.rs:50`). `examples/dioxus-fullstack` `AppUser` is hash-free (`id/email/name` only). | No new cookie-path hole. F2 still open (`WebTokenStorage`). Extra: `SessionId` `Debug`/`Display` print the raw wire token (`id.rs:8`, `:43-46`) — a log of `Session` is a session leak (F9). |
+| S5 | **Does not hold as stated for logout** | `login_cookie` Origin-checks *before* login (`server_fn.rs:254-255`). `current_user` extracts bearer with `cookie = None`, then treats cookie as cookie (`server_fn.rs:130-136`) — correct. **Logout does not.** See **F7**. Login CSRF with default `expected_origins = None` is also unmitigated by `SameSite=Lax` (F8). | **Yes — F7 contradicts "cookie logout is Origin-checked."** F3/F8 are the default-off Origin story, already half-known. |
+| S6 | Holds for `MemoryStore` | Validate then `touch_session_if_present` (`auth_engine.rs:137-145`). `MemoryStore` holds the write lock for the check-and-update (`memory.rs:117-132`). Trait default is still find-then-save (F4). | No, same F4 caveat. |
+| S7 | Holds in the demo, fails in the on-ramp | Demo `AppUser` has no hash. README quickstart still puts `password_hash` on the public `User` (F5). Several `examples/sqlite*` types do the same — teaching surfaces, not the fullstack demo. | No library serialization of User. F5 still must-fix docs. F6 (duplicate Logout) is **already gone** — single `#### 11. Logout`. |
+| S8 | Holds when `single_active_session` is on | `delete_user_sessions` before issue (`auth_engine.rs:303-305`). Delete errors are ignored (`let _ =`), so a failed wipe + successful save can leave two live sessions — reliability, not a replay of the *rotated-out* raw token if the wipe actually ran. | No. |
+| S9 | Holds | `extract_session_id` / `cookie_value` accept only the expected name (`cookie.rs:171-176`, `extract.rs:46-50`). Tests: bare rejected when `host_only`, prefix rejected when not. Set/delete both force `Path=/` under `host_only`. | No. |
+| S10 | Holds | `splitn(2, '=')`, empty value skipped, empty `Bearer ` falls through to cookie *in the extractor* (intentional for `current_user`). No length cap on the token string — huge Cookie values are a cheap SHA-256 DoS, not a parse bypass. | No bypass. |
+
+### New findings (3-way sorted)
+
+**F7 — cookie logout skips Origin when `Authorization` is present but is not a Bearer token (must-fix before v0.1, code).**
+
+`extract_session_token` prefers Bearer, then **falls through to Cookie**. That is correct for `current_user`, which passes `cookie = None` on the bearer attempt and then classifies the cookie path as `used_cookie = true`.
+
+Logout does the opposite:
+
+- `ServerAuthContext::logout_current` (`server_fn.rs:334-350`): if any `Authorization` header exists, it calls `extract_session_token(Some(auth), cookie_header, …)`. A junk value (`Authorization: Bearer `, `Basic …`, `Token …`) yields the **cookie** token. `using_cookie` is then `wire_token.is_none() && cookie_header.is_some()` → **false**, so `validate_cookie_origin` is skipped, and the cookie session is revoked.
+- Registry `logout_with_headers` (`registry.rs:239-248`): same call, same fallthrough. The comment claims this *prevents* skipping Origin; passing `cookie` into the extractor reintroduces it. `fullstack_server_fns!` `logout_server` goes through `logout_current`.
+
+Browser HTML form CSRF cannot set `Authorization` (so SameSite=Lax still saves vanilla POST). The hole is real for: (1) `SameSite=None` + a credentialed `fetch` that sets a dummy `Authorization` (CORS-dependent), (2) any client/gateway that always sends `Authorization: Bearer ${token \|\| ''}` next to the session cookie, (3) spec 15 as written — cookie state-changing ops must Origin-check, and this path is a cookie op mislabeled as bearer.
+
+Fix: extract bearer with `cookie = None` (mirror `current_user`). Only skip Origin when `bearer_token(...)` actually returned a token. Add a test: `Authorization: Basic …` + session cookie + missing/mismatch Origin → `Csrf`, session still alive.
+
+**F8 — login CSRF is not SameSite-Lax's problem (document-as-limitation).**
+
+S5 bundled login and logout. Logout CSRF needs the victim's cookie. Login CSRF does not: the attacker POSTs *their* credentials to the victim origin and the response `Set-Cookie` overwrites the victim's jar. `SameSite=Lax` does not stop that. The only library defense is `validate_cookie_origin` on `login_cookie`, which no-ops when `expected_origins` is `None` (the default). Finding 1.1 / F3 framed this around `SameSite=None`. Login CSRF needs origins **even with Lax**.
+
+Action: one Secure-configuration sentence: "set `expected_origins` in production even with Lax, or login CSRF can bind the victim's browser to the attacker's account." Not a default-on code change for 0.1 (would break local/dev). Also: `ServerAuthContext::login` (the non-cookie helper, `server_fn.rs:236-239`) never Origin-checks — apps that use it instead of `login_cookie` skip CSRF entirely.
+
+**F9 — `SessionId` `Debug`/`Display` is the raw secret (document-as-limitation).**
+
+`id.rs:8` derives `Debug`; `Display` writes `self.0` (`:43-46`). `Session` also derives `Debug` and contains `id` plus `auth_hash` (often the password hash). `tracing`/`log` of a session dumps a hijackable token. Cookie flow never returns `Session` to JS; engine `login` still returns `(User, Session)` with the raw id and auth_hash to the caller.
+
+Action: post-v0.1, redact `Debug` (`SessionId(***)`). Until then, README: never log `Session` / `SessionId`.
+
+**F10 — `AuthEngine::identifier_exists` is an enumeration API (document-as-limitation).**
+
+`auth_engine.rs:334-343` is a public existence check. Login's error channel correctly collapses unknown-user and wrong-password. This method is the side door, intended for registration UX. Do not call it from an unauthenticated "is this email taken?" probe on the login page.
+
+**F6 verified fixed.** README has one logout section (`#### 11. Logout`). Tick `[x]`.
+
+### Pass conclusion
+
+- 8/10 scenarios hold as claimed. S5's **logout** half is contradicted by F7 (code). S7 still contradicted by F5 (docs).
+- Code must-fix before tag: **F7**.
+- Doc must-fix before tag: **F5, F1, F2**, plus F8's one-liner.
+- Document-as-limitation: F4, F8, F9, F10.
+- Deferred: F3 (runtime WARN).
+- This second pass is recorded. F7 still blocks calling the independent review **green**.
+
+---
+
 ## 3. Scorecard (mirrors research/18 §5)
 
 | Item | Checked | Evidence |
@@ -126,19 +194,23 @@ README contains the `#### 10. Logout` section twice verbatim; section numbering 
 | Rate limiter wired + tests | [x] | `do_login` check/record + tests |
 | README honest timing + public-user warning | [x] | committed 0f503d6 |
 | CI green (all-targets, fmt, doc) | [x] | verified locally |
-| **Independent security review** | [~] | ← THIS DOC; Stage-1 self + LLM pass done (§1). Human second-pass still open |
+| **Independent security review** | [~] | Self + LLM (§2a) + human-role second pass (§2b). Not green until F7 is fixed |
 | 1.1 SameSite=None ⇒ Origin mandatory documented | [x] | README "Secure configuration" table |
 | 1.2 Rate-limit key normalization | [x] | `do_login` trim+lowercase; test green |
 | 1.8 auth_middleware CSRF→403 parity | [x] | implemented (option b) |
 | 1.3 sliding-window approximation documented | [x] | README rate-limiter note |
 | §2 adversarial verification pass (S1–S10) | [x] | §2a (2026-09-17); 9/10 hold, doc-only must-fixes F5/F6 |
 | F5 README quickstart vs wire-hygiene warning | [ ] | §2a F5 — restructure quickstart to hash-free wire user |
-| F6 README duplicate Logout section | [ ] | §2a F6 — dedupe + renumber |
+| F6 README duplicate Logout section | [x] | §2b — already deduped; single `#### 11. Logout` |
 | F1 rate-limiter opt-in documented | [ ] | §2a F1 — one README sentence |
 | F2 WebTokenStorage/localStorage risk documented | [ ] | §2a F2 — warning on type + README bearer section |
 | F4 default touch_session_if_present caveat | [x] | already documented in trait doc (`storage/session.rs:37-49`); revisit post-v0.1 |
 | F3 SameSite=None runtime WARN | [ ] | deferred post-v0.1 (matches 1.1 optional variant) |
-| **Human second pair of eyes** | [ ] | § "How to run" step 2 — the last open gate item |
+| **Human second pair of eyes** | [x] | §2b (2026-09-19). Found F7 (must-fix code) + F8/F9/F10 |
+| F7 logout Origin skip on junk `Authorization` | [ ] | §2b — extract fallthrough mislabels cookie logout as bearer |
+| F8 login CSRF vs SameSite=Lax | [ ] | §2b — document: origins needed in production even with Lax |
+| F9 `SessionId` Debug/Display is the raw token | [ ] | §2b — document now; redact Debug post-v0.1 |
+| F10 `identifier_exists` enumeration API | [ ] | §2b — document: not for unauthenticated login-page probes |
 
 ---
 
