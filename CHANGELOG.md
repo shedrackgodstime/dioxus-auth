@@ -43,6 +43,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `list_user_sessions`, a client destructure of a single-value login return,
   and no workspace escape hatch). The examples are not in CI; run
   `cargo check` in each example directory to verify locally.
+- **Packaging whitelist rewritten with root-anchored patterns.** The previous
+  `include` list used unanchored gitignore-style globs: `README.md` and
+  `LICENSE*` matched those filenames at **any** depth, and cargo's package
+  walk followed per-clone symlinks — so the 0.1.0 tarball would have shipped
+  ~80 private files (agent-config and reference-repo READMEs/LICENSEs found
+  via `cargo package --list`). The whitelist now anchors every pattern at the
+  package root and ships exactly: `src/**`, the four publishable integration
+  tests, both `[[example]]` targets, the manifest, README, CHANGELOG, and the
+  two canonical license files. `crates/**` is dropped (cargo already excludes
+  workspace-member packages — that entry never shipped anything, so
+  `dioxus-auth-derive` stays dev-only/unpublished); `tests/derive_auth_user.rs`
+  is deliberately excluded because cargo strips path-only dev-dependencies
+  from the published manifest, which would leave a test that cannot compile
+  for consumers (it still runs in this workspace). Previously the 7 files
+  outside the old include were silently dropped as ignored targets; now the
+  intended set ships explicitly.
 
 ### Documentation
 

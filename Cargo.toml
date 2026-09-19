@@ -11,12 +11,36 @@ repository = "https://github.com/shedrackgodstime/dioxus-auth"
 documentation = "https://docs.rs/dioxus-auth"
 keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
+# Packaging whitelist — every pattern is ROOT-ANCHORED on purpose.
+# The previous `include = ["src/**", "crates/**", "Cargo.toml", "README.md",
+# "LICENSE*"]` used unanchored gitignore-style patterns: `README.md` and
+# `LICENSE*` matched those filenames at ANY depth, and the package walk
+# followed the per-clone `scratch/` and `.agent-rules/` symlinks — shipping
+# ~80 private knowledge-base files (vendored next-auth, agent rules) to
+# crates.io. Found via `cargo package --list` before the real 0.1.0 publish.
+#
+# - `crates/**` is gone: cargo auto-excludes workspace-member packages from
+#   the parent's tarball, so that entry never shipped anything (verified:
+#   zero `crates/` files in `cargo package --list`). `dioxus-auth-derive`
+#   stays dev-only and unpublished; its path-only dep on this crate has no
+#   version, so it could not be published as-is anyway.
+# - `tests/derive_auth_user.rs` is deliberately NOT listed: cargo strips the
+#   path-only dev-dependency from the published manifest, so the shipped
+#   test would not compile for anyone who vendors the crate. It still runs
+#   in this workspace (`cargo test --all-features`).
 include = [
-    "src/**",
-    "crates/**",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE*",
+    "/src/**",
+    "/tests/auth_lifecycle_integration.rs",
+    "/tests/concurrency_stress.rs",
+    "/tests/sqlite_integration.rs",
+    "/tests/transport_extract.rs",
+    "/examples/basic_auth.rs",
+    "/examples/sqlite_adapter.rs",
+    "/Cargo.toml",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
 ]
 
 [workspace]
