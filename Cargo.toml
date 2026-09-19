@@ -12,6 +12,8 @@ documentation = "https://docs.rs/dioxus-auth"
 keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
 # Packaging whitelist — every pattern is ROOT-ANCHORED on purpose.
+# Guarded by scripts/check-packaging.sh (CI job "Packaging guard"): keep the
+# whitelist there in sync when editing this list.
 # The previous `include = ["src/**", "crates/**", "Cargo.toml", "README.md",
 # "LICENSE*"]` used unanchored gitignore-style patterns: `README.md` and
 # `LICENSE*` matched those filenames at ANY depth, and the package walk

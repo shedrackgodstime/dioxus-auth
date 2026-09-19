@@ -58,7 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from the published manifest, which would leave a test that cannot compile
   for consumers (it still runs in this workspace). Previously the 7 files
   outside the old include were silently dropped as ignored targets; now the
-  intended set ships explicitly.
+  intended set ships explicitly. A new CI job ("Packaging guard") runs
+  `scripts/check-packaging.sh`, which fails the build if `cargo package
+  --list` ever contains files outside the whitelist, drops tracked `src/`
+  files or canary targets, or includes private paths (`scratch/`,
+  `.agent-rules/`).
 
 ### Documentation
 

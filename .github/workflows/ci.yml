@@ -100,3 +100,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
         run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus
+
+  packaging:
+    name: Packaging guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The src/-coverage check compares `cargo package --list` against
+          # `git ls-files src/` — a default shallow checkout is fine, but
+          # fetch-depth 0 keeps git ls-files authoritative if history-based
+          # tooling is ever added.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      # Fails the build if `cargo package --list` contains any file outside
+      # the packaging whitelist (unanchored include globs once shipped ~80
+      # private files via the per-clone scratch/ and .agent-rules/ symlinks),
+      # if the include list silently dropped tracked src/ files or canary
+      # targets, or if private paths appear. Script whitelist must stay in
+      # sync with [package] include in Cargo.toml — both have comments
+      # pointing at each other.
+      - name: Check packaging whitelist
+        run: ./scripts/check-packaging.sh
