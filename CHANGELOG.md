@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Wire hygiene taught correctly from the first snippet (F5):** the README
+  quickstart and minimal setup now define a hash-free `UserView` for the wire
+  and a server-side `UserRecord` holding the hash, replacing the hash-bearing
+  `User` the on-ramp previously modeled — the exact anti-pattern the README's
+  own warning forbids. All client/server snippets updated consistently.
+- **Secure configuration gaps closed (F1, F8, F9, F10):** documented that the
+  rate limiter is **opt-in** (off until `.with_rate_limiter(...)`) and that
+  login CSRF needs `expected_origins` **even with `SameSite=Lax`**; added
+  "never log `Session`/`SessionId`" (Debug/Display print the raw token) and a
+  warning that `identifier_exists` is for registration flows, not unauthenticated
+  login-page probes.
+- **`WebTokenStorage` XSS trade-off stated (F2):** a `# Security` doc section
+  on the type and a bearer-section note — the cookie flow is the
+  XSS-resistant default; bearer + `localStorage` is readable by any XSS.
+- Fixed stale test-helper link (`storage/tests.rs` → `storage/conformance.rs`),
+  corrected the License section to the dual MIT OR Apache-2.0 grant matching
+  `Cargo.toml`, and reworded Status for the upcoming 0.1.0.
+
 ### Fixed
 
 - **Logout Origin bypass via junk `Authorization` (F7).** `ServerAuthContext::logout_current`

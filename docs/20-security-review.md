@@ -200,17 +200,17 @@ Action: post-v0.1, redact `Debug` (`SessionId(***)`). Until then, README: never 
 | 1.8 auth_middleware CSRF→403 parity | [x] | implemented (option b) |
 | 1.3 sliding-window approximation documented | [x] | README rate-limiter note |
 | §2 adversarial verification pass (S1–S10) | [x] | §2a (2026-09-17); 9/10 hold, doc-only must-fixes F5/F6 |
-| F5 README quickstart vs wire-hygiene warning | [ ] | §2a F5 — restructure quickstart to hash-free wire user |
+| F5 README quickstart vs wire-hygiene warning | [x] | FIXED 2026-09-19 — quickstart + minimal setup split into `UserView` (wire) / `UserRecord` (server); both README doctests updated and green |
 | F6 README duplicate Logout section | [x] | §2b — already deduped; single `#### 11. Logout` |
-| F1 rate-limiter opt-in documented | [ ] | §2a F1 — one README sentence |
-| F2 WebTokenStorage/localStorage risk documented | [ ] | §2a F2 — warning on type + README bearer section |
+| F1 rate-limiter opt-in documented | [x] | FIXED 2026-09-19 — Secure-configuration table row: off until `.with_rate_limiter(...)` |
+| F2 WebTokenStorage/localStorage risk documented | [x] | FIXED 2026-09-19 — `# Security` warning on the type + README bearer-section note |
 | F4 default touch_session_if_present caveat | [x] | already documented in trait doc (`storage/session.rs:37-49`); revisit post-v0.1 |
 | F3 SameSite=None runtime WARN | [ ] | deferred post-v0.1 (matches 1.1 optional variant) |
 | **Human second pair of eyes** | [x] | §2b (2026-09-19). Found F7 (must-fix code) + F8/F9/F10 |
 | F7 logout Origin skip on junk `Authorization` | [x] | §2b — FIXED 2026-09-19, commit `f2ac6ab`: both logout sites extract bearer with `cookie = None` (mirroring `current_user`); regression test `junk_authorization_header_cannot_bypass_logout_origin_check` ships |
-| F8 login CSRF vs SameSite=Lax | [ ] | §2b — document: origins needed in production even with Lax |
-| F9 `SessionId` Debug/Display is the raw token | [ ] | §2b — document now; redact Debug post-v0.1 |
-| F10 `identifier_exists` enumeration API | [ ] | §2b — document: not for unauthenticated login-page probes |
+| F8 login CSRF vs SameSite=Lax | [x] | FIXED 2026-09-19 — Secure-configuration row: origins needed in production even with Lax |
+| F9 `SessionId` Debug/Display is the raw token | [x] | DOCUMENTED 2026-09-19 — Secure-configuration row: never log `Session`/`SessionId`; Debug redaction post-v0.1 |
+| F10 `identifier_exists` enumeration API | [x] | DOCUMENTED 2026-09-19 — Secure-configuration note: registration flows only, never login-page probes |
 
 ---
 

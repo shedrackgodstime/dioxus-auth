@@ -6,6 +6,15 @@ use crate::transport::token::TokenStorage;
 /// Stores the raw session token under the given key. Only available when the
 /// `dioxus-auth` crate is compiled for `wasm32` because `localStorage` is a
 /// browser API.
+///
+/// # Security
+///
+/// The token is readable by **any JavaScript running on the page** — an XSS
+/// bug is token theft. The cookie flow (`login_cookie`) is the
+/// XSS-resistant default on web: the credential lives in an `HttpOnly` cookie
+/// JavaScript cannot read and this type is not involved. Prefer bearer +
+/// `WebTokenStorage` only when your app accepts that trade-off (or for hybrid
+/// native/web clients that need the raw token).
 pub struct WebTokenStorage {
     key: &'static str,
 }

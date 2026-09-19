@@ -63,19 +63,33 @@ If you already know Dioxus, the API is predictable:
 
 ### Quick Start
 
-#### 1. Define your `User`
+#### 1. Define your users
+
+Two types: one for the wire, one for the server. The engine authenticates
+`UserRecord` (server-side only); clients only ever see `UserView`.
 
 ```rust
 use dioxus_auth::AuthUser;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct User {
+/// The type that crosses the wire and lives in client auth state.
+/// Public fields only — `#[server]` functions serialize what they return.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserView {
     pub id: u64,
     pub email: String,
-    pub password_hash: String,
+    pub name: String,
 }
 
-impl AuthUser for User {
+/// The server-side row. The password hash NEVER leaves the server.
+#[derive(Clone)]
+struct UserRecord {
+    id: u64,
+    email: String,
+    password_hash: String,
+}
+
+impl AuthUser for UserRecord {
     type Id = u64;
 
     fn id(&self) -> Self::Id {
@@ -95,7 +109,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use dioxus_auth::{AuthEngine, MemoryStore};
 
-let store = Arc::new(MemoryStore::<User>::new());
+let store = Arc::new(MemoryStore::<UserRecord>::new());
 
 let engine = AuthEngine::builder(store.clone(), store.clone())
     .session_ttl(Duration::from_secs(60 * 60 * 24 * 7)) // 7 days
@@ -124,7 +138,7 @@ use dioxus_auth::{AuthProvider, AuthStatus, use_auth, use_auth_restore};
 
 fn App() -> Element {
     rsx! {
-        AuthProvider::<User> {
+        AuthProvider::<UserView> {
             initial_status: AuthStatus::Loading,
             AuthRestore {}
             Router::<Route> {}
@@ -147,7 +161,7 @@ use dioxus_auth::{use_auth, require_auth, RouteGate};
 
 #[component]
 fn ProtectedLayout() -> Element {
-    let auth = use_auth::<User>();
+    let auth = use_auth::<UserView>();
     let outcome = require_auth(&auth.status(), Route::Login);
 
     rsx! {
@@ -180,14 +194,14 @@ Sign in on one tab, stay in sync on the rest. Mount the receiver near the root, 
 
 ```rust,ignore
 rsx! {
-    AuthProvider::<User> {
-        CrossTabSync::<User> {}          // receive: applies other tabs' changes
+    AuthProvider::<UserView> {
+        CrossTabSync::<UserView> {}          // receive: applies other tabs' changes
         Router::<Route> {}
     }
 }
 
 // in the login flow, after auth.set_user(user):
-let broadcaster = use_auth_broadcaster::<User>();
+let broadcaster = use_auth_broadcaster::<UserView>();
 broadcaster.login(&user);                // other tabs sign in too
 
 // in the logout flow:
@@ -203,14 +217,14 @@ use dioxus_auth::{use_auth, SignedIn, SignedOut};
 
 #[component]
 fn Navbar() -> Element {
-    let auth = use_auth::<User>();
+    let auth = use_auth::<UserView>();
 
     rsx! {
-        SignedIn::<User> {
+        SignedIn::<UserView> {
             span { "Welcome, {auth.user().unwrap().email}!" }
             button { onclick: move |_| auth.logout(), "Log Out" }
         }
-        SignedOut::<User> {
+        SignedOut::<UserView> {
             Link { to: Route::Login, "Log In" }
         }
     }
@@ -223,7 +237,7 @@ fn Navbar() -> Element {
 use dioxus_auth::{ServerAuthContext, AuthEngine, CookieConfig};
 
 #[server]
-async fn current_user() -> Result<Option<User>, ServerFnError> {
+async fn current_user() -> Result<Option<UserView>, ServerFnError> {
     let (engine, cookie_config) = /* ... */;
     let ctx = ServerAuthContext::from_request(&engine, &cookie_config)
         .ok_or_else(|| ServerFnError::new("not in a request context"))?;
@@ -274,16 +288,18 @@ fn AuthRestore() -> Element {
 ```
 
 The `fullstack_server_fns!` macro generates four `\[server\]` functions:
-- `login_server(identifier: String, password: String) -> Result<User, ServerFnError>`
+- `login_server(identifier: String, password: String) -> Result<UserView, ServerFnError>`
 - `logout_server() -> Result<(), ServerFnError>`
-- `current_user() -> Result<Option<User>, ServerFnError>`
-- `require_user() -> Result<User, ServerFnError>`
+- `current_user() -> Result<Option<UserView>, ServerFnError>`
+- `require_user() -> Result<UserView, ServerFnError>`
 
 `login_server` is **cookie-only** — it sets an `HttpOnly` session cookie on the response and returns the authenticated user. The raw session token never reaches JavaScript. `logout_server` revokes the current session (cookie or bearer) and clears the cookie if a cookie session was active.
 
 #### 9. Bearer token support
 
 `ServerAuthContext` supports both cookies and `Authorization: Bearer` headers. Bearer tokens take precedence. Bearer is for **native / API clients** (desktop, mobile, scripts); the web flow is cookie-only.
+
+> On web, prefer the cookie flow: `HttpOnly` cookies are invisible to JavaScript, while a bearer token persisted via `WebTokenStorage` (`localStorage`) is readable by any XSS. See the warning on the type and the "Secure configuration" notes below.
 
 For native clients, use `login_bearer` instead of `login_cookie`:
 
@@ -292,7 +308,7 @@ For native clients, use `login_bearer` instead of `login_cookie`:
 async fn login_bearer(
     identifier: String,
     password: String,
-) -> Result<(User, String), ServerFnError> {
+) -> Result<(UserView, String), ServerFnError> {
     let (engine, cookie_config) = /* ... */;
     let ctx = ServerAuthContext::new(&engine, &cookie_config);
     ctx.login_bearer(&identifier, &password)
@@ -307,7 +323,7 @@ async fn login_bearer(
 #[server]
 async fn api_get_user(
     auth_header: Option<String>,
-) -> Result<Option<User>, ServerFnError> {
+) -> Result<Option<UserView>, ServerFnError> {
     let (engine, cookie_config) = /* ... */;
     let ctx = ServerAuthContext::new(&engine, &cookie_config);
     ctx.current_user(None, None, auth_header.as_deref())
@@ -340,7 +356,7 @@ The middleware inserts `AuthenticatedUser(user)` into request extensions. Handle
 use dioxus_auth::{ServerAuthContext, AuthEngine, CookieConfig};
 
 #[server]
-async fn login(email: String, password: String) -> Result<User, ServerFnError> {
+async fn login(email: String, password: String) -> Result<UserView, ServerFnError> {
     let (engine, cookie_config) = /* ... */;
     let ctx = ServerAuthContext::from_request(&engine, &cookie_config)
         .ok_or_else(|| ServerFnError::new("not in a request context"))?;
@@ -381,7 +397,7 @@ async fn logout() -> Result<(), ServerFnError> {
 use std::sync::Arc;
 use dioxus_auth::{AuthEngine, MemoryStore};
 
-let store = Arc::new(MemoryStore::<User>::new());
+let store = Arc::new(MemoryStore::<UserRecord>::new());
 let engine = AuthEngine::builder(store.clone(), store.clone())
     .session_ttl(Duration::from_secs(60 * 60 * 24 * 7))
     .on_sign_in(|user| {
@@ -449,7 +465,7 @@ async fn my_store_follows_contract() {
 }
 ```
 
-See [`src/storage/tests.rs`](src/storage/tests.rs) for the full list of test helpers.
+See [`src/storage/conformance.rs`](src/storage/conformance.rs) for the full list of test helpers.
 
 > **Warning: keep secrets out of the wire user.** `#[server]` functions serialize
 > their return value to the client. Your `AuthUser` type — or anything containing
@@ -468,15 +484,16 @@ use dioxus_auth::{
     AuthEngine, AuthUser, PasswordUserStore, Session, SessionId, SessionStore, UserStore,
 };
 
-// 1. Your user model
+// 1. Your server-side user record (the password hash never crosses the
+// wire; return a hash-free public view from #[server] functions).
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct User {
+struct UserRecord {
     id: u64,
     email: String,
     password_hash: String,
 }
 
-impl AuthUser for User {
+impl AuthUser for UserRecord {
     type Id = u64;
     fn id(&self) -> Self::Id { self.id }
     fn session_auth_hash(&self) -> Option<&str> { Some(&self.password_hash) }
@@ -484,14 +501,14 @@ impl AuthUser for User {
 
 // 2. Minimal in-memory store (replace with your database)
 struct MyStore {
-    users: std::collections::HashMap<u64, User>,
+    users: std::collections::HashMap<u64, UserRecord>,
     credentials: std::collections::HashMap<String, (u64, String)>,
     sessions: std::collections::HashMap<SessionId, Session<u64>>,
 }
 
 impl UserStore for MyStore {
-    type User = User;
-    async fn find_by_id(&self, id: &u64) -> dioxus_auth::AuthResult<Option<User>> {
+    type User = UserRecord;
+    async fn find_by_id(&self, id: &u64) -> dioxus_auth::AuthResult<Option<UserRecord>> {
         Ok(self.users.get(id).cloned())
     }
 }
@@ -500,7 +517,7 @@ impl PasswordUserStore for MyStore {
     async fn find_by_identifier(
         &self,
         identifier: &str,
-    ) -> dioxus_auth::AuthResult<Option<(User, String)>> {
+    ) -> dioxus_auth::AuthResult<Option<(UserRecord, String)>> {
         Ok(self.credentials
             .get(identifier)
             .and_then(|(id, hash)| self.users.get(id).map(|u| (u.clone(), hash.clone())))
@@ -550,11 +567,25 @@ These settings interact and must be considered together before you ship:
 | **`same_site = None`** | **Mandatory** `expected_origins`. With `SameSite=None` a cross-site request can carry the ambient session cookie, so `expected_origins` becomes the **only** real CSRF defense on cookie state-changing ops (`login`, `logout`). If you set `None`, you must set `expected_origins` to your exact origin(s). |
 | `expected_origins` | Origin/CSRF checks apply **only to cookie credentials** (Bearer never needs Origin). Set this to your production origin(s) (`https://app.example.com`). Default `None` disables it — fine for a vanilla `SameSite=Lax` same-origin app, unsafe with `SameSite=None`. |
 | `secure` | Emitted automatically with `host_only`; default `true` in release builds. Do not set the cookie over plain HTTP. |
+| **rate limiter** | **Opt-in — off until you call `.with_rate_limiter(...)` on the builder.** Without it, login brute force is unthrottled (S1's defense only exists if configured). The built-in `InMemoryRateLimiter` is a per-process sliding window; multi-instance deployments should implement `RateLimiter` against a shared store (Redis, Memcached). |
+| **login CSRF** | Set `expected_origins` in production **even with `SameSite=Lax`** — login CSRF does not need the victim's cookie: an attacker cross-site POSTs *their own* credentials and the response `Set-Cookie` binds your visitor's browser to the attacker's account. Lax cannot stop that; the Origin check can. |
+| `Session` / `SessionId` logging | Never log a `Session` or `SessionId`: `Debug`/`Display` print the **raw wire token** — a log line is a session leak. (Redaction is planned post-0.1.) |
 
 > The sliding-window rate limiter is a **per-process approximation**. For a
 > multi-instance deployment, implement `RateLimiter` against a shared store
 > (Redis, Memcached). It counts attempts per normalized identifier and is not a
-> lockout policy.
+> lockout policy. Remember it is **off by default** — see the table row above.
+>
+> `AuthEngine::identifier_exists` is a public existence check intended for
+> registration flows. Do **not** call it from an unauthenticated
+> "is this email taken?" probe on the login page — login's own error channel
+> collapses unknown-user and wrong-password precisely to prevent enumeration.
+>
+> `WebTokenStorage` keeps the raw session token in `localStorage`. The cookie
+> flow (`HttpOnly`, never readable by JavaScript) is the XSS-resistant default
+> on web; prefer it. Use bearer + `WebTokenStorage` only for apps that accept
+> the token-theft-on-XSS trade-off, or on native targets where
+> `FileTokenStorage` applies.
 
 ### Philosophy
 
@@ -564,10 +595,12 @@ The goal is to make authentication feel like a natural part of a Dioxus applicat
 
 ### Status
 
-🚧 **Early development**
-
-The API is still evolving. Expect breaking changes while the core architecture is being established.
+**Pre-1.0, under active development.** The core auth kernel (engine, sessions,
+cookies, password hashing) and the Dioxus client lifecycle are stable in
+shape and covered by the security review in `docs/`; the API may still break
+between minor releases while the crate approaches 1.0. See
+[`CHANGELOG.md`](CHANGELOG.md) for what changed and what is planned.
 
 ### License
 
-Licensed under the MIT License.
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-Apache) at your option.
