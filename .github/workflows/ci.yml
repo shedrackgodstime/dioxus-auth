@@ -81,7 +81,10 @@ jobs:
       - name: Run cargo audit
         run: cargo audit
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        # Pinned to the locally-verified version: unpinned installs compile
+        # the latest release, whose config parsing/behavior can drift under
+        # the pinned deny.toml (this job went red once with no local repro).
+        run: cargo install cargo-deny --version 0.19.8 --locked
       - name: Run cargo deny
         # Full check (advisories + bans + licenses + sources) against the
         # committed policy; without --config cargo-deny looks for deny.toml in
