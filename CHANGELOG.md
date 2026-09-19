@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Logout Origin bypass via junk `Authorization` (F7).** `ServerAuthContext::logout_current`
+  and the registry's `logout_with_headers` extracted credentials by passing
+  the cookie into the bearer extractor; a present-but-non-Bearer header
+  (`Basic …`, `Bearer ` with no token, unknown schemes) fell through to the
+  session cookie, was misclassified as bearer credentials, and skipped
+  `validate_cookie_origin` — letting a cross-site request revoke the cookie
+  session with no Origin check. Both sites now extract bearer with
+  `cookie = None` (mirroring `current_user`): junk headers fall through to
+  the cookie path, where the Origin check runs before revocation. Guarded by
+  `junk_authorization_header_cannot_bypass_logout_origin_check`.
 - `CookieConfig::build_delete_cookie_header` now forces `Path=/` when
   `host_only` is enabled, mirroring `build_set_cookie_header` (RFC 6265bis §5).
   Previously the delete header used the configured `path` unforced, so with

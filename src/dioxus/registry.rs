@@ -232,14 +232,17 @@ where
     S: SessionStore<<U::User as AuthUser>::Id> + Send + Sync + 'static,
 {
     let ctx = ServerAuthContext::new(engine, cookie_config);
-    // Bearer wins ONLY when an Authorization header is actually present —
-    // identical to `ServerAuthContext::logout_current`. Without this guard the
-    // extractor would classify the cookie value itself as a token and skip the
-    // Origin check below.
+    // Bearer wins ONLY when the Authorization header actually carries a
+    // usable `Bearer <token>` — extract with `cookie = None` (identical to
+    // `ServerAuthContext::logout_current`) so the cookie can never be
+    // classified as the bearer token (F7). A junk Authorization header
+    // (Basic, empty Bearer, unknown scheme) falls through to the cookie path
+    // below, where `validate_cookie_origin` runs before the session is
+    // revoked.
     let bearer = authorization.and_then(|auth| {
         crate::transport::extract_session_token(
             Some(auth),
-            cookie,
+            None,
             cookie_config.name.as_str(),
             cookie_config.host_only,
         )
@@ -511,6 +514,69 @@ mod tests {
             .await
             .unwrap();
         assert!(gone.is_none(), "matching-origin logout must revoke");
+    }
+
+    // F7 (security review §2b): a junk `Authorization` header next to the
+    // session cookie must NOT reclassify a cookie logout as bearer credentials
+    // — the request must fall through to the cookie path and be Origin-checked.
+    // Regression for the extract fallthrough that skipped
+    // `validate_cookie_origin` and let a cross-site request revoke the session.
+    #[tokio::test(flavor = "current_thread")]
+    async fn junk_authorization_header_cannot_bypass_logout_origin_check() {
+        let (_engine, _cookie, store) = test_engine_and_cookie();
+        let cookie_config = Arc::new(CookieConfig {
+            name: "reg_test_sess".into(),
+            expected_origins: Some(vec!["https://app.example.com".into()]),
+            ..Default::default()
+        });
+
+        // Log in through a matching-origin context to get a live session.
+        let ctx = ServerAuthContext::new(&_engine, &cookie_config);
+        let (_user, set_cookie) = ctx.login("reg@example.com", "registry_pw").await.unwrap();
+        let raw = set_cookie
+            .split(';')
+            .next()
+            .unwrap()
+            .split("reg_test_sess=")
+            .nth(1)
+            .unwrap()
+            .to_string();
+        let cookie = format!("reg_test_sess={raw}");
+        let sid = crate::session::SessionId::new(raw).hash_for_storage();
+
+        // Every junk Authorization shape must be treated as a cookie logout:
+        // absent Origin → CSRF rejection, session stays alive.
+        for junk in ["Basic dXNlcjpwYXNz", "Bearer ", "Token abc"] {
+            let err =
+                logout_with_headers(&_engine, &cookie_config, Some(&cookie), None, Some(junk))
+                    .await
+                    .unwrap_err();
+            assert_eq!(
+                err,
+                AuthError::Csrf,
+                "junk Authorization {junk:?} must not classify as bearer"
+            );
+
+            let alive = store.find_session(&sid).await.unwrap();
+            assert!(
+                alive.is_some(),
+                "rejected logout must not revoke the session ({junk:?})"
+            );
+        }
+
+        // With a valid Origin the same junk header is irrelevant: the cookie
+        // path revokes as normal.
+        logout_with_headers(
+            &_engine,
+            &cookie_config,
+            Some(&cookie),
+            Some("https://app.example.com"),
+            Some("Basic dXNlcjpwYXNz"),
+        )
+        .await
+        .unwrap();
+        let gone = store.find_session(&sid).await.unwrap();
+        assert!(gone.is_none(), "origin-valid logout must revoke");
     }
 
     #[tokio::test(flavor = "current_thread")]

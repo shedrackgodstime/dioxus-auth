@@ -330,11 +330,16 @@ where
             (cookie_header, authorization_header, had_cookie)
         };
 
-        // Try bearer first, then cookie. Extract the raw wire token.
+        // Bearer credentials only: extract with `cookie = None`, mirroring
+        // `current_user`. A present-but-junk `Authorization` header (Basic,
+        // empty Bearer, unknown scheme) must fall through to the COOKIE path
+        // below — where the Origin check runs — never be classified as bearer
+        // (F7): that mislabel let a cross-site request revoke the cookie
+        // session with no Origin validation.
         let wire_token = if let Some(auth) = authorization_header.as_deref() {
             crate::transport::extract_session_token(
                 Some(auth),
-                cookie_header.as_deref(),
+                None,
                 self.cookie_config.name.as_str(),
                 self.cookie_config.host_only,
             )
