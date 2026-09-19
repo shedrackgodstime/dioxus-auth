@@ -4,7 +4,14 @@
 # the fix is not resolvable here. time is transitive-only:
 # dioxus-fullstack -> reqwest -> cookie_store -> time.
 # Revisit when the MSRV floor is raised past 1.88.
-ignore = ["RUSTSEC-2026-0009"]
+#
+# RUSTSEC-2026-0253 — lru 0.16.4 unsoundness (use-after-free in
+# `LruCache::pop()` if a KEY's Drop panics under catch_unwind; Info, unsound
+# not vuln). Fixed in lru >=0.18.2, unresolvable at MSRV 1.85. Unreachable
+# path: framework-internal cache keys have no panicking Drop. Mirrors the
+# justified ignore in .cargo/audit.toml so cargo-audit and cargo-deny agree.
+# Revisit alongside RUSTSEC-2026-0009 or when dioxus-fullstack bumps lru.
+ignore = ["RUSTSEC-2026-0009", "RUSTSEC-2026-0253"]
 
 [licenses]
 allow = [
@@ -17,6 +24,13 @@ allow = [
     "Unicode-3.0",
     "CC0-1.0",
     "Zlib",
+    # Boost Software License 1.0 — OSI-approved, FSF free (xxhash-rust via
+    # dioxus-fullstack).
+    "BSL-1.0",
+    # Permissive data license (webpki-roots root-certificate bundle via
+    # hyper-rustls -> reqwest). Not OSI-listed, so it must be explicit; terms
+    # are permissive attribution for redistributed data.
+    "CDLA-Permissive-2.0",
 ]
 
 [licenses.private]

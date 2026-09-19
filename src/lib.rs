@@ -144,6 +144,9 @@ mod tests {
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
+    // Only used by dioxus-gated guard tests; un-gated it is dead code when the
+    // feature is off (the clippy --all-targets matrix cell catches this).
+    #[cfg(feature = "dioxus")]
     enum MockRoute {
         Login,
         Dashboard,

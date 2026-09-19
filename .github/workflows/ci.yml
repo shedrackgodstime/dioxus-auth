@@ -32,8 +32,12 @@ jobs:
           - rust: 1.85.0
             features: "--features dioxus-fullstack"
         include:
+          # `test_flags` merges into the generated stable × dioxus cell; the
+          # plain `features` key stays clippy-friendly (clippy always adds
+          # --all-targets itself).
           - rust: stable
-            features: "--all-targets --features dioxus"
+            features: "--features dioxus"
+            test_flags: "--all-targets --features dioxus"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -42,12 +46,14 @@ jobs:
           components: rustfmt, clippy
       - name: Check format
         run: cargo fmt -- --check
+      # --all-targets everywhere: the M1 bug class (test-only code broken
+      # under one feature combination) is invisible to clippy without it.
       - name: Check clippy
-        run: cargo clippy ${{ matrix.features }} -- -D warnings
+        run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
       - name: Run tests
-        run: cargo test ${{ matrix.features }}
+        run: cargo test ${{ matrix.test_flags || matrix.features }}
       - name: Run doc tests
-        if: matrix.features == '--all-targets --features dioxus' || matrix.features == '--all-targets --features dioxus-fullstack'
+        if: matrix.test_flags == '--all-targets --features dioxus'
         run: cargo test --doc --features dioxus
 
   wasm:
@@ -77,7 +83,11 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny
       - name: Run cargo deny
-        run: cargo deny check
+        # Full check (advisories + bans + licenses + sources) against the
+        # committed policy; without --config cargo-deny looks for deny.toml in
+        # the repo root and silently runs its default policy. Graph flags are
+        # top-level in cargo-deny 0.19.x.
+        run: cargo deny --all-features check --config .cargo/deny.toml
 
   doc:
     name: Documentation
