@@ -207,7 +207,7 @@ Action: post-v0.1, redact `Debug` (`SessionId(***)`). Until then, README: never 
 | F4 default touch_session_if_present caveat | [x] | already documented in trait doc (`storage/session.rs:37-49`); revisit post-v0.1 |
 | F3 SameSite=None runtime WARN | [ ] | deferred post-v0.1 (matches 1.1 optional variant) |
 | **Human second pair of eyes** | [x] | §2b (2026-09-19). Found F7 (must-fix code) + F8/F9/F10 |
-| F7 logout Origin skip on junk `Authorization` | [x] | §2b — FIXED 2026-09-19, commit `fd8ab36`: both logout sites extract bearer with `cookie = None` (mirroring `current_user`); regression test `junk_authorization_header_cannot_bypass_logout_origin_check` ships |
+| F7 logout Origin skip on junk `Authorization` | [x] | §2b — FIXED 2026-09-19, commit `f2ac6ab`: both logout sites extract bearer with `cookie = None` (mirroring `current_user`); regression test `junk_authorization_header_cannot_bypass_logout_origin_check` ships |
 | F8 login CSRF vs SameSite=Lax | [ ] | §2b — document: origins needed in production even with Lax |
 | F9 `SessionId` Debug/Display is the raw token | [ ] | §2b — document now; redact Debug post-v0.1 |
 | F10 `identifier_exists` enumeration API | [ ] | §2b — document: not for unauthenticated login-page probes |
