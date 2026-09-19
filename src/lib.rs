@@ -117,8 +117,14 @@ mod tests {
 
     /// Test whoami error: definitively rejected (used by restore tests that
     /// expect the guest outcome).
+    //
+    // Gated to match the restore tests that use it: `crate::dioxus` only
+    // exists under the `dioxus` feature, and an un-gated reference here broke
+    // `cargo test --no-default-features` (CI run 35439757150).
+    #[cfg(feature = "dioxus")]
     struct TestRestoreErr;
 
+    #[cfg(feature = "dioxus")]
     impl crate::dioxus::restore::RestoreClassify for TestRestoreErr {
         fn restore_verdict(&self) -> crate::dioxus::restore::RestoreVerdict {
             crate::dioxus::restore::RestoreVerdict::Unauthenticated
