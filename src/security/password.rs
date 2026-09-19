@@ -11,7 +11,16 @@ pub trait PasswordHasher: Send + Sync + 'static {
 
     /// Verify a plaintext password against an encoded password hash string.
     ///
-    /// Must execute in constant time to prevent side-channel timing attacks.
+    /// Implementations are **not** required to be constant-time, and the trait
+    /// cannot enforce a timing contract (even Argon2id's own verifier varies
+    /// with the encoded parameters, and a malformed stored hash may short-
+    /// circuit). The engine's defense-in-depth around this: a miss still runs
+    /// a real Argon2id verification against a dummy hash so unknown-user and
+    /// wrong-password timings roughly match, and the remaining residual
+    /// (variable-time store lookup) is documented in the README's timing
+    /// note. If you implement this trait, use a memory-hard KDF (prefer
+    /// [`Argon2Hasher`], which is Argon2id per OWASP parameters) and keep the
+    /// verify cost high.
     fn verify_password(&self, password: &str, password_hash: &str) -> AuthResult<bool>;
 }
 

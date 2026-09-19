@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Session credentials redacted from logs (F9/C-F4):** `SessionId::Debug` now
+  renders `SessionId(***)` and `Session::Debug` renders `id: ***` and
+  `auth_hash: ***` — a derived `Debug` previously printed the raw wire token
+  and (often) the password hash into any log line. Field access is unchanged
+  via getters; `as_str()`/`into_string()` remain the explicit opt-in for the
+  raw token. Guarded by redaction tests on both types.
+- **Wire tokens are format-checked at extraction (C-F7):** cookie and bearer
+  extraction now accept only the exact shape the engine mints (64 lowercase
+  hex characters); anything else is rejected before hashing or store lookup,
+  so oversized or malformed cookie values cannot force unbounded `sha256`
+  work. `SessionId::new` remains infallible (storage/tests); only wire input
+  is gated. Guarded by malformed-token rejection tests on both transports.
+- **`PasswordHasher` trait docs no longer promise constant-time verification
+  (C-F8):** the trait cannot enforce a timing contract (Argon2id's verifier
+  varies with encoded parameters; a malformed stored hash short-circuits), so
+  the docs now state what is actually guaranteed — the engine's dummy-hash
+  miss path and the documented variable-time lookup residual — and advise
+  memory-hard KDFs for custom implementations.
+
+### Changed
+
+- **BREAKING:** `SessionId` and `Session` no longer derive `Debug`/`Display`.
+  Code that formatted a session id or session for logging must use the
+  getters or drop the log line; nothing legitimate parsed `Display` output.
+- **Examples teach the wire/record split (C-F9):** `examples/sqlite-demo` and
+  `examples/sqlx-sqlite` now return a hash-free `UserView` from `#[server]`
+  functions and keep the hash-bearing `UserRecord` server-side, matching the
+  README pattern — the sqlite demos previously returned the hash-bearing row
+  from `login_server`/`current_user` directly. Both example crates are also
+  now standalone workspaces and compile in both client and server
+  configurations (they previously could not build at all: missing
+  `list_user_sessions`, a client destructure of a single-value login return,
+  and no workspace escape hatch). The examples are not in CI; run
+  `cargo check` in each example directory to verify locally.
+
 ### Documentation
 
 - **Wire hygiene taught correctly from the first snippet (F5):** the README
@@ -29,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Logout Origin bypass via junk `Authorization` (F7).** `ServerAuthContext::logout_current`
+- **Logout Origin bypass via junk `Authorization` (F7):** `ServerAuthContext::logout_current`
   and the registry's `logout_with_headers` extracted credentials by passing
   the cookie into the bearer extractor; a present-but-non-Bearer header
   (`Basic …`, `Bearer ` with no token, unknown schemes) fell through to the

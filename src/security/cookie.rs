@@ -182,6 +182,12 @@ impl CookieConfig {
                     continue;
                 }
                 if name.trim() == expected_name {
+                    // Wire-format gate (C-F7): cookies carry the 64-hex token
+                    // the engine mints; anything else is a cheap rejection
+                    // before hashing or store lookup.
+                    if !SessionId::is_valid_wire_format(val) {
+                        continue;
+                    }
                     return Some(SessionId::new(val));
                 }
             }

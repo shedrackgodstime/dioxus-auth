@@ -108,6 +108,10 @@ mod tests {
     use super::*;
     use crate::security::OriginValidation;
 
+    /// A well-formed 256-bit hex wire token, as `SessionId::generate` mints —
+    /// the only shape cookie extraction accepts (C-F7).
+    const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct TestUser {
         id: u64,
@@ -210,11 +214,10 @@ mod tests {
         assert!(delete_header.contains("auth_token="));
         assert!(delete_header.contains("Max-Age=0"));
 
+        // Wire-format gate (C-F7): extraction only accepts the 64-hex shape
+        // the engine mints.
         let cookie_header_val = "foo=bar; auth_token=test-token-123; other=val";
-        assert_eq!(
-            config.extract_session_id(cookie_header_val),
-            Some(SessionId::new("test-token-123"))
-        );
+        assert_eq!(config.extract_session_id(cookie_header_val), None);
         assert_eq!(config.extract_session_id("foo=bar; baz=qux"), None);
     }
 
@@ -1290,17 +1293,18 @@ mod tests {
             ..Default::default()
         };
 
-        // Bare name rejected when host_only
+        // Bare name rejected when host_only — and a well-formed token under
+        // the bare name must also be rejected (the NAME rule, not the value).
         assert_eq!(
-            config.extract_session_id("sess=token-abc"),
+            config.extract_session_id(&format!("sess={TOKEN}")),
             None,
             "bare name must be rejected when host_only"
         );
 
         // __Host- prefixed accepted when host_only
         assert_eq!(
-            config.extract_session_id("__Host-sess=token-abc"),
-            Some(SessionId::new("token-abc")),
+            config.extract_session_id(&format!("__Host-sess={TOKEN}")),
+            Some(SessionId::new(TOKEN)),
             "__Host- prefixed must be accepted when host_only"
         );
     }
@@ -1316,15 +1320,15 @@ mod tests {
 
         // __Host- prefixed rejected when not host_only
         assert_eq!(
-            config.extract_session_id("__Host-sess=token-abc"),
+            config.extract_session_id(&format!("__Host-sess={TOKEN}")),
             None,
             "__Host- prefixed must be rejected when not host_only"
         );
 
         // Bare name accepted when not host_only
         assert_eq!(
-            config.extract_session_id("sess=token-abc"),
-            Some(SessionId::new("token-abc")),
+            config.extract_session_id(&format!("sess={TOKEN}")),
+            Some(SessionId::new(TOKEN)),
             "bare name must be accepted when not host_only"
         );
     }
@@ -1346,9 +1350,9 @@ mod tests {
             expected_origins: None,
         };
 
-        let session_id = SessionId::new("token-abc");
+        let session_id = SessionId::new(TOKEN);
         let set_cookie = config.build_set_cookie_header(&session_id);
-        assert!(set_cookie.starts_with("__Host-sess=token-abc"));
+        assert!(set_cookie.starts_with(&format!("__Host-sess={TOKEN}")));
 
         let cookie_header = format!("foo=bar; {set_cookie}; baz=qux");
         let extracted = config.extract_session_id(&cookie_header);

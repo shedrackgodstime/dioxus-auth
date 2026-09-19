@@ -13,15 +13,27 @@ pub fn extract_session_token(
 ) -> Option<String> {
     if let Some(raw) = authorization {
         if let Some(token) = bearer_token(raw) {
-            return Some(token.to_string());
+            return valid_wire_token(token).map(str::to_string);
         }
     }
     if let Some(raw) = cookie {
         if let Some(token) = cookie_value(raw, cookie_name, host_only) {
-            return Some(token.to_string());
+            return valid_wire_token(token).map(str::to_string);
         }
     }
     None
+}
+
+/// Wire tokens must have the exact shape the engine mints (256-bit CSPRNG
+/// hex, 64 chars). Anything else is a cheap rejection before any hashing —
+/// an oversized or malformed cookie/bearer value cannot force unbounded
+/// `sha256` work or reach the store (C-F7).
+fn valid_wire_token(token: &str) -> Option<&str> {
+    if crate::session::SessionId::is_valid_wire_format(token) {
+        Some(token)
+    } else {
+        None
+    }
 }
 
 /// Extract the bearer token from an `Authorization` header value.
@@ -67,38 +79,48 @@ fn cookie_value<'a>(cookie_header: &'a str, name: &str, host_only: bool) -> Opti
 mod tests {
     use super::*;
 
+    /// A well-formed 256-bit hex token, as `SessionId::generate` mints.
+    fn hex_token(seed: u8) -> String {
+        let pair = format!("{seed:02x}");
+        pair.repeat(32)
+    }
+
     #[test]
     fn bearer_wins_over_cookie() {
+        let bearer_tok = hex_token(0xab);
+        let cookie_tok = hex_token(0xcd);
         let token = extract_session_token(
-            Some("Bearer bearer_token_xyz"),
-            Some("dioxus_session=cookie_token_abc"),
+            Some(&format!("Bearer {bearer_tok}")),
+            Some(&format!("dioxus_session={cookie_tok}")),
             "dioxus_session",
             false,
         );
-        assert_eq!(token.as_deref(), Some("bearer_token_xyz"));
+        assert_eq!(token.as_deref(), Some(bearer_tok.as_str()));
     }
 
     #[test]
     fn cookie_used_when_no_bearer() {
+        let cookie_tok = hex_token(0xcd);
         let token = extract_session_token(
             None,
-            Some("foo=bar; dioxus_session=cookie_token_abc; baz=qux"),
+            Some(&format!("foo=bar; dioxus_session={cookie_tok}; baz=qux")),
             "dioxus_session",
             false,
         );
-        assert_eq!(token.as_deref(), Some("cookie_token_abc"));
+        assert_eq!(token.as_deref(), Some(cookie_tok.as_str()));
     }
 
     #[test]
     fn cookie_used_when_bearer_malformed() {
         // "Basic ..." is not Bearer; should fall through to cookie.
+        let cookie_tok = hex_token(0xcd);
         let token = extract_session_token(
             Some("Basic dXNlcjpwYXNz"),
-            Some("dioxus_session=cookie_token_abc"),
+            Some(&format!("dioxus_session={cookie_tok}")),
             "dioxus_session",
             false,
         );
-        assert_eq!(token.as_deref(), Some("cookie_token_abc"));
+        assert_eq!(token.as_deref(), Some(cookie_tok.as_str()));
     }
 
     #[test]
@@ -120,44 +142,49 @@ mod tests {
 
     #[test]
     fn empty_bearer_value_falls_through() {
+        let cookie_tok = hex_token(0xcd);
         let token = extract_session_token(
             Some("Bearer "),
-            Some("dioxus_session=cookie_token_abc"),
+            Some(&format!("dioxus_session={cookie_tok}")),
             "dioxus_session",
             false,
         );
-        assert_eq!(token.as_deref(), Some("cookie_token_abc"));
+        assert_eq!(token.as_deref(), Some(cookie_tok.as_str()));
     }
 
     #[test]
     fn cookie_name_is_exact_match() {
+        let cookie_tok = hex_token(0xcd);
         let token = extract_session_token(
             None,
-            Some("session=other; dioxus_session=mine"),
+            Some(&format!("session=other; dioxus_session={cookie_tok}")),
             "dioxus_session",
             false,
         );
-        assert_eq!(token.as_deref(), Some("mine"));
+        assert_eq!(token.as_deref(), Some(cookie_tok.as_str()));
     }
 
     #[test]
     fn host_prefixed_cookie_found_when_host_only() {
         // host_only=true: __Host- prefixed form is accepted
+        let cookie_tok = hex_token(0xab);
         let token = extract_session_token(
             None,
-            Some("__Host-dioxus_session=host_token_abc"),
+            Some(&format!("__Host-dioxus_session={cookie_tok}")),
             "dioxus_session",
             true,
         );
-        assert_eq!(token.as_deref(), Some("host_token_abc"));
+        assert_eq!(token.as_deref(), Some(cookie_tok.as_str()));
     }
 
     #[test]
     fn bare_cookie_rejected_when_host_only() {
-        // host_only=true: bare name is rejected
+        // host_only=true: bare name is rejected even when the value is a
+        // perfectly formed token — the NAME rule is what fails here.
+        let cookie_tok = hex_token(0xab);
         let token = extract_session_token(
             None,
-            Some("dioxus_session=bare_token_abc"),
+            Some(&format!("dioxus_session={cookie_tok}")),
             "dioxus_session",
             true,
         );
@@ -165,11 +192,43 @@ mod tests {
     }
 
     #[test]
+    fn malformed_wire_tokens_are_rejected() {
+        let legit = "a".repeat(64);
+        // Oversized token: rejected regardless of transport.
+        assert_eq!(
+            extract_session_token(
+                Some(&format!("Bearer {}", "a".repeat(65))),
+                None,
+                "s",
+                false
+            ),
+            None
+        );
+        // Non-hex characters.
+        assert_eq!(
+            extract_session_token(
+                Some(&format!("Bearer {}", "z".repeat(64))),
+                None,
+                "s",
+                false
+            ),
+            None
+        );
+        // Valid 64-hex bearer is accepted.
+        assert_eq!(
+            extract_session_token(Some(&format!("Bearer {legit}")), None, "s", false).as_deref(),
+            Some(legit.as_str())
+        );
+    }
+
+    #[test]
     fn host_prefixed_cookie_rejected_when_not_host_only() {
-        // host_only=false: __Host- prefixed form is rejected
+        // host_only=false: __Host- prefixed form is rejected even when the
+        // value is well formed — again the NAME rule, not the value shape.
+        let cookie_tok = hex_token(0xab);
         let token = extract_session_token(
             None,
-            Some("__Host-dioxus_session=host_token_abc"),
+            Some(&format!("__Host-dioxus_session={cookie_tok}")),
             "dioxus_session",
             false,
         );

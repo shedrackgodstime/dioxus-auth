@@ -3,6 +3,9 @@ name = "dioxus-auth-sqlx-sqlite"
 version = "0.1.0"
 edition = "2021"
 
+# Standalone example crate, not a member of the parent workspace.
+[workspace]
+
 [dependencies]
 dioxus = { version = "0.7", features = ["router", "fullstack"] }
 dioxus-auth = { path = "../..", features = ["dioxus", "dioxus-fullstack"] }

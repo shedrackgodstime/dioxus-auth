@@ -184,6 +184,37 @@ Action: post-v0.1, redact `Debug` (`SessionId(***)`). Until then, README: never 
 
 ---
 
+## 2c. Third-party defaults/extensibility review (2026-09-19, Copilot)
+
+An automated Copilot source audit was run against the tree and triaged in
+`scratch` (not repo-tracked); its checkable claims were re-verified in source
+before acceptance. **Scope caveat:** the audit capped its search depth (10 hits
+per pattern) and did not re-derive S1–S10 from source — it is a third pair of
+eyes on **defaults and extensibility**, not a replacement for the §2b walk.
+Its numbering (C-Fn) collides with ours (R-Fn); the mapping is recorded here.
+
+| Copilot | Ours | Disposition |
+|---|---|---|
+| C-F1 rate limiter opt-in | F1 | Already documented; "mandatory constructor" rejected as a 0.1 change (Argon2 already bounds guessing; a default in-process limiter is a multi-instance footgun) |
+| C-F2 Origin off unless configured | F3/F8 | Already documented; runtime WARN stays deferred |
+| C-F3 `WebTokenStorage` XSS | F2 | Already documented |
+| C-F4 `SessionId` Debug/Display leaks token | F9 | **FIXED 2026-09-19** — Debug/Display redacted (`SessionId(***)`, `Session{id: ***, auth_hash: ***}`) with tests; breaking for anyone parsing Display output (nobody should) |
+| C-F5 default `touch_session_if_present` race | F4 | Already documented; "SQLx implementation in core" overstated — SQL stores are examples |
+| C-F6 `identifier_exists` enumeration | F10 | Already documented |
+| C-F7 unbounded wire token length | S10 note | **FIXED 2026-09-19** — extraction accepts only 64-char lowercase hex (the `generate()` shape) on both transports; `SessionId::new` stays infallible; rejection tests ship |
+| C-F8 `PasswordHasher` doc claims constant-time | — | **FIXED 2026-09-19** — trait doc rewritten: no timing contract is enforceable; documents the dummy-hash defense and variable-time lookup residual |
+| C-F9 examples as teaching boundary | F5 | **FIXED 2026-09-19** — both sqlite examples split into hash-free `UserView` (wire) / server-side `UserRecord`; they previously returned the hash-bearing row from `login_server`/`current_user` and could not compile at all (missing `list_user_sessions`, stale login destructure, no workspace escape) |
+
+Copilot correctly treated F7 (junk-`Authorization` logout Origin bypass) as
+already fixed. Its "must fix before release" list is otherwise a post-0.1
+hardening program (mandatory limiter/origins, required touch, refresh rotation,
+fuzzing, hasher conformance suite) — product decisions, not kernel holes; the
+existing deferrals stand. Two items worth keeping on the post-0.1 board: a
+secure builder preset (limiter + origins without changing `Default`) and
+extract fuzzing.
+
+---
+
 ## 3. Scorecard (mirrors research/18 §5)
 
 | Item | Checked | Evidence |
@@ -194,7 +225,7 @@ Action: post-v0.1, redact `Debug` (`SessionId(***)`). Until then, README: never 
 | Rate limiter wired + tests | [x] | `do_login` check/record + tests |
 | README honest timing + public-user warning | [x] | committed 0f503d6 |
 | CI green (all-targets, fmt, doc) | [x] | verified locally |
-| **Independent security review** | [~] | Self + LLM (§2a) + human-role second pass (§2b). Not green until F7 is fixed |
+| **Independent security review** | [~] | Self + LLM (§2a) + human-role second pass (§2b, F7 fixed) + Copilot defaults/extensibility pass (§2c). All recorded must-fixes closed; a cold-reader human walk remains valuable before the tag |
 | 1.1 SameSite=None ⇒ Origin mandatory documented | [x] | README "Secure configuration" table |
 | 1.2 Rate-limit key normalization | [x] | `do_login` trim+lowercase; test green |
 | 1.8 auth_middleware CSRF→403 parity | [x] | implemented (option b) |
@@ -209,7 +240,10 @@ Action: post-v0.1, redact `Debug` (`SessionId(***)`). Until then, README: never 
 | **Human second pair of eyes** | [x] | §2b (2026-09-19). Found F7 (must-fix code) + F8/F9/F10 |
 | F7 logout Origin skip on junk `Authorization` | [x] | §2b — FIXED 2026-09-19, commit `5844f16`: both logout sites extract bearer with `cookie = None` (mirroring `current_user`); regression test `junk_authorization_header_cannot_bypass_logout_origin_check` ships |
 | F8 login CSRF vs SameSite=Lax | [x] | FIXED 2026-09-19 — Secure-configuration row: origins needed in production even with Lax |
-| F9 `SessionId` Debug/Display is the raw token | [x] | DOCUMENTED 2026-09-19 — Secure-configuration row: never log `Session`/`SessionId`; Debug redaction post-v0.1 |
+| F9 `SessionId` Debug/Display is the raw token | [x] | DOCUMENTED 2026-09-19 (Secure-configuration row) and **REDACTED** 2026-09-19 per §2c C-F4 — `SessionId(***)`, `Session` redacts id + auth_hash, tests ship |
+| C-F7 wire token length unbounded | [x] | §2c — FIXED 2026-09-19: extraction accepts only 64-char lowercase hex on cookie + bearer, rejection tests ship |
+| C-F8 `PasswordHasher` constant-time claim | [x] | §2c — FIXED 2026-09-19: trait doc rewritten (no enforceable timing contract; dummy-hash defense documented) |
+| C-F9 examples leak hash-bearing row | [x] | §2c — FIXED 2026-09-19: sqlite demos return hash-free `UserView`; hash stays in server-side `UserRecord` |
 | F10 `identifier_exists` enumeration API | [x] | DOCUMENTED 2026-09-19 — Secure-configuration note: registration flows only, never login-page probes |
 
 ---

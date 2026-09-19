@@ -1,25 +1,45 @@
+#[cfg(feature = "server")]
 use std::sync::Arc;
+#[cfg(feature = "server")]
 use std::time::Duration;
 
 use dioxus::prelude::*;
-use dioxus_auth::{
-    AuthProvider, AuthUser, use_auth,
-};
+#[cfg(feature = "server")]
+use dioxus_auth::{AuthProvider, AuthUser, use_auth};
+#[cfg(not(feature = "server"))]
+use dioxus_auth::{AuthProvider, use_auth};
 #[cfg(feature = "server")]
 use dioxus_auth::{
-    Argon2Hasher, AuthEngine, CookieConfig, PasswordHasher, ServerAuthContext, SessionStore, UserStore,
+    Argon2Hasher, AuthEngine, CookieConfig, PasswordHasher, ServerAuthContext, SessionStore,
+    UserStore,
 };
-use sqlx::{FromRow, Row, SqlitePool};
+#[cfg(feature = "server")]
+use sqlx::{Row, SqlitePool};
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, FromRow)]
-pub struct AppUser {
+// Two types, per the README's wire/record split: `#[server]` functions
+// serialize what they return, so the hash-bearing row must never be that
+// return type.
+
+/// The type that crosses the wire and lives in client auth state.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UserView {
+    pub id: i64,
+    pub email: String,
+    pub name: String,
+}
+
+/// The server-side store row. The password hash NEVER leaves the server.
+#[cfg(feature = "server")]
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct UserRecord {
     pub id: i64,
     pub email: String,
     pub name: String,
     pub password_hash: String,
 }
 
-impl AuthUser for AppUser {
+#[cfg(feature = "server")]
+impl AuthUser for UserRecord {
     type Id = u64;
 
     fn id(&self) -> Self::Id {
@@ -28,6 +48,17 @@ impl AuthUser for AppUser {
 
     fn session_auth_hash(&self) -> Option<&str> {
         Some(&self.password_hash)
+    }
+}
+
+#[cfg(feature = "server")]
+impl UserView {
+    fn from_record(record: &UserRecord) -> Self {
+        Self {
+            id: record.id,
+            email: record.email.clone(),
+            name: record.name.clone(),
+        }
     }
 }
 
@@ -82,7 +113,7 @@ impl SqliteStore {
         email: &str,
         name: &str,
         password_hash: &str,
-    ) -> Result<AppUser, sqlx::Error> {
+    ) -> Result<UserRecord, sqlx::Error> {
         let result = sqlx::query(
             "INSERT INTO users (email, name, password_hash) VALUES (?1, ?2, ?3)",
         )
@@ -93,7 +124,7 @@ impl SqliteStore {
         .await?;
 
         let id = result.last_insert_rowid();
-        Ok(AppUser {
+        Ok(UserRecord {
             id,
             email: email.to_string(),
             name: name.to_string(),
@@ -104,9 +135,9 @@ impl SqliteStore {
 
 #[cfg(feature = "server")]
 impl UserStore for SqliteStore {
-    type User = AppUser;
+    type User = UserRecord;
 
-    async fn find_by_id(&self, id: &u64) -> dioxus_auth::AuthResult<Option<AppUser>> {
+    async fn find_by_id(&self, id: &u64) -> dioxus_auth::AuthResult<Option<UserRecord>> {
         let row = sqlx::query(
             "SELECT id, email, name, password_hash FROM users WHERE id = ?1",
         )
@@ -115,7 +146,7 @@ impl UserStore for SqliteStore {
         .await
         .map_err(|e| dioxus_auth::AuthError::Store(e.to_string()))?;
 
-        let user = row.map(|r| AppUser {
+        let user = row.map(|r| UserRecord {
             id: r.get(0),
             email: r.get(1),
             name: r.get(2),
@@ -131,7 +162,7 @@ impl dioxus_auth::PasswordUserStore for SqliteStore {
     async fn find_by_identifier(
         &self,
         identifier: &str,
-    ) -> dioxus_auth::AuthResult<Option<(AppUser, String)>> {
+    ) -> dioxus_auth::AuthResult<Option<(UserRecord, String)>> {
         let row = sqlx::query(
             "SELECT id, email, name, password_hash FROM users WHERE email = ?1",
         )
@@ -143,7 +174,7 @@ impl dioxus_auth::PasswordUserStore for SqliteStore {
         let result = row.map(|r| {
             let password_hash: String = r.get(3);
             (
-                AppUser {
+                UserRecord {
                     id: r.get(0),
                     email: r.get(1),
                     name: r.get(2),
@@ -308,15 +339,19 @@ fn get_server_state(
     async fn login_server(
         email: String,
         password: String,
-    ) -> Result<AppUser, ServerFnError> {
+    ) -> Result<UserView, ServerFnError> {
         #[cfg(feature = "server")]
         {
             let (_, engine, cookie_config) = get_server_state();
             let ctx = ServerAuthContext::from_request(engine, cookie_config)
                 .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-            ctx.login_cookie(&email, &password)
+            // Cookie flow: the server sets the HttpOnly session cookie on the
+            // response and returns the user only — no raw token on the wire.
+            let user = ctx
+                .login_cookie(&email, &password)
                 .await
-                .map_err(|e| ServerFnError::new(e.to_string()))
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            Ok(UserView::from_record(&user))
         }
         #[cfg(not(feature = "server"))]
         {
@@ -346,15 +381,17 @@ async fn logout_server() -> Result<(), ServerFnError> {
 }
 
 #[server]
-async fn current_user() -> Result<Option<AppUser>, ServerFnError> {
+async fn current_user() -> Result<Option<UserView>, ServerFnError> {
     #[cfg(feature = "server")]
     {
         let (_, engine, cookie_config) = get_server_state();
         let ctx = ServerAuthContext::from_request(engine, cookie_config)
             .ok_or_else(|| ServerFnError::new("not in a request context"))?;
-        ctx.current_user_from_request()
+        let user = ctx
+            .current_user_from_request()
             .await
-            .map_err(|e| ServerFnError::new(e.to_string()))
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        Ok(user.as_ref().map(UserView::from_record))
     }
     #[cfg(not(feature = "server"))]
     {
@@ -375,7 +412,7 @@ enum Route {
 
 #[component]
 fn NavBar() -> Element {
-    let mut auth = use_auth::<AppUser>();
+    let mut auth = use_auth::<UserView>();
     let nav = use_navigator();
 
     rsx! {
@@ -448,7 +485,7 @@ fn Login() -> Element {
                         error_msg.set(Some("Email and password are required".to_string()));
                         return;
                     }
-                    let mut auth = use_auth::<AppUser>();
+                    let mut auth = use_auth::<UserView>();
                     let nav = nav;
                     spawn(async move {
                         is_submitting.set(true);
@@ -499,7 +536,7 @@ fn Login() -> Element {
 
 #[component]
 fn Dashboard() -> Element {
-    let auth = use_auth::<AppUser>();
+    let auth = use_auth::<UserView>();
     let metrics = use_resource(get_secret_metrics);
 
     let outcome = dioxus_auth::require_auth(&auth.status(), Route::Login {});
@@ -542,7 +579,7 @@ fn Dashboard() -> Element {
 #[component]
 fn App() -> Element {
     rsx! {
-        AuthProvider::<AppUser> {
+        AuthProvider::<UserView> {
             initial_status: None,
             token_storage: dioxus_auth::TokenStorageRef::new(std::sync::Arc::new(dioxus_auth::MemoryTokenStorage::default())),
             AuthRestore {}

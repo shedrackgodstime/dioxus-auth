@@ -1,7 +1,13 @@
 use crate::session::id::SessionId;
+use std::fmt;
 
 /// Server-side session record.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// `Debug` is **manual and redacted**: a derived impl would render the raw
+/// session token (`id`) and the session auth hash — logging a `Session`
+/// would otherwise dump a hijackable credential plus the user's password
+/// hash. Field access stays available through the getters.
+#[derive(Clone, Eq, PartialEq)]
 pub struct Session<UserId> {
     id: SessionId,
     user_id: UserId,
@@ -11,6 +17,21 @@ pub struct Session<UserId> {
     auth_hash: Option<String>,
     ip_address: Option<String>,
     user_agent: Option<String>,
+}
+
+impl<UserId: fmt::Debug> fmt::Debug for Session<UserId> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Session")
+            .field("id", &"***")
+            .field("user_id", &self.user_id)
+            .field("created_at_unix", &self.created_at_unix)
+            .field("expires_at_unix", &self.expires_at_unix)
+            .field("last_active_at_unix", &self.last_active_at_unix)
+            .field("auth_hash", &self.auth_hash.as_ref().map(|_| "***"))
+            .field("ip_address", &self.ip_address)
+            .field("user_agent", &self.user_agent)
+            .finish()
+    }
 }
 
 impl<UserId> Session<UserId> {
@@ -127,5 +148,60 @@ impl<UserId> Session<UserId> {
         self.expires_at_unix = new_expiry;
         self.last_active_at_unix = Some(last_active);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// C-F4 / F9: `Debug` on `Session` must redact both the raw session token
+    /// and the auth hash (often the password hash). Logging a session must not
+    /// dump a hijackable credential.
+    #[test]
+    fn debug_redacts_id_and_auth_hash() {
+        let raw = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let secret_hash = "$argon2id$v=19$m=19456,t=2,p=1$c2VjcmV0c2FsdA$aGFzaGhleGFscw";
+        let session = Session::new(SessionId::new(raw), 7u64, 1_000, 2_000)
+            .with_auth_hash(secret_hash)
+            .with_ip_address("10.0.0.1")
+            .with_user_agent("test-agent");
+
+        let rendered = format!("{session:?}");
+        assert!(
+            !rendered.contains(raw),
+            "Debug must not render the raw token"
+        );
+        assert!(
+            !rendered.contains(secret_hash),
+            "Debug must not render the auth hash"
+        );
+        assert!(
+            rendered.contains("***"),
+            "redaction marker present: {rendered}"
+        );
+        assert!(rendered.contains("7"), "non-secret fields stay visible");
+
+        // The id field renders through SessionId's own redacted Debug.
+        let id_rendered = format!("{:?}", session.id());
+        assert_eq!(id_rendered, "SessionId(***)");
+    }
+
+    /// The derived-eq/test ergonomics the redaction must not break: getters
+    /// still expose every field for legitimate use.
+    #[test]
+    fn getters_still_expose_fields() {
+        let session = Session::new(SessionId::new("tok"), 7u64, 1_000, 2_000)
+            .with_auth_hash("h")
+            .with_ip_address("10.0.0.1")
+            .with_user_agent("ua");
+
+        assert_eq!(session.id().as_str(), "tok");
+        assert_eq!(*session.user_id(), 7);
+        assert_eq!(session.created_at_unix(), 1_000);
+        assert_eq!(session.expires_at_unix(), 2_000);
+        assert_eq!(session.auth_hash(), Some("h"));
+        assert_eq!(session.ip_address(), Some("10.0.0.1"));
+        assert_eq!(session.user_agent(), Some("ua"));
     }
 }

@@ -5,13 +5,34 @@ use std::fmt;
 /// On the wire (cookie, bearer header) this is the raw 256-bit token.
 /// In storage the lookup key is `sha256(raw)`. A leaked store therefore
 /// cannot be used to hijack active sessions.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+///
+/// `Debug` and `Display` are **redacted**: they never render the raw token,
+/// so accidentally logging a session id cannot leak a hijackable credential.
+/// Use [`SessionId::as_str`] / [`SessionId::into_string`] at the (rare)
+/// points where the wire value is genuinely needed.
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct SessionId(String);
 
 impl SessionId {
     /// Create a session ID from an existing string (raw wire token).
+    ///
+    /// Infallible by design (storage layer, tests). Wire input is validated
+    /// separately — see [`SessionId::is_valid_wire_format`].
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
+    }
+
+    /// Whether `token` has the exact shape [`SessionId::generate`] mints:
+    /// 64 lowercase hex characters (a 256-bit CSPRNG value).
+    ///
+    /// Applied to **wire** input (bearer/cookie extraction) before any
+    /// hashing or lookup, so oversized or malformed cookie values are cheap
+    /// rejections instead of unbounded `sha256` work.
+    pub fn is_valid_wire_format(token: &str) -> bool {
+        token.len() == 64
+            && token
+                .bytes()
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
     }
 
     /// Generate a new cryptographically secure random session ID (256-bit CSPRNG hex string).
@@ -42,6 +63,45 @@ impl SessionId {
 
 impl fmt::Display for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        // Redacted: the raw token must never reach a log line (F9 / C-F4).
+        f.write_str("***")
+    }
+}
+
+impl fmt::Debug for SessionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SessionId(***)")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_and_display_do_not_leak_the_raw_token() {
+        let id = SessionId::generate();
+        let raw = id.as_str().to_string();
+        assert!(!raw.is_empty());
+        assert!(!format!("{id:?}").contains(&raw));
+        assert!(!format!("{id}").contains(&raw));
+        assert_eq!(format!("{id}"), "***");
+        assert_eq!(format!("{id:?}"), "SessionId(***)");
+    }
+
+    #[test]
+    fn wire_format_validation() {
+        assert!(SessionId::is_valid_wire_format(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ));
+        // Wrong length, non-hex, uppercase, empty — all invalid.
+        assert!(!SessionId::is_valid_wire_format("abc"));
+        assert!(!SessionId::is_valid_wire_format(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg"
+        ));
+        assert!(!SessionId::is_valid_wire_format(
+            "0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef"
+        ));
+        assert!(!SessionId::is_valid_wire_format(""));
     }
 }
