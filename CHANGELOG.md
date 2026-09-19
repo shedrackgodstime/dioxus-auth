@@ -50,12 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Registry one-liner `logout_current` now enforces Origin/CSRF validation on
-  cookie-credential logouts (spec 15): previously the registry's logout path
+  cookie-credential logouts: previously the registry's logout path
   dropped the `Origin` header, so a cross-site request could revoke a
   cookie-session despite `expected_origins` being configured. Rejection leaves
   the session alive; bearer logouts skip Origin per the credential-specific
-  rule; no-credential logouts stay idempotent. Plan + tests:
-  `scratch/plans/0a-cookie-transport-completion.md`.
+  rule; no-credential logouts stay idempotent. Guarded by registry logout
+  Origin tests.
 
 ### Changed
 

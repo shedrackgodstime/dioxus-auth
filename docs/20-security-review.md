@@ -1,8 +1,8 @@
 # 20 — Security Review: Standing Adversarial Review & Attack Scenarios
 
 * **Status**: ACTIVE — living. First-pass self-review + LLM-adversary pass started 2026-09-08; findings below are CODE-GROUNDED (file:line).
-* **Drives**: threat-model §5 final checklist; **blocks v0.1.0 tag until this is green** (research/18 §5 last item).
-* **Anchors**: `scratch/research/18-threat-model-defense-map.md` (lives in the private knowledge-base via the `scratch/` symlink; not repo-tracked) (scorecard = §5), specs 14/15/16.
+* **Drives**: **blocks the v0.1.0 tag until this is green** — every `[ ]` in the §3 scorecard must be checked and each accepted residual documented in the README.
+* **Anchors**: the §2 scenario table and §3 scorecard below; the shipped defenses they verify live in `src/security/`, `src/engine/`, and `src/dioxus/`.
 
 > **How to run this review (human)**
 > 1. Work the §2 attack scenarios — answer each with file:line evidence, not vibes.

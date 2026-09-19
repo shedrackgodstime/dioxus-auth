@@ -5,3 +5,6 @@
 /.cargo
 /examples/*/target
 /examples/utmelab/
+
+# per-clone agent configuration (never ship private paths)
+/AGENTS.md
