@@ -18,66 +18,96 @@ You own the database, users, and data. **dioxus-auth** provides the authenticati
 
 ## Usage
 
-```sh
-cargo add dioxus-auth = "0.1.0"
-```
+Add "dioxus-auth" to your Dioxus application:
 
-```rust
-use dioxus_auth::prelude::*;
-use std::sync::Arc;
+cargo add dioxus-auth
 
-let store = Arc::new(MemoryStore::<AppUser>::new());
+1. Enable authentication
 
-let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-    .idle_timeout_secs(30 * 60) // little config: idle sessions expire
-    .single_active_session(true)
+Configure "dioxus-auth" with your application's user and session stores.
+
+let auth = AuthEngine::builder(user_store, session_store)
+    .password_auth(true)
     .build()?;
 
-// Password auth — register a user, then sign in.
-let hash = Argon2Hasher::new().hash("s3cret")?;
-store.insert_user_with_password(AppUser::new(1, "alice"), "alice", hash);
+Your application owns the database and decides how users and sessions are stored.
 
-let (user, session) = auth.login("alice", "s3cret")?;
-auth.validate_session(session.id())?;
-auth.logout(session.id())?;
-```
+2. Register and log in
 
-Then:
+Create a user with a password:
 
-```rust
+auth.register("alice", "s3cret")?;
+
+Then log in:
+
+let user = auth.login("alice", "s3cret").await?;
+
+The session is created automatically after a successful login.
+
+3. Log out
+
+auth.logout().await?;
+
+4. Use authentication in your app
+
+Access the reactive authentication state from any component:
+
 let auth = use_auth::<AppUser>();
 
-auth.login(...).await?;
-auth.logout().await?;
-```
+if let Some(user) = auth.user() {
+    rsx! {
+        p { "Welcome, {user.username}" }
+    }
+}
 
-Protect routes and server operations with the same auth state.
+Authentication state updates reactively when the user logs in or out.
 
-```rust
+5. Protect routes
+
+Require authentication for protected routes:
+
 require_auth();
 
+rsx! {
+    Dashboard {}
+}
+
+Unauthenticated users can be redirected to your login page.
+
+6. Protect server operations
+
+Authentication can also be checked on the server:
+
 let user = require_user().await?;
-```
 
-## Design
+Use the returned user for authorization and application logic:
 
-**dioxus-auth** manages authentication and sessions.
+let user = require_user().await?;
 
-Your application owns the data.
+get_private_data(user.id).await?;
 
-```text
-Your Database
-     │
-     ▼
-  dioxus-auth
-     │
-     ├── Authentication
-     ├── Sessions
-     └── Authorization
-            │
-            ▼
-       Dioxus App
-```
+The same authentication state is used for both your UI and server-side operations.
+
+7. Custom database
+
+"dioxus-auth" does not own your database.
+
+Bring your own user and session stores:
+
+let user_store = MyUserStore::new(db.clone());
+let session_store = MySessionStore::new(db);
+
+let auth = AuthEngine::builder(user_store, session_store)
+    .password_auth(true)
+    .build()?;
+
+Your existing database remains the source of truth for your application's users and data.
+
+Other authentication methods
+
+Password authentication is only one option. Social authentication can be added when needed.
+
+See the documentation for configuring social providers and advanced authentication flows.
 
 ## Status
 
