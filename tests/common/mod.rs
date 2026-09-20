@@ -65,6 +65,46 @@ impl TestUser {
     }
 }
 
+/// A user whose credential version (`session_auth_hash`) can be rotated.
+#[derive(Debug, Clone)]
+pub struct VersionedUser {
+    pub id: u64,
+    pub name: String,
+    pub version: String,
+}
+
+impl AuthUser for VersionedUser {
+    type Id = u64;
+
+    fn id(&self) -> Self::Id {
+        return self.id;
+    }
+
+    fn display_name(&self) -> Option<String> {
+        return Some(self.name.clone());
+    }
+
+    fn session_auth_hash(&self) -> Option<&str> {
+        return Some(&self.version);
+    }
+
+    fn clone_box(&self) -> Box<dyn AuthUser<Id = Self::Id>> {
+        return Box::new(self.clone());
+    }
+}
+
+impl VersionedUser {
+    /// Creates a versioned test user.
+    #[must_use]
+    pub fn new(id: u64, name: impl Into<String>, version: impl Into<String>) -> Self {
+        return Self {
+            id,
+            name: name.into(),
+            version: version.into(),
+        };
+    }
+}
+
 /// Hashes a password with the default Argon2 hasher.
 ///
 /// # Panics

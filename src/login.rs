@@ -97,6 +97,24 @@ where
                 Ok(()) => {}
                 Err(e) => return Err(e),
             }
+        } else if let Some(current_hash) = user.session_auth_hash() {
+            // reason: rotate sessions minted under a previous credential
+            // version so a password change revokes them at the next login
+            // rather than only on first use (validate_session also drops
+            // them lazily on use).
+            let sessions = match self.sessions.list_user_sessions(&user_id) {
+                Ok(list) => list,
+                Err(e) => return Err(e),
+            };
+            for session in sessions {
+                if let Some(session_hash) = session.auth_hash() {
+                    if session_hash != current_hash {
+                        if let Err(e) = self.sessions.delete_session(session.id()) {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
         }
 
         let raw_id = SessionId::generate();

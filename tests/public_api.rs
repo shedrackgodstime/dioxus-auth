@@ -9,7 +9,7 @@ mod common;
 
 use std::sync::Arc;
 
-use common::{IdentityHasher, TestUser, hash_password};
+use common::{IdentityHasher, TestUser, VersionedUser, hash_password};
 use dioxus_auth::prelude::{
     Argon2Hasher, AuthEngine, AuthError, AuthStatus, CookieConfig, InMemoryRateLimiter,
     LoginOptions, MemoryStore, MemoryTokenStorage, OriginValidation, PasswordHasher,
@@ -28,6 +28,16 @@ fn seeded_login_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUs
     return AuthEngine::builder(Arc::clone(&store), store)
         .build()
         .expect("engine construction must succeed");
+}
+
+#[test]
+fn default_clock_records_current_time_on_login() {
+    let engine = seeded_login_engine();
+    let (_, session) = engine.login("alice", "pw").expect("login must succeed");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| return duration.as_secs());
+    assert!(session.created_at_unix().abs_diff(now) <= 5);
 }
 
 #[test]
@@ -271,6 +281,31 @@ fn custom_hasher_override_is_used_for_verification() {
     assert_eq!(user.id, 1);
     let result = engine.login("alice", "wrong");
     assert_eq!(result.unwrap_err(), AuthError::InvalidCredentials);
+}
+
+#[test]
+fn login_rotates_sessions_bound_to_a_previous_credential_version() {
+    let store = MemoryStore::<VersionedUser>::new();
+    store.insert_user_with_password(
+        VersionedUser::new(1, "alice", "v1"),
+        "alice",
+        String::from("pw"),
+    );
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+        .hasher(IdentityHasher)
+        .build()
+        .expect("engine construction must succeed");
+
+    let (_, first) = engine.login("alice", "pw").unwrap();
+    store.insert_user(VersionedUser::new(1, "alice", "v2"));
+
+    let (_, second) = engine.login("alice", "pw").unwrap();
+
+    let first_storage = first.id().hash_for_storage();
+    let second_storage = second.id().hash_for_storage();
+    assert!(store.find_session(&first_storage).unwrap().is_none());
+    assert!(store.find_session(&second_storage).unwrap().is_some());
 }
 
 #[test]

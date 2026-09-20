@@ -188,6 +188,9 @@ where
 }
 
 /// Current UNIX timestamp in seconds.
+///
+/// Returns `0` if the system clock predates the Unix epoch.
+#[must_use]
 pub fn now_unix() -> u64 {
     return std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
