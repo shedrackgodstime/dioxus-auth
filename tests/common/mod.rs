@@ -11,7 +11,10 @@
 use dioxus_auth::prelude::{Argon2Hasher, AuthError, AuthUser, PasswordHasher};
 
 /// A minimal user for exercising the auth core.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Serialize`/`Deserialize` make it usable as a server-function return type
+/// in the fullstack integration tests.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TestUser {
     pub id: u64,
     pub name: String,

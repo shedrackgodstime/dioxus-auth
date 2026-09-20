@@ -14,9 +14,22 @@ mod operations;
 mod provider;
 mod storage;
 
+#[cfg(feature = "dioxus-fullstack")]
+pub mod server;
+
 pub use context::AuthContext;
 pub use guards::{RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAuthProps};
 pub use hooks::use_auth;
 pub use operations::{AuthEngineHandle, AuthOperations};
 pub use provider::{AuthProvider, AuthProviderProps};
 pub use storage::TokenStorageHandle;
+
+#[cfg(feature = "dioxus-fullstack")]
+pub use server::{
+    AuthLayer, AuthService, LoginRequest, RequireAuthLayer, RequireAuthService, ServerAuthConfig,
+    ServerAuthContext, ServerError, current_user, fullstack_server_fns, require_user, server_init,
+    write_session_cookie,
+};
+
+#[cfg(feature = "dioxus-fullstack")]
+pub use dioxus_fullstack::{ServerFnError, ServerFnResult};

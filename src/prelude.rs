@@ -45,3 +45,11 @@ pub use crate::dioxus::{
     RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAuthProps, TokenStorageHandle,
     use_auth,
 };
+
+#[cfg(feature = "dioxus-fullstack")]
+#[doc(inline)]
+pub use crate::dioxus::{
+    AuthLayer, AuthService, LoginRequest, RequireAuthLayer, RequireAuthService, ServerAuthConfig,
+    ServerAuthContext, ServerError, ServerFnError, ServerFnResult, current_user,
+    fullstack_server_fns, require_user, server_init, write_session_cookie,
+};

@@ -1,0 +1,184 @@
+//! Axum middleware that publishes the engine to fullstack requests.
+//!
+//! The middleware inserts the configuration into each request's extensions,
+//! so it resolves in both SSR renders and server functions.
+
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use axum::extract::Request;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::routing::Route;
+use tower::Layer;
+use tower::Service;
+
+use crate::dioxus::server::ServerAuthConfig;
+use crate::dioxus::server::cookies::request_cookie_token;
+use crate::status::SessionId;
+use crate::user::AuthUser;
+
+type BoxFuture =
+    Pin<Box<dyn Future<Output = Result<Response, std::convert::Infallible>> + Send + 'static>>;
+
+/// Server auth middleware that makes the engine available to every request.
+///
+/// [`ServerAuthConfig`] is inserted into the request extensions so that
+/// [`ServerAuthContext::from_request`](super::server_fn::ServerAuthContext::from_request)
+/// resolves everywhere — initial SSR renders and server functions alike.
+///
+/// Guests are served normally; combine with [`RequireAuthLayer`] to
+/// reject them.
+#[derive(Clone, Debug)]
+pub struct AuthLayer<U: AuthUser> {
+    config: Arc<ServerAuthConfig<U>>,
+}
+
+impl<U: AuthUser> AuthLayer<U> {
+    /// Builds the middleware from a server auth configuration.
+    #[must_use]
+    pub fn new(config: ServerAuthConfig<U>) -> Self {
+        return Self {
+            config: Arc::new(config),
+        };
+    }
+}
+
+impl<U: AuthUser> Layer<Route> for AuthLayer<U> {
+    type Service = AuthService<U>;
+
+    fn layer(&self, inner: Route) -> Self::Service {
+        return AuthService {
+            config: Arc::clone(&self.config),
+            inner,
+        };
+    }
+}
+
+/// The layered service produced by [`AuthLayer`].
+#[derive(Clone)]
+pub struct AuthService<U: AuthUser> {
+    config: Arc<ServerAuthConfig<U>>,
+    inner: Route,
+}
+
+impl<U: AuthUser> Service<Request> for AuthService<U> {
+    type Response = Response;
+    type Error = std::convert::Infallible;
+    type Future = BoxFuture;
+
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        return std::task::Poll::Ready(Ok(()));
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        let config = Arc::clone(&self.config);
+        let mut inner = self.inner.clone();
+        return Box::pin(async move {
+            let mut request = request;
+            request.extensions_mut().insert(config);
+            return match inner.call(request).await {
+                Ok(response) => Ok(response),
+                Err(infallible) => match infallible {},
+            };
+        });
+    }
+}
+
+/// Server auth middleware that resolves the session and rejects guests.
+///
+/// Validates the session cookie like
+/// [`ServerAuthContext::from_request`](super::server_fn::ServerAuthContext::from_request);
+/// unauthenticated or invalid requests receive `401 Unauthorized` without
+/// reaching the handler. Authenticated requests continue with the engine in
+/// the request extensions.
+#[derive(Clone, Debug)]
+pub struct RequireAuthLayer<U: AuthUser> {
+    config: Arc<ServerAuthConfig<U>>,
+}
+
+impl<U: AuthUser> RequireAuthLayer<U> {
+    /// Builds the requiring middleware from a server auth configuration.
+    #[must_use]
+    pub fn for_config(config: ServerAuthConfig<U>) -> Self {
+        return Self {
+            config: Arc::new(config),
+        };
+    }
+}
+
+impl<U: AuthUser> Layer<Route> for RequireAuthLayer<U> {
+    type Service = RequireAuthService<U>;
+
+    fn layer(&self, inner: Route) -> Self::Service {
+        return RequireAuthService {
+            config: Arc::clone(&self.config),
+            inner,
+        };
+    }
+}
+
+/// The layered service produced by [`RequireAuthLayer`].
+#[derive(Clone)]
+pub struct RequireAuthService<U: AuthUser> {
+    config: Arc<ServerAuthConfig<U>>,
+    inner: Route,
+}
+
+impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
+    type Response = Response;
+    type Error = std::convert::Infallible;
+    type Future = BoxFuture;
+
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        return std::task::Poll::Ready(Ok(()));
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        let config = Arc::clone(&self.config);
+        let mut inner = self.inner.clone();
+        return Box::pin(async move {
+            let mut request = request;
+            request.extensions_mut().insert(Arc::clone(&config));
+            let Some(token) = request_cookie_token(request.headers(), config.cookie().name())
+            else {
+                return Ok(unauthorized());
+            };
+            if !SessionId::is_valid_wire_format(&token) {
+                return Ok(unauthorized());
+            }
+            let validated = config.engine().engine().validate(&SessionId::new(token));
+            return match validated {
+                Ok(Some(_)) => match inner.call(request).await {
+                    Ok(response) => Ok(response),
+                    Err(infallible) => match infallible {},
+                },
+                Ok(None) | Err(_) => Ok(unauthorized()),
+            };
+        });
+    }
+}
+
+fn unauthorized() -> Response {
+    return (StatusCode::UNAUTHORIZED, String::from("unauthorized")).into_response();
+}
+
+impl<U: AuthUser> fmt::Debug for AuthService<U> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f.write_str("AuthService(..)");
+    }
+}
+
+impl<U: AuthUser> fmt::Debug for RequireAuthService<U> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f.write_str("RequireAuthService(..)");
+    }
+}

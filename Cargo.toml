@@ -29,27 +29,44 @@ include = [
     "clippy.toml",
     "rustfmt.toml",
     "scripts/check-packaging.sh",
+    "docs/README.md",
     "src/**",
 ]
 
 [features]
 default = []
 dioxus = ["dep:dioxus", "dep:dioxus-core", "dep:dioxus-router", "dep:dioxus-signals"]
+dioxus-fullstack = ["dioxus", "dep:dioxus-fullstack", "dep:serde", "dep:axum", "dep:tower"]
+# Compile-phase gate for the server half of dioxus-fullstack-generated fns.
+# dioxus-fullstack's `#[server]`/`#[post]` macros expand the wire call under
+# `cfg(feature = "server")`; apps that declare their own fullstack fns must
+# declare the same-named feature (dioxus's convention, see the macro docs).
+server = ["dioxus-fullstack/server"]
 
 [dependencies]
 argon2 = { version = "0.5", default-features = false, features = ["std", "password-hash", "alloc"] }
+axum = { version = "0.8", optional = true }
 dioxus = { version = "0.7", optional = true, default-features = false, features = ["hooks", "signals", "macro", "html"] }
 dioxus-core = { version = "0.7", optional = true }
+dioxus-fullstack = { version = "0.7", optional = true }
 dioxus-router = { version = "0.7", optional = true, default-features = false, features = ["html"] }
 dioxus-signals = { version = "0.7", optional = true }
 hex = "0.4"
 parking_lot = "0.12"
 rand_core = { version = "0.6", features = ["std"] }
+serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10"
 thiserror = "2.0"
+tower = { version = "0.5", optional = true }
 
 [dev-dependencies]
+dioxus-fullstack = { version = "0.7", features = ["server"] }
 dioxus-history = "0.7"
+dioxus-server = "0.7"
+http-body-util = "0.1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tower = { version = "0.5", features = ["util"] }
 
 [[test]]
 name = "conformance_user_store"
@@ -67,3 +84,13 @@ path = "tests/conformance/session_store.rs"
 name = "dioxus_runtime"
 path = "tests/dioxus_runtime.rs"
 required-features = ["dioxus"]
+
+[[test]]
+name = "fullstack_tests"
+path = "tests/fullstack_tests.rs"
+required-features = ["dioxus-fullstack", "server"]
+
+[[test]]
+name = "fullstack_global_tests"
+path = "tests/fullstack_global_tests.rs"
+required-features = ["dioxus-fullstack", "server"]

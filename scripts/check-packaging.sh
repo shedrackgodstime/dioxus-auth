@@ -16,6 +16,7 @@ whitelist=(
     '^clippy\.toml$'
     '^rustfmt\.toml$'
     '^README\.md$'
+    '^docs/README\.md$'
     '^LICENSE$'
     '^LICENSE-MIT$'
     '^LICENSE-APACHE$'

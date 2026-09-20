@@ -59,8 +59,13 @@ where
 ///
 /// `PartialEq` compares the shared `Arc` identity: prop diffing cannot and must
 /// not compare erased engines field by field.
-#[derive(Clone)]
 pub struct AuthEngineHandle<T: AuthUser>(pub(crate) Arc<dyn AuthOperations<T>>);
+
+impl<T: AuthUser> Clone for AuthEngineHandle<T> {
+    fn clone(&self) -> Self {
+        return Self(Arc::clone(&self.0));
+    }
+}
 
 impl<T: AuthUser> AuthEngineHandle<T> {
     /// Wraps a type-erased authorization implementation.
