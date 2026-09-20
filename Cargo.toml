@@ -21,15 +21,10 @@ categories = ["authentication", "web-programming"]
 # ~80 private knowledge-base files (vendored next-auth, agent rules) to
 # crates.io. Found via `cargo package --list` before the real 0.1.0 publish.
 #
-# - `crates/**` is gone: cargo auto-excludes workspace-member packages from
-#   the parent's tarball, so that entry never shipped anything (verified:
-#   zero `crates/` files in `cargo package --list`). `dioxus-auth-derive`
-#   stays dev-only and unpublished; its path-only dep on this crate has no
-#   version, so it could not be published as-is anyway.
-# - `tests/derive_auth_user.rs` is deliberately NOT listed: cargo strips the
-#   path-only dev-dependency from the published manifest, so the shipped
-#   test would not compile for anyone who vendors the crate. It still runs
-#   in this workspace (`cargo test --all-features`).
+# `tests/derive_auth_user.rs` is removed: the `dioxus-auth-derive`
+# proc-macro crate is gone. All users implement `AuthUser` manually
+# (see src/user.rs and the README quickstart). It still runs in
+# this workspace (`cargo test --all-features`).
 include = [
     "/src/**",
     "/tests/auth_lifecycle_integration.rs",
@@ -45,13 +40,9 @@ include = [
     "/LICENSE-APACHE",
 ]
 
-[workspace]
-members = ["crates/dioxus-auth-derive"]
-
 [workspace.lints.rust]
 # missing_docs is enforced via #![warn(missing_docs)] inside each lib target
-# (src/lib.rs, crates/dioxus-auth-derive/src/lib.rs) so tests and examples
-# are not held to library documentation standards.
+# (src/lib.rs) so tests and examples are not held to library documentation standards.
 
 [workspace.lints.clippy]
 correctness = "deny"
@@ -100,7 +91,6 @@ web-sys = { version = "0.3", features = ["BroadcastChannel", "console", "Locatio
 [dev-dependencies]
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-dioxus-auth-derive = { path = "./crates/dioxus-auth-derive" }
 serde_json = "1"
 
 [[example]]

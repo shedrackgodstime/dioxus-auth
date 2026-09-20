@@ -1,0 +1,2428 @@
+warning: item in documentation is missing backticks
+   --> src/../README.md:431:30
+    |
+431 | #### 14. SQLite-backed demo (SQLx)
+    |                              ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+    = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+    |
+431 - #### 14. SQLite-backed demo (SQLx)
+431 + #### 14. SQLite-backed demo (`SQLx`)
+    |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/engine/auth_engine.rs:64:12
+   |
+64 |     pub fn user_store(&self) -> &U {
+   |            ^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+   = note: `-W clippy::must-use-candidate` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::must_use_candidate)]`
+help: add the attribute
+   |
+64 ~     #[must_use]
+65 ~     pub fn user_store(&self) -> &U {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/engine/auth_engine.rs:69:12
+   |
+69 |     pub fn session_store(&self) -> &S {
+   |            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+69 ~     #[must_use]
+70 ~     pub fn session_store(&self) -> &S {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/engine/auth_engine.rs:74:12
+   |
+74 |     pub fn hasher(&self) -> &dyn PasswordHasher {
+   |            ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+74 ~     #[must_use]
+75 ~     pub fn hasher(&self) -> &dyn PasswordHasher {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/engine/auth_engine.rs:79:12
+   |
+79 |     pub fn session_ttl_secs(&self) -> u64 {
+   |            ^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+79 ~     #[must_use]
+80 ~     pub fn session_ttl_secs(&self) -> u64 {
+   |
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> src/engine/auth_engine.rs:93:5
+   |
+93 |     pub async fn validate_session(&self, session_id: &SessionId) -> AuthResult<Option<U::User>> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+   = note: `-W clippy::missing-errors-doc` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::missing_errors_doc)]`
+
+warning: this could be rewritten as `let...else`
+  --> src/engine/auth_engine.rs:95:9
+   |
+95 | /         let session = match self.sessions.find_session(&storage_id).await? {
+96 | |             Some(s) => s,
+97 | |             None => return Ok(None),
+98 | |         };
+   | |__________^ help: consider writing: `let Some(session) = self.sessions.find_session(&storage_id).await? else { return Ok(None) };`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_let_else
+   = note: `-W clippy::manual-let-else` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::manual_let_else)]`
+
+warning: this could be rewritten as `let...else`
+   --> src/engine/auth_engine.rs:110:9
+    |
+110 | /         let user = match self.users.find_by_id(session.user_id()).await? {
+111 | |             Some(u) => u,
+112 | |             None => {
+113 | |                 let _ = self.sessions.delete_session(&storage_id).await;
+...   |
+116 | |         };
+    | |__________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_let_else
+help: consider writing
+    |
+110 ~         let Some(user) = self.users.find_by_id(session.user_id()).await? else {
+111 +                 let _ = self.sessions.delete_session(&storage_id).await;
+112 +                 return Ok(None);
+113 +             };
+    |
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src/engine/auth_engine.rs:110:20
+    |
+110 |           let user = match self.users.find_by_id(session.user_id()).await? {
+    |  ____________________^
+111 | |             Some(u) => u,
+112 | |             None => {
+113 | |                 let _ = self.sessions.delete_session(&storage_id).await;
+...   |
+116 | |         };
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#single_match_else
+    = note: `-W clippy::single-match-else` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::single_match_else)]`
+help: try
+    |
+110 ~         let user = if let Some(u) = self.users.find_by_id(session.user_id()).await? { u } else {
+111 +             let _ = self.sessions.delete_session(&storage_id).await;
+112 +             return Ok(None);
+113 ~         };
+    |
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:155:5
+    |
+155 |     pub async fn logout(&self, session_id: &SessionId) -> AuthResult<()> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:167:5
+    |
+167 | /     pub async fn revoke_all_user_sessions(
+168 | |         &self,
+169 | |         user_id: &<U::User as AuthUser>::Id,
+170 | |     ) -> AuthResult<()> {
+    | |_______________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: this method could have a `#[must_use]` attribute
+   --> src/engine/auth_engine.rs:175:12
+    |
+175 |     pub fn idle_timeout_secs(&self) -> Option<u64> {
+    |            ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+175 ~     #[must_use]
+176 ~     pub fn idle_timeout_secs(&self) -> Option<u64> {
+    |
+
+warning: this method could have a `#[must_use]` attribute
+   --> src/engine/auth_engine.rs:180:12
+    |
+180 |     pub fn single_active_session(&self) -> bool {
+    |            ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+180 ~     #[must_use]
+181 ~     pub fn single_active_session(&self) -> bool {
+    |
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:191:5
+    |
+191 | /     pub async fn list_user_sessions(
+192 | |         &self,
+193 | |         user_id: &<U::User as AuthUser>::Id,
+194 | |     ) -> AuthResult<Vec<Session<<U::User as AuthUser>::Id>>> {
+    | |____________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:202:5
+    |
+202 |     pub async fn revoke_session(&self, session_id: &SessionId) -> AuthResult<bool> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: unused `self` argument
+   --> src/engine/auth_engine.rs:211:18
+    |
+211 |     fn fire_hook(&self, hook: Option<&Arc<dyn Fn(&U::User) + Send + Sync>>, user: &U::User) {
+    |                  ^^^^^
+    |
+    = help: consider refactoring to an associated function
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_self
+    = note: `-W clippy::unused-self` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::unused_self)]`
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:239:5
+    |
+239 | /     pub async fn login(
+240 | |         &self,
+241 | |         identifier: &str,
+242 | |         password: &str,
+243 | |     ) -> AuthResult<(U::User, Session<<U::User as AuthUser>::Id>)> {
+    | |__________________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:250:5
+    |
+250 | /     pub async fn login_with_options(
+251 | |         &self,
+252 | |         identifier: &str,
+253 | |         password: &str,
+254 | |         options: LoginOptions<'_>,
+255 | |     ) -> AuthResult<(U::User, Session<<U::User as AuthUser>::Id>)> {
+    | |__________________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src/engine/auth_engine.rs:277:37
+    |
+277 |           let (user, password_hash) = match user_entry {
+    |  _____________________________________^
+278 | |             Some((u, hash)) => (Some(u), hash),
+279 | |             None => {
+280 | |                 if let Some(limiter) = &self.rate_limiter {
+...   |
+286 | |         };
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#single_match_else
+help: try
+    |
+277 ~         let (user, password_hash) = if let Some((u, hash)) = user_entry { (Some(u), hash) } else {
+278 +             if let Some(limiter) = &self.rate_limiter {
+279 +                 limiter.record_attempt(&limiter_key);
+280 +             }
+281 +             let _ = self.hasher.verify_password(password, &self.dummy_hash);
+282 +             return Err(AuthError::InvalidCredentials);
+283 ~         };
+    |
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/engine/auth_engine.rs:338:5
+    |
+338 |     pub async fn identifier_exists(&self, identifier: &str) -> AuthResult<bool> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+ --> src/security/cookie.rs:4:5
+  |
+4 | /// SameSite policy for session cookies.
+  |     ^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+  |
+4 - /// SameSite policy for session cookies.
+4 + /// `SameSite` policy for session cookies.
+  |
+
+warning: item in documentation is missing backticks
+  --> src/security/cookie.rs:61:9
+   |
+61 |     /// SameSite policy. Default is [`SameSite::Lax`].
+   |         ^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+   |
+61 -     /// SameSite policy. Default is [`SameSite::Lax`].
+61 +     /// `SameSite` policy. Default is [`SameSite::Lax`].
+   |
+
+warning: `format!(..)` appended to existing `String`
+   --> src/security/cookie.rs:113:17
+    |
+113 |                 header.push_str(&format!("; Domain={domain}"));
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: you may need to import the `std::fmt::Write` trait
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#format_push_string
+    = note: `-W clippy::format-push-string` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::format_push_string)]`
+help: consider using `write!` to avoid the extra allocation
+    |
+113 -                 header.push_str(&format!("; Domain={domain}"));
+113 +                 let _ = write!(header, "; Domain={domain}");
+    |
+
+warning: `format!(..)` appended to existing `String`
+   --> src/security/cookie.rs:117:13
+    |
+117 |             header.push_str(&format!("; Max-Age={max_age}"));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: you may need to import the `std::fmt::Write` trait
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#format_push_string
+help: consider using `write!` to avoid the extra allocation
+    |
+117 -             header.push_str(&format!("; Max-Age={max_age}"));
+117 +             let _ = write!(header, "; Max-Age={max_age}");
+    |
+
+warning: `format!(..)` appended to existing `String`
+   --> src/security/cookie.rs:126:9
+    |
+126 |         header.push_str(&format!("; SameSite={}", self.same_site.as_str()));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: you may need to import the `std::fmt::Write` trait
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#format_push_string
+help: consider using `write!` to avoid the extra allocation
+    |
+126 -         header.push_str(&format!("; SameSite={}", self.same_site.as_str()));
+126 +         let _ = write!(header, "; SameSite={}", self.same_site.as_str());
+    |
+
+warning: variables can be used directly in the `format!` string
+   --> src/security/cookie.rs:145:26
+    |
+145 |         let mut header = format!("{}=; Path={}; Max-Age=0", cookie_name, path);
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#uninlined_format_args
+    = note: `-W clippy::uninlined-format-args` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::uninlined_format_args)]`
+help: change this to
+    |
+145 -         let mut header = format!("{}=; Path={}; Max-Age=0", cookie_name, path);
+145 +         let mut header = format!("{cookie_name}=; Path={path}; Max-Age=0");
+    |
+
+warning: `format!(..)` appended to existing `String`
+   --> src/security/cookie.rs:150:17
+    |
+150 |                 header.push_str(&format!("; Domain={domain}"));
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: you may need to import the `std::fmt::Write` trait
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#format_push_string
+help: consider using `write!` to avoid the extra allocation
+    |
+150 -                 header.push_str(&format!("; Domain={domain}"));
+150 +                 let _ = write!(header, "; Domain={domain}");
+    |
+
+warning: `format!(..)` appended to existing `String`
+   --> src/security/cookie.rs:160:9
+    |
+160 |         header.push_str(&format!("; SameSite={}", self.same_site.as_str()));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: you may need to import the `std::fmt::Write` trait
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#format_push_string
+help: consider using `write!` to avoid the extra allocation
+    |
+160 -         header.push_str(&format!("; SameSite={}", self.same_site.as_str()));
+160 +         let _ = write!(header, "; SameSite={}", self.same_site.as_str());
+    |
+
+warning: this method could have a `#[must_use]` attribute
+   --> src/security/cookie.rs:171:12
+    |
+171 |     pub fn extract_session_id(&self, cookie_header: &str) -> Option<SessionId> {
+    |            ^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+171 ~     #[must_use]
+172 ~     pub fn extract_session_id(&self, cookie_header: &str) -> Option<SessionId> {
+    |
+
+warning: this method could have a `#[must_use]` attribute
+   --> src/security/cookie.rs:209:12
+    |
+209 |     pub fn validate_origin(&self, origin: Option<&str>) -> OriginValidation {
+    |            ^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+209 ~     #[must_use]
+210 ~     pub fn validate_origin(&self, origin: Option<&str>) -> OriginValidation {
+    |
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/security/cookie.rs:234:5
+    |
+234 |     pub fn validate_cookie_origin(&self, origin: Option<&str>) -> AuthResult<()> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> src/security/password.rs:10:5
+   |
+10 |     fn hash_password(&self, password: &str) -> AuthResult<String>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> src/security/password.rs:24:5
+   |
+24 |     fn verify_password(&self, password: &str, password_hash: &str) -> AuthResult<bool>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/security/password.rs:43:12
+   |
+43 |     pub fn new() -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+43 ~     #[must_use]
+44 ~     pub fn new() -> Self {
+   |
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> src/security/password.rs:50:5
+   |
+50 |     pub fn with_params(m_cost_kib: u32, t_cost: u32, p_cost: u32) -> Result<Self, AuthError> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: this could be rewritten as `let...else`
+  --> src/security/password.rs:68:9
+   |
+68 | /         let parsed_hash = match PasswordHash::new(password_hash) {
+69 | |             Ok(h) => h,
+70 | |             Err(_) => return Ok(false),
+71 | |         };
+   | |__________^ help: consider writing: `let Ok(parsed_hash) = PasswordHash::new(password_hash) else { return Ok(false) };`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_let_else
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> src/security/rate_limit.rs:16:5
+   |
+16 |     fn check(&self, identifier: &str) -> AuthResult<()>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/security/rate_limit.rs:44:12
+   |
+44 |     pub fn new(max_attempts: usize, window: Duration) -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+44 ~     #[must_use]
+45 ~     pub fn new(max_attempts: usize, window: Duration) -> Self {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/session/id.rs:31:12
+   |
+31 |     pub fn is_valid_wire_format(token: &str) -> bool {
+   |            ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+31 ~     #[must_use]
+32 ~     pub fn is_valid_wire_format(token: &str) -> bool {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/session/id.rs:39:12
+   |
+39 |     pub fn generate() -> Self {
+   |            ^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+39 ~     #[must_use]
+40 ~     pub fn generate() -> Self {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/session/id.rs:47:12
+   |
+47 |     pub fn hash_for_storage(&self) -> SessionId {
+   |            ^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+47 ~     #[must_use]
+48 ~     pub fn hash_for_storage(&self) -> SessionId {
+   |
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+  --> src/session/id.rs:47:5
+   |
+47 | /     pub fn hash_for_storage(&self) -> SessionId {
+48 | |         use sha2::{Digest, Sha256};
+49 | |         let digest = Sha256::digest(self.0.as_bytes());
+50 | |         SessionId(hex::encode(digest))
+51 | |     }
+   | |_____^
+   |
+   = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+   = note: `-W clippy::return-self-not-must-use` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::return_self_not_must_use)]`
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/session/id.rs:54:12
+   |
+54 |     pub fn as_str(&self) -> &str {
+   |            ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+54 ~     #[must_use]
+55 ~     pub fn as_str(&self) -> &str {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/session/id.rs:59:12
+   |
+59 |     pub fn into_string(self) -> String {
+   |            ^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+59 ~     #[must_use]
+60 ~     pub fn into_string(self) -> String {
+   |
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+  --> src/session/record.rs:56:5
+   |
+56 | /     pub fn with_last_active(mut self, at: u64) -> Self {
+57 | |         self.last_active_at_unix = Some(at);
+58 | |         self
+59 | |     }
+   | |_____^
+   |
+   = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+  --> src/session/record.rs:67:5
+   |
+67 | /     pub fn with_auth_hash(mut self, auth_hash: impl Into<String>) -> Self {
+68 | |         self.auth_hash = Some(auth_hash.into());
+69 | |         self
+70 | |     }
+   | |_____^
+   |
+   = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+  --> src/session/record.rs:73:5
+   |
+73 | /     pub fn with_ip_address(mut self, ip_address: impl Into<String>) -> Self {
+74 | |         self.ip_address = Some(ip_address.into());
+75 | |         self
+76 | |     }
+   | |_____^
+   |
+   = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+  --> src/session/record.rs:79:5
+   |
+79 | /     pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+80 | |         self.user_agent = Some(user_agent.into());
+81 | |         self
+82 | |     }
+   | |_____^
+   |
+   = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+   --> src/session/record.rs:127:5
+    |
+127 | /     pub fn extend_expiry(mut self, now: u64, ttl_secs: u64) -> Self {
+128 | |         self.expires_at_unix = now + ttl_secs;
+129 | |         self
+130 | |     }
+    | |_____^
+    |
+    = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+   --> src/session/record.rs:147:5
+    |
+147 | /     pub fn set_expiry_and_last_active(mut self, new_expiry: u64, last_active: u64) -> Self {
+148 | |         self.expires_at_unix = new_expiry;
+149 | |         self.last_active_at_unix = Some(last_active);
+150 | |         self
+151 | |     }
+    | |_____^
+    |
+    = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/storage/memory.rs:44:12
+   |
+44 |     pub fn new() -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+44 ~     #[must_use]
+45 ~     pub fn new() -> Self {
+   |
+
+warning: docs for function which may panic missing `# Panics` section
+  --> src/storage/memory.rs:53:5
+   |
+53 |     pub fn insert_user(&self, user: User) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: first possible panic found here
+  --> src/storage/memory.rs:54:25
+   |
+54 |         let mut users = self.users.write().expect("lock poisoned");
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+   = note: `-W clippy::missing-panics-doc` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::missing_panics_doc)]`
+
+warning: docs for function which may panic missing `# Panics` section
+  --> src/storage/memory.rs:59:5
+   |
+59 | /     pub fn insert_user_with_password(
+60 | |         &self,
+61 | |         user: User,
+62 | |         identifier: impl Into<String>,
+63 | |         password_hash: impl Into<String>,
+64 | |     ) {
+   | |_____^
+   |
+note: first possible panic found here
+  --> src/storage/memory.rs:66:25
+   |
+66 |         let mut users = self.users.write().expect("MemoryStore lock poisoned");
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: unused `async` for async trait impl function with no `.await` statements
+  --> src/storage/memory.rs:77:5
+   |
+77 | /     async fn find_by_id(&self, id: &User::Id) -> AuthResult<Option<User>> {
+78 | |         let users = Self::read_lock(&self.users)?;
+79 | |         Ok(users.get(id).cloned())
+80 | |     }
+   | |_____^
+   |
+   = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+   = note: `-W clippy::unused-async-trait-impl` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::unused_async_trait_impl)]`
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<User>>>` instead
+   |
+77 ~     fn find_by_id(&self, id: &User::Id) -> impl Future<Output = AuthResult<Option<User>>> {
+78 ~         let users = std::future::ready(Self::read_lock(&self.users)?);
+79 ~         std::future::ready(Ok(users.get(id).cloned()))
+   |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+  --> src/storage/memory.rs:84:5
+   |
+84 | /     async fn find_by_identifier(&self, identifier: &str) -> AuthResult<Option<(User, String)>> {
+85 | |         let credentials = Self::read_lock(&self.credentials)?;
+86 | |         if let Some((user_id, hash)) = credentials.get(identifier) {
+87 | |             let users = Self::read_lock(&self.users)?;
+...  |
+92 | |         Ok(None)
+93 | |     }
+   | |_____^
+   |
+   = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<(User, String)>>>` instead
+   |
+84 ~     fn find_by_identifier(&self, identifier: &str) -> impl Future<Output = AuthResult<Option<(User, String)>>> {
+85 ~         let credentials = std::future::ready(Self::read_lock(&self.credentials)?);
+86 |         if let Some((user_id, hash)) = credentials.get(identifier) {
+87 ~             let users = std::future::ready(Self::read_lock(&self.users)?);
+88 |             if let Some(user) = users.get(user_id) {
+89 ~                 return std::future::ready(Ok(Some((user.clone(), hash.clone()))));
+90 |             }
+91 |         }
+92 ~         std::future::ready(Ok(None))
+   |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> src/storage/memory.rs:100:5
+    |
+100 | /     async fn save_session(&self, session: Session<User::Id>) -> AuthResult<()> {
+101 | |         let mut sessions = Self::write_lock(&self.sessions)?;
+102 | |         sessions.insert(session.id().clone(), session);
+103 | |         Ok(())
+104 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+100 ~     fn save_session(&self, session: Session<User::Id>) -> impl Future<Output = AuthResult<()>> {
+101 ~         let mut sessions = std::future::ready(Self::write_lock(&self.sessions)?);
+102 |         sessions.insert(session.id().clone(), session);
+103 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> src/storage/memory.rs:106:5
+    |
+106 | /     async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<User::Id>>> {
+107 | |         let sessions = Self::read_lock(&self.sessions)?;
+108 | |         Ok(sessions.get(id).cloned())
+109 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<Session<User::Id>>>>` instead
+    |
+106 ~     fn find_session(&self, id: &SessionId) -> impl Future<Output = AuthResult<Option<Session<User::Id>>>> {
+107 ~         let sessions = std::future::ready(Self::read_lock(&self.sessions)?);
+108 ~         std::future::ready(Ok(sessions.get(id).cloned()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> src/storage/memory.rs:111:5
+    |
+111 | /     async fn delete_session(&self, id: &SessionId) -> AuthResult<()> {
+112 | |         let mut sessions = Self::write_lock(&self.sessions)?;
+113 | |         sessions.remove(id);
+114 | |         Ok(())
+115 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+111 ~     fn delete_session(&self, id: &SessionId) -> impl Future<Output = AuthResult<()>> {
+112 ~         let mut sessions = std::future::ready(Self::write_lock(&self.sessions)?);
+113 |         sessions.remove(id);
+114 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> src/storage/memory.rs:117:5
+    |
+117 | /     async fn touch_session_if_present(
+118 | |         &self,
+119 | |         id: &SessionId,
+120 | |         new_expiry: u64,
+...   |
+132 | |         Ok(())
+133 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+117 ~     fn touch_session_if_present(
+118 |         &self,
+...
+121 |         last_active: u64,
+122 ~     ) -> impl Future<Output = AuthResult<()>> {
+123 ~         let mut sessions = std::future::ready(Self::write_lock(&self.sessions)?);
+124 |         if let Some(session) = sessions.get_mut(id) {
+...
+131 |         // that's exactly what prevents resurrection races (Spec 16).
+132 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> src/storage/memory.rs:135:5
+    |
+135 | /     async fn delete_user_sessions(&self, user_id: &User::Id) -> AuthResult<()> {
+136 | |         let mut sessions = Self::write_lock(&self.sessions)?;
+137 | |         sessions.retain(|_, session| session.user_id() != user_id);
+138 | |         Ok(())
+139 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+135 ~     fn delete_user_sessions(&self, user_id: &User::Id) -> impl Future<Output = AuthResult<()>> {
+136 ~         let mut sessions = std::future::ready(Self::write_lock(&self.sessions)?);
+137 |         sessions.retain(|_, session| session.user_id() != user_id);
+138 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> src/storage/memory.rs:141:5
+    |
+141 | /     async fn list_user_sessions(&self, user_id: &User::Id) -> AuthResult<Vec<Session<User::Id>>> {
+142 | |         let sessions = Self::read_lock(&self.sessions)?;
+143 | |         Ok(sessions
+144 | |             .values()
+...   |
+147 | |             .collect())
+148 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Vec<Session<User::Id>>>>` instead
+    |
+141 ~     fn list_user_sessions(&self, user_id: &User::Id) -> impl Future<Output = AuthResult<Vec<Session<User::Id>>>> {
+142 ~         let sessions = std::future::ready(Self::read_lock(&self.sessions)?);
+143 ~         std::future::ready(Ok(sessions
+144 +             .values()
+145 +             .filter(|session| session.user_id() == user_id)
+146 +             .cloned()
+147 +             .collect()))
+    |
+
+warning: item in documentation is missing backticks
+  --> src/storage/session.rs:42:48
+   |
+42 |     /// Atomically extend a session's expiry + last_active only if it still exists.
+   |                                                ^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+   |
+42 -     /// Atomically extend a session's expiry + last_active only if it still exists.
+42 +     /// Atomically extend a session's expiry + `last_active` only if it still exists.
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/transport/memory.rs:17:12
+   |
+17 |     pub fn new() -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+17 ~     #[must_use]
+18 ~     pub fn new() -> Self {
+   |
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> src/transport/token.rs:19:5
+   |
+19 |     fn save(&self, token: &str) -> AuthResult<()>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/transport/file.rs:33:12
+   |
+33 |     pub fn path(&self) -> &Path {
+   |            ^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+33 ~     #[must_use]
+34 ~     pub fn path(&self) -> &Path {
+   |
+
+warning: used underscore-prefixed binding
+  --> src/dioxus/components/signed_in_out.rs:14:5
+   |
+14 |     _marker: PhantomData<User>,
+   |     ^^^^^^^
+   |
+note: binding is defined here
+  --> src/dioxus/components/signed_in_out.rs:14:5
+   |
+14 |     _marker: PhantomData<User>,
+   |     ^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#used_underscore_binding
+   = note: `-W clippy::used-underscore-binding` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::used_underscore_binding)]`
+
+warning: used underscore-prefixed binding
+  --> src/dioxus/components/signed_in_out.rs:14:5
+   |
+14 |     _marker: PhantomData<User>,
+   |     ^^^^^^^
+   |
+note: binding is defined here
+  --> src/dioxus/components/signed_in_out.rs:14:5
+   |
+14 |     _marker: PhantomData<User>,
+   |     ^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#used_underscore_binding
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/context.rs:30:12
+   |
+30 |     pub fn new(status: Signal<AuthStatus<User>>) -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+30 ~     #[must_use]
+31 ~     pub fn new(status: Signal<AuthStatus<User>>) -> Self {
+   |
+
+warning: these match arms have identical bodies
+  --> src/dioxus/hooks/use_auth_restore.rs:55:9
+   |
+55 |         None => {}
+   |         ^^^^^^^^^^
+...
+65 |         Some(Err(_)) => {}
+   |         ^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is unintentional make the arms return different values
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#match_same_arms
+   = note: `-W clippy::match-same-arms` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::match_same_arms)]`
+help: otherwise merge the patterns into a single arm
+   |
+55 ~         Some(Ok(Some(user))) => auth.set_user(user),
+56 |         Some(Ok(None)) => auth.set_status(AuthStatus::Unauthenticated),
+...
+63 |         // we learned nothing, so we must not log anyone out.
+64 ~         None | Some(Err(_)) => {}
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/provider.rs:28:12
+   |
+28 |     pub fn into_inner(self) -> Arc<dyn TokenStorage> {
+   |            ^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+28 ~     #[must_use]
+29 ~     pub fn into_inner(self) -> Arc<dyn TokenStorage> {
+   |
+
+warning: redundant closure
+  --> src/dioxus/provider.rs:57:62
+   |
+57 |     let _storage = use_context_provider(|| token_storage.map(|r| r.into_inner()));
+   |                                                              ^^^^^^^^^^^^^^^^^^ help: replace the closure with the method itself: `TokenStorageRef::into_inner`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#redundant_closure_for_method_calls
+   = note: `-W clippy::redundant-closure-for-method-calls` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::redundant_closure_for_method_calls)]`
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/server_fn.rs:30:12
+   |
+30 |     pub fn new(engine: &'a AuthEngine<U, S>, cookie_config: &'a CookieConfig) -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+30 ~     #[must_use]
+31 ~     pub fn new(engine: &'a AuthEngine<U, S>, cookie_config: &'a CookieConfig) -> Self {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/server_fn.rs:77:12
+   |
+77 |     pub fn engine(&self) -> &AuthEngine<U, S> {
+   |            ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+77 ~     #[must_use]
+78 ~     pub fn engine(&self) -> &AuthEngine<U, S> {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/server_fn.rs:82:12
+   |
+82 |     pub fn cookie_config(&self) -> &CookieConfig {
+   |            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+82 ~     #[must_use]
+83 ~     pub fn cookie_config(&self) -> &CookieConfig {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/server_fn.rs:87:12
+   |
+87 |     pub fn cookie_header(&self) -> Option<&str> {
+   |            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+87 ~     #[must_use]
+88 ~     pub fn cookie_header(&self) -> Option<&str> {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/server_fn.rs:92:12
+   |
+92 |     pub fn origin_header(&self) -> Option<&str> {
+   |            ^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+92 ~     #[must_use]
+93 ~     pub fn origin_header(&self) -> Option<&str> {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/dioxus/server_fn.rs:97:12
+   |
+97 |     pub fn authorization_header(&self) -> Option<&str> {
+   |            ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+97 ~     #[must_use]
+98 ~     pub fn authorization_header(&self) -> Option<&str> {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+   --> src/dioxus/server_fn.rs:102:12
+    |
+102 |     pub fn session_id(&self) -> Option<SessionId> {
+    |            ^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+102 ~     #[must_use]
+103 ~     pub fn session_id(&self) -> Option<SessionId> {
+    |
+
+warning: this method could have a `#[must_use]` attribute
+   --> src/dioxus/server_fn.rs:109:12
+    |
+109 |     pub fn extract_session_id(&self, cookie_header: Option<&str>) -> Option<SessionId> {
+    |            ^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+109 ~     #[must_use]
+110 ~     pub fn extract_session_id(&self, cookie_header: Option<&str>) -> Option<SessionId> {
+    |
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/dioxus/server_fn.rs:120:5
+    |
+120 | /     pub async fn current_user(
+121 | |         &self,
+122 | |         cookie_header: Option<&str>,
+123 | |         origin_header: Option<&str>,
+124 | |         authorization_header: Option<&str>,
+125 | |     ) -> AuthResult<Option<U::User>> {
+    | |____________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/dioxus/server_fn.rs:188:5
+    |
+188 | /     pub async fn require_user(
+189 | |         &self,
+190 | |         cookie_header: Option<&str>,
+191 | |         origin_header: Option<&str>,
+192 | |         authorization_header: Option<&str>,
+193 | |     ) -> AuthResult<U::User> {
+    | |____________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/dioxus/server_fn.rs:210:5
+    |
+210 |     pub async fn logout(&self, session_id: &SessionId) -> AuthResult<String> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/dioxus/server_fn.rs:236:5
+    |
+236 |     pub async fn login(&self, identifier: &str, password: &str) -> AuthResult<(U::User, String)> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+   --> src/dioxus/server_fn.rs:272:5
+    |
+272 | /     pub async fn login_bearer(
+273 | |         &self,
+274 | |         identifier: &str,
+275 | |         password: &str,
+276 | |     ) -> AuthResult<(U::User, String)> {
+    | |______________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+  --> src/dioxus/sync.rs:67:19
+   |
+67 |       let channel = try_use_context::<SyncChannelName>()
+   |  ___________________^
+68 | |         .map(|s| s.0)
+69 | |         .unwrap_or_else(|| DEFAULT_CROSS_TAB_CHANNEL.to_string());
+   | |_________________________________________________________________^ help: try: `try_use_context::<SyncChannelName>().map_or_else(|| DEFAULT_CROSS_TAB_CHANNEL.to_string(), |s| s.0)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#map_unwrap_or
+   = note: `-W clippy::map-unwrap-or` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::map_unwrap_or)]`
+
+warning: unused `self` argument
+  --> src/dioxus/sync.rs:94:27
+   |
+94 |     fn post<M: Serialize>(&self, msg: &M) {
+   |                           ^^^^^
+   |
+   = help: consider refactoring to an associated function
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_self
+
+warning: item in documentation is missing backticks
+   --> src/dioxus/sync.rs:196:22
+    |
+196 |     /// Override the BroadcastChannel name (default: `dioxus-auth-sync`).
+    |                      ^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+    |
+196 -     /// Override the BroadcastChannel name (default: `dioxus-auth-sync`).
+196 +     /// Override the `BroadcastChannel` name (default: `dioxus-auth-sync`).
+    |
+
+warning: used underscore-prefixed binding
+   --> src/dioxus/sync.rs:202:5
+    |
+202 |     _marker: PhantomData<fn() -> User>,
+    |     ^^^^^^^
+    |
+note: binding is defined here
+   --> src/dioxus/sync.rs:202:5
+    |
+202 |     _marker: PhantomData<fn() -> User>,
+    |     ^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#used_underscore_binding
+
+warning: `dioxus-auth` (lib) generated 91 warnings (3 duplicates) (run `cargo clippy --fix --lib -p dioxus-auth -- -W clippy::pedantic` to apply 38 suggestions)
+warning: binding's name is too similar to existing binding
+  --> tests/auth_lifecycle_integration.rs:33:9
+   |
+33 |     let hashed = hasher.hash_password(raw_pass).unwrap();
+   |         ^^^^^^
+   |
+note: existing binding defined here
+  --> tests/auth_lifecycle_integration.rs:31:9
+   |
+31 |     let hasher = Argon2Hasher::new();
+   |         ^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#similar_names
+   = note: `-W clippy::similar-names` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::similar_names)]`
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:106:5
+    |
+106 | /     async fn find_by_id(&self, id: &i64) -> AuthResult<Option<IntegrationSqlUser>> {
+107 | |         let conn = self
+108 | |             .conn
+109 | |             .lock()
+...   |
+125 | |         Ok(user)
+126 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+    = note: `-W clippy::unused-async-trait-impl` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::unused_async_trait_impl)]`
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<IntegrationSqlUser>>>` instead
+    |
+106 ~     fn find_by_id(&self, id: &i64) -> impl Future<Output = AuthResult<Option<IntegrationSqlUser>>> {
+107 ~         let conn = std::future::ready(self
+108 +             .conn
+109 +             .lock()
+110 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+111 ~         let user = std::future::ready(conn
+112 +             .query_row(
+113 +                 "SELECT id, email, password_hash FROM users WHERE id = ?1",
+114 +                 params![id],
+115 +                 |row| {
+116 +                     Ok(IntegrationSqlUser {
+117 +                         id: row.get(0)?,
+118 +                         email: row.get(1)?,
+119 +                         password_hash: row.get(2)?,
+120 +                     })
+121 +                 },
+122 +             )
+123 +             .optional()
+124 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+125 ~         std::future::ready(Ok(user))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:130:5
+    |
+130 | /     async fn find_by_identifier(
+131 | |         &self,
+132 | |         identifier: &str,
+133 | |     ) -> AuthResult<Option<(IntegrationSqlUser, String)>> {
+...   |
+154 | |         Ok(result)
+155 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<(IntegrationSqlUser, String)>>>` instead
+    |
+130 ~     fn find_by_identifier(
+131 |         &self,
+132 |         identifier: &str,
+133 ~     ) -> impl Future<Output = AuthResult<Option<(IntegrationSqlUser, String)>>> {
+134 ~         let conn = std::future::ready(self
+135 +             .conn
+136 +             .lock()
+137 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+138 ~         let result = std::future::ready(conn
+139 +             .query_row(
+140 +                 "SELECT id, email, password_hash FROM users WHERE email = ?1",
+141 +                 params![identifier],
+142 +                 |row| {
+143 +                     let hash: String = row.get(2)?;
+144 +                     let user = IntegrationSqlUser {
+145 +                         id: row.get(0)?,
+146 +                         email: row.get(1)?,
+147 +                         password_hash: hash.clone(),
+148 +                     };
+149 +                     Ok((user, hash))
+150 +                 },
+151 +             )
+152 +             .optional()
+153 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+154 ~         std::future::ready(Ok(result))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:159:5
+    |
+159 | /     async fn save_session(&self, session: Session<i64>) -> AuthResult<()> {
+160 | |         let conn = self
+161 | |             .conn
+162 | |             .lock()
+...   |
+183 | |         Ok(())
+184 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+159 ~     fn save_session(&self, session: Session<i64>) -> impl Future<Output = AuthResult<()>> {
+160 ~         let conn = std::future::ready(self
+161 +             .conn
+162 +             .lock()
+163 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+164 ~         std::future::ready(conn.execute(
+165 +             "
+166 +             INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash)
+167 +             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+168 +             ON CONFLICT(id) DO UPDATE SET
+169 +                 expires_at_unix = excluded.expires_at_unix,
+170 +                 last_active_at_unix = excluded.last_active_at_unix,
+171 +                 auth_hash = excluded.auth_hash
+172 +             ",
+173 +             params![
+174 +                 session.id().as_str(),
+175 +                 session.user_id(),
+176 +                 session.created_at_unix() as i64,
+177 +                 session.expires_at_unix() as i64,
+178 +                 session.last_active_at_unix().map(|v| v as i64),
+179 +                 session.auth_hash(),
+180 +             ],
+181 +         )
+182 ~         .map_err(|e| AuthError::Store(e.to_string()))?);
+183 ~         std::future::ready(Ok(()))
+    |
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> tests/sqlite_integration.rs:176:17
+    |
+176 |                 session.created_at_unix() as i64,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+    = note: `-W clippy::cast-possible-wrap` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_possible_wrap)]`
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> tests/sqlite_integration.rs:177:17
+    |
+177 |                 session.expires_at_unix() as i64,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> tests/sqlite_integration.rs:178:55
+    |
+178 |                 session.last_active_at_unix().map(|v| v as i64),
+    |                                                       ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:186:5
+    |
+186 | /     async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<i64>>> {
+187 | |         let conn = self
+188 | |             .conn
+189 | |             .lock()
+...   |
+215 | |         Ok(session)
+216 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<Session<i64>>>>` instead
+    |
+186 ~     fn find_session(&self, id: &SessionId) -> impl Future<Output = AuthResult<Option<Session<i64>>>> {
+187 ~         let conn = std::future::ready(self
+188 +             .conn
+189 +             .lock()
+190 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+191 ~         let session = std::future::ready(conn
+192 +             .query_row(
+193 +                 "SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE id = ?1",
+194 +                 params![id.as_str()],
+195 +                 |row| {
+196 +                     let s_id = SessionId::new(row.get::<_, String>(0)?);
+197 +                     let u_id = row.get::<_, i64>(1)?;
+198 +                     let c_at = row.get::<_, i64>(2)?;
+199 +                     let e_at = row.get::<_, i64>(3)?;
+200 +                     let last_active: Option<i64> = row.get(4)?;
+201 +                     let hash = row.get::<_, Option<String>>(5)?;
+202 + 
+203 +                     let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
+204 +                     if let Some(t) = last_active {
+205 +                         s = s.with_last_active(t as u64);
+206 +                     }
+207 +                     if let Some(h) = hash {
+208 +                         s = s.with_auth_hash(h);
+209 +                     }
+210 +                     Ok(s)
+211 +                 },
+212 +             )
+213 +             .optional()
+214 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+215 ~         std::future::ready(Ok(session))
+    |
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> tests/sqlite_integration.rs:203:58
+    |
+203 |                     let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
+    |                                                          ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+    = note: `-W clippy::cast-sign-loss` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_sign_loss)]`
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> tests/sqlite_integration.rs:203:71
+    |
+203 |                     let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
+    |                                                                       ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> tests/sqlite_integration.rs:205:48
+    |
+205 |                         s = s.with_last_active(t as u64);
+    |                                                ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:218:5
+    |
+218 | /     async fn delete_session(&self, id: &SessionId) -> AuthResult<()> {
+219 | |         let conn = self
+220 | |             .conn
+221 | |             .lock()
+...   |
+225 | |         Ok(())
+226 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+218 ~     fn delete_session(&self, id: &SessionId) -> impl Future<Output = AuthResult<()>> {
+219 ~         let conn = std::future::ready(self
+220 +             .conn
+221 +             .lock()
+222 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+223 ~         std::future::ready(conn.execute("DELETE FROM sessions WHERE id = ?1", params![id.as_str()])
+224 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+225 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:228:5
+    |
+228 | /     async fn delete_user_sessions(&self, user_id: &i64) -> AuthResult<()> {
+229 | |         let conn = self
+230 | |             .conn
+231 | |             .lock()
+...   |
+235 | |         Ok(())
+236 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+228 ~     fn delete_user_sessions(&self, user_id: &i64) -> impl Future<Output = AuthResult<()>> {
+229 ~         let conn = std::future::ready(self
+230 +             .conn
+231 +             .lock()
+232 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+233 ~         std::future::ready(conn.execute("DELETE FROM sessions WHERE user_id = ?1", params![user_id])
+234 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+235 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:238:5
+    |
+238 | /     async fn list_user_sessions(&self, user_id: &i64) -> AuthResult<Vec<Session<i64>>> {
+239 | |         let conn = self
+240 | |             .conn
+241 | |             .lock()
+...   |
+268 | |         Ok(sessions)
+269 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Vec<Session<i64>>>>` instead
+    |
+238 ~     fn list_user_sessions(&self, user_id: &i64) -> impl Future<Output = AuthResult<Vec<Session<i64>>>> {
+239 ~         let conn = std::future::ready(self
+240 +             .conn
+241 +             .lock()
+242 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+243 ~         let mut stmt = std::future::ready(conn
+244 +             .prepare("SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE user_id = ?1")
+245 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+246 ~         let rows = std::future::ready(stmt
+247 +             .query_map(params![user_id], |row| {
+248 +                 let s_id = SessionId::new(row.get::<_, String>(0)?);
+249 +                 let u_id = row.get::<_, i64>(1)?;
+250 +                 let c_at = row.get::<_, i64>(2)?;
+251 +                 let e_at = row.get::<_, i64>(3)?;
+252 +                 let last_active: Option<i64> = row.get(4)?;
+253 +                 let hash = row.get::<_, Option<String>>(5)?;
+254 +                 let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
+255 +                 if let Some(t) = last_active {
+256 +                     s = s.with_last_active(t as u64);
+257 +                 }
+258 +                 if let Some(h) = hash {
+259 +                     s = s.with_auth_hash(h);
+260 +                 }
+261 +                 Ok(s)
+262 +             })
+263 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+264 |         let mut sessions = Vec::new();
+265 |         for row in rows {
+266 ~             sessions.push(std::future::ready(row.map_err(|e| AuthError::Store(e.to_string()))?));
+267 |         }
+268 ~         std::future::ready(Ok(sessions))
+    |
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> tests/sqlite_integration.rs:254:54
+    |
+254 |                 let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
+    |                                                      ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> tests/sqlite_integration.rs:254:67
+    |
+254 |                 let mut s = Session::new(s_id, u_id, c_at as u64, e_at as u64);
+    |                                                                   ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> tests/sqlite_integration.rs:256:44
+    |
+256 |                     s = s.with_last_active(t as u64);
+    |                                            ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: item in documentation is missing backticks
+   --> tests/sqlite_integration.rs:271:52
+    |
+271 |     /// Conditional session touch: update expiry + last_active only if the
+    |                                                    ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+    = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+    |
+271 -     /// Conditional session touch: update expiry + last_active only if the
+271 +     /// Conditional session touch: update expiry + `last_active` only if the
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> tests/sqlite_integration.rs:273:5
+    |
+273 | /     async fn touch_session_if_present(
+274 | |         &self,
+275 | |         id: &SessionId,
+276 | |         new_expiry: u64,
+...   |
+288 | |         Ok(())
+289 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+273 ~     fn touch_session_if_present(
+274 |         &self,
+...
+277 |         last_active: u64,
+278 ~     ) -> impl Future<Output = AuthResult<()>> {
+279 ~         let conn = std::future::ready(self
+280 +             .conn
+281 +             .lock()
+282 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+283 ~         std::future::ready(conn.execute(
+284 +             "UPDATE sessions SET expires_at_unix = ?1, last_active_at_unix = ?2 WHERE id = ?3",
+285 +             params![new_expiry as i64, last_active as i64, id.as_str()],
+286 +         )
+287 ~         .map_err(|e| AuthError::Store(e.to_string()))?);
+288 ~         std::future::ready(Ok(()))
+    |
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> tests/sqlite_integration.rs:285:21
+    |
+285 |             params![new_expiry as i64, last_active as i64, id.as_str()],
+    |                     ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> tests/sqlite_integration.rs:285:40
+    |
+285 |             params![new_expiry as i64, last_active as i64, id.as_str()],
+    |                                        ^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> examples/sqlite_adapter.rs:45:5
+   |
+45 |     pub fn new_in_memory() -> Result<Self, rusqlite::Error> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+   = note: `-W clippy::missing-errors-doc` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::missing_errors_doc)]`
+
+warning: docs for function which may panic missing `# Panics` section
+  --> examples/sqlite_adapter.rs:55:5
+   |
+55 |     pub fn create_tables(&self) -> Result<(), rusqlite::Error> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: first possible panic found here
+  --> examples/sqlite_adapter.rs:56:20
+   |
+56 |         let conn = self.conn.lock().unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+   = note: `-W clippy::missing-panics-doc` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::missing_panics_doc)]`
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> examples/sqlite_adapter.rs:55:5
+   |
+55 |     pub fn create_tables(&self) -> Result<(), rusqlite::Error> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: docs for function which may panic missing `# Panics` section
+  --> examples/sqlite_adapter.rs:81:5
+   |
+81 | /     pub fn create_user(
+82 | |         &self,
+83 | |         username: &str,
+84 | |         email: &str,
+85 | |         password_hash: &str,
+86 | |     ) -> Result<DbUser, rusqlite::Error> {
+   | |________________________________________^
+   |
+note: first possible panic found here
+  --> examples/sqlite_adapter.rs:87:20
+   |
+87 |         let conn = self.conn.lock().unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+  --> examples/sqlite_adapter.rs:81:5
+   |
+81 | /     pub fn create_user(
+82 | |         &self,
+83 | |         username: &str,
+84 | |         email: &str,
+85 | |         password_hash: &str,
+86 | |     ) -> Result<DbUser, rusqlite::Error> {
+   | |________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_errors_doc
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:105:5
+    |
+105 | /     async fn find_by_id(&self, id: &i64) -> AuthResult<Option<DbUser>> {
+106 | |         let conn = self
+107 | |             .conn
+108 | |             .lock()
+...   |
+126 | |         Ok(user)
+127 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+    = note: `-W clippy::unused-async-trait-impl` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::unused_async_trait_impl)]`
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<DbUser>>>` instead
+    |
+105 ~     fn find_by_id(&self, id: &i64) -> impl Future<Output = AuthResult<Option<DbUser>>> {
+106 ~         let conn = std::future::ready(self
+107 +             .conn
+108 +             .lock()
+109 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+110 ~         let user = std::future::ready(conn
+111 +             .query_row(
+112 +                 "SELECT id, username, email, password_hash FROM users WHERE id = ?1",
+113 +                 params![id],
+114 +                 |row| {
+115 +                     Ok(DbUser {
+116 +                         id: row.get(0)?,
+117 +                         username: row.get(1)?,
+118 +                         email: row.get(2)?,
+119 +                         password_hash: row.get(3)?,
+120 +                     })
+121 +                 },
+122 +             )
+123 +             .optional()
+124 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+125 |
+126 ~         std::future::ready(Ok(user))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:131:5
+    |
+131 | /     async fn find_by_identifier(&self, identifier: &str) -> AuthResult<Option<(DbUser, String)>> {
+132 | |         let conn = self
+133 | |             .conn
+134 | |             .lock()
+...   |
+154 | |         Ok(result)
+155 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<(DbUser, String)>>>` instead
+    |
+131 ~     fn find_by_identifier(&self, identifier: &str) -> impl Future<Output = AuthResult<Option<(DbUser, String)>>> {
+132 ~         let conn = std::future::ready(self
+133 +             .conn
+134 +             .lock()
+135 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+136 ~         let result = std::future::ready(conn
+137 +             .query_row(
+138 +                 "SELECT id, username, email, password_hash FROM users WHERE email = ?1 OR username = ?1",
+139 +                 params![identifier],
+140 +                 |row| {
+141 +                     let hash: String = row.get(3)?;
+142 +                     let user = DbUser {
+143 +                         id: row.get(0)?,
+144 +                         username: row.get(1)?,
+145 +                         email: row.get(2)?,
+146 +                         password_hash: hash.clone(),
+147 +                     };
+148 +                     Ok((user, hash))
+149 +                 },
+150 +             )
+151 +             .optional()
+152 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+153 |
+154 ~         std::future::ready(Ok(result))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:159:5
+    |
+159 | /     async fn save_session(&self, session: Session<i64>) -> AuthResult<()> {
+160 | |         let conn = self
+161 | |             .conn
+162 | |             .lock()
+...   |
+184 | |         Ok(())
+185 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+159 ~     fn save_session(&self, session: Session<i64>) -> impl Future<Output = AuthResult<()>> {
+160 ~         let conn = std::future::ready(self
+161 +             .conn
+162 +             .lock()
+163 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+164 ~         std::future::ready(conn.execute(
+165 +             "
+166 +             INSERT INTO sessions (id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash)
+167 +             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+168 +             ON CONFLICT(id) DO UPDATE SET
+169 +                 expires_at_unix = excluded.expires_at_unix,
+170 +                 last_active_at_unix = excluded.last_active_at_unix,
+171 +                 auth_hash = excluded.auth_hash
+172 +             ",
+173 +             params![
+174 +                 session.id().as_str(),
+175 +                 session.user_id(),
+176 +                 session.created_at_unix() as i64,
+177 +                 session.expires_at_unix() as i64,
+178 +                 session.last_active_at_unix().map(|v| v as i64),
+179 +                 session.auth_hash(),
+180 +             ],
+181 +         )
+182 ~         .map_err(|e| AuthError::Store(e.to_string()))?);
+183 |
+184 ~         std::future::ready(Ok(()))
+    |
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> examples/sqlite_adapter.rs:176:17
+    |
+176 |                 session.created_at_unix() as i64,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+    = note: `-W clippy::cast-possible-wrap` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_possible_wrap)]`
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> examples/sqlite_adapter.rs:177:17
+    |
+177 |                 session.expires_at_unix() as i64,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> examples/sqlite_adapter.rs:178:55
+    |
+178 |                 session.last_active_at_unix().map(|v| v as i64),
+    |                                                       ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:187:5
+    |
+187 | /     async fn find_session(&self, id: &SessionId) -> AuthResult<Option<Session<i64>>> {
+188 | |         let conn = self
+189 | |             .conn
+190 | |             .lock()
+...   |
+217 | |         Ok(session)
+218 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Option<Session<i64>>>>` instead
+    |
+187 ~     fn find_session(&self, id: &SessionId) -> impl Future<Output = AuthResult<Option<Session<i64>>>> {
+188 ~         let conn = std::future::ready(self
+189 +             .conn
+190 +             .lock()
+191 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+192 ~         let session = std::future::ready(conn
+193 +             .query_row(
+194 +                 "SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE id = ?1",
+195 +                 params![id.as_str()],
+196 +                 |row| {
+197 +                     let sess_id = SessionId::new(row.get::<_, String>(0)?);
+198 +                     let user_id = row.get::<_, i64>(1)?;
+199 +                     let created_at = row.get::<_, i64>(2)?;
+200 +                     let expires_at = row.get::<_, i64>(3)?;
+201 +                     let last_active: Option<i64> = row.get(4)?;
+202 +                     let auth_hash = row.get::<_, Option<String>>(5)?;
+203 + 
+204 +                     let mut s = Session::new(sess_id, user_id, created_at as u64, expires_at as u64);
+205 +                     if let Some(t) = last_active {
+206 +                         s = s.with_last_active(t as u64);
+207 +                     }
+208 +                     if let Some(hash) = auth_hash {
+209 +                         s = s.with_auth_hash(hash);
+210 +                     }
+211 +                     Ok(s)
+212 +                 },
+213 +             )
+214 +             .optional()
+215 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+216 |
+217 ~         std::future::ready(Ok(session))
+    |
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> examples/sqlite_adapter.rs:204:64
+    |
+204 |                     let mut s = Session::new(sess_id, user_id, created_at as u64, expires_at as u64);
+    |                                                                ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+    = note: `-W clippy::cast-sign-loss` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_sign_loss)]`
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> examples/sqlite_adapter.rs:204:83
+    |
+204 |                     let mut s = Session::new(sess_id, user_id, created_at as u64, expires_at as u64);
+    |                                                                                   ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> examples/sqlite_adapter.rs:206:48
+    |
+206 |                         s = s.with_last_active(t as u64);
+    |                                                ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:220:5
+    |
+220 | /     async fn delete_session(&self, id: &SessionId) -> AuthResult<()> {
+221 | |         let conn = self
+222 | |             .conn
+223 | |             .lock()
+...   |
+227 | |         Ok(())
+228 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+220 ~     fn delete_session(&self, id: &SessionId) -> impl Future<Output = AuthResult<()>> {
+221 ~         let conn = std::future::ready(self
+222 +             .conn
+223 +             .lock()
+224 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+225 ~         std::future::ready(conn.execute("DELETE FROM sessions WHERE id = ?1", params![id.as_str()])
+226 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+227 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:230:5
+    |
+230 | /     async fn delete_user_sessions(&self, user_id: &i64) -> AuthResult<()> {
+231 | |         let conn = self
+232 | |             .conn
+233 | |             .lock()
+...   |
+237 | |         Ok(())
+238 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+230 ~     fn delete_user_sessions(&self, user_id: &i64) -> impl Future<Output = AuthResult<()>> {
+231 ~         let conn = std::future::ready(self
+232 +             .conn
+233 +             .lock()
+234 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+235 ~         std::future::ready(conn.execute("DELETE FROM sessions WHERE user_id = ?1", params![user_id])
+236 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+237 ~         std::future::ready(Ok(()))
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:240:5
+    |
+240 | /     async fn list_user_sessions(&self, user_id: &i64) -> AuthResult<Vec<Session<i64>>> {
+241 | |         let conn = self
+242 | |             .conn
+243 | |             .lock()
+...   |
+270 | |         Ok(sessions)
+271 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<Vec<Session<i64>>>>` instead
+    |
+240 ~     fn list_user_sessions(&self, user_id: &i64) -> impl Future<Output = AuthResult<Vec<Session<i64>>>> {
+241 ~         let conn = std::future::ready(self
+242 +             .conn
+243 +             .lock()
+244 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+245 ~         let mut stmt = std::future::ready(conn
+246 +             .prepare("SELECT id, user_id, created_at_unix, expires_at_unix, last_active_at_unix, auth_hash FROM sessions WHERE user_id = ?1")
+247 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+248 ~         let rows = std::future::ready(stmt
+249 +             .query_map(params![user_id], |row| {
+250 +                 let sess_id = SessionId::new(row.get::<_, String>(0)?);
+251 +                 let uid = row.get::<_, i64>(1)?;
+252 +                 let created_at = row.get::<_, i64>(2)?;
+253 +                 let expires_at = row.get::<_, i64>(3)?;
+254 +                 let last_active: Option<i64> = row.get(4)?;
+255 +                 let auth_hash = row.get::<_, Option<String>>(5)?;
+256 +                 let mut s = Session::new(sess_id, uid, created_at as u64, expires_at as u64);
+257 +                 if let Some(t) = last_active {
+258 +                     s = s.with_last_active(t as u64);
+259 +                 }
+260 +                 if let Some(hash) = auth_hash {
+261 +                     s = s.with_auth_hash(hash);
+262 +                 }
+263 +                 Ok(s)
+264 +             })
+265 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+266 |         let mut sessions = Vec::new();
+267 |         for row in rows {
+268 ~             sessions.push(std::future::ready(row.map_err(|e| AuthError::Store(e.to_string()))?));
+269 |         }
+270 ~         std::future::ready(Ok(sessions))
+    |
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> examples/sqlite_adapter.rs:256:56
+    |
+256 |                 let mut s = Session::new(sess_id, uid, created_at as u64, expires_at as u64);
+    |                                                        ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> examples/sqlite_adapter.rs:256:75
+    |
+256 |                 let mut s = Session::new(sess_id, uid, created_at as u64, expires_at as u64);
+    |                                                                           ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> examples/sqlite_adapter.rs:258:44
+    |
+258 |                     s = s.with_last_active(t as u64);
+    |                                            ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_sign_loss
+
+warning: item in documentation is missing backticks
+   --> examples/sqlite_adapter.rs:273:52
+    |
+273 |     /// Conditional session touch: update expiry + last_active only if the
+    |                                                    ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+    = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+    |
+273 -     /// Conditional session touch: update expiry + last_active only if the
+273 +     /// Conditional session touch: update expiry + `last_active` only if the
+    |
+
+warning: unused `async` for async trait impl function with no `.await` statements
+   --> examples/sqlite_adapter.rs:275:5
+    |
+275 | /     async fn touch_session_if_present(
+276 | |         &self,
+277 | |         id: &SessionId,
+278 | |         new_expiry: u64,
+...   |
+290 | |         Ok(())
+291 | |     }
+    | |_____^
+    |
+    = note: `std::future::ready` creates a `Future` which returns the value immediately when `poll`ed
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unused_async_trait_impl
+help: consider removing the `async` from this function and returning `impl Future<Output = AuthResult<()>>` instead
+    |
+275 ~     fn touch_session_if_present(
+276 |         &self,
+...
+279 |         last_active: u64,
+280 ~     ) -> impl Future<Output = AuthResult<()>> {
+281 ~         let conn = std::future::ready(self
+282 +             .conn
+283 +             .lock()
+284 ~             .map_err(|e| AuthError::Store(e.to_string()))?);
+285 ~         std::future::ready(conn.execute(
+286 +             "UPDATE sessions SET expires_at_unix = ?1, last_active_at_unix = ?2 WHERE id = ?3",
+287 +             params![new_expiry as i64, last_active as i64, id.as_str()],
+288 +         )
+289 ~         .map_err(|e| AuthError::Store(e.to_string()))?);
+290 ~         std::future::ready(Ok(()))
+    |
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> examples/sqlite_adapter.rs:287:21
+    |
+287 |             params![new_expiry as i64, last_active as i64, id.as_str()],
+    |                     ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> examples/sqlite_adapter.rs:287:40
+    |
+287 |             params![new_expiry as i64, last_active as i64, id.as_str()],
+    |                                        ^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_wrap
+
+warning: item in documentation is missing backticks
+ --> tests/transport_extract.rs:5:14
+  |
+5 | //! Spec 15: host_only enforces strict cookie-name matching.
+  |              ^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+  = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+  = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+  |
+5 - //! Spec 15: host_only enforces strict cookie-name matching.
+5 + //! Spec 15: `host_only` enforces strict cookie-name matching.
+  |
+
+warning: binding's name is too similar to existing binding
+    --> src/lib.rs:1463:13
+     |
+1463 |         let sessions = engine.list_user_sessions(&user.id()).await.unwrap();
+     |             ^^^^^^^^
+     |
+note: existing binding defined here
+    --> src/lib.rs:1460:17
+     |
+1460 |         let (_, session1) = engine.login("lister@example.com", password).await.unwrap();
+     |                 ^^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#similar_names
+     = note: `-W clippy::similar-names` implied by `-W clippy::pedantic`
+     = help: to override `-W clippy::pedantic` add `#[allow(clippy::similar_names)]`
+
+warning: single-character string constant used as pattern
+   --> src/session/record.rs:183:35
+    |
+183 |         assert!(rendered.contains("7"), "non-secret fields stay visible");
+    |                                   ^^^ help: consider using a `char`: `'7'`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#single_char_pattern
+    = note: `-W clippy::single-char-pattern` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::single_char_pattern)]`
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/storage/conformance.rs:64:12
+   |
+64 |     pub fn new(id: u64, email: &str) -> Self {
+   |            ^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+64 ~     #[must_use]
+65 ~     pub fn new(id: u64, email: &str) -> Self {
+   |
+
+warning: this method could have a `#[must_use]` attribute
+  --> src/storage/conformance.rs:73:12
+   |
+73 |     pub fn with_password_hash(mut self, hash: &str) -> Self {
+   |            ^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+   |
+73 ~     #[must_use]
+74 ~     pub fn with_password_hash(mut self, hash: &str) -> Self {
+   |
+
+warning: missing `#[must_use]` attribute on a method returning `Self`
+  --> src/storage/conformance.rs:73:5
+   |
+73 | /     pub fn with_password_hash(mut self, hash: &str) -> Self {
+74 | |         self.password_hash = hash.to_string();
+75 | |         self
+76 | |     }
+   | |_____^
+   |
+   = help: consider adding the `#[must_use]` attribute to the method or directly to the `Self` type
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#return_self_not_must_use
+
+warning: docs for function which may panic missing `# Panics` section
+  --> src/storage/conformance.rs:84:1
+   |
+84 | / pub async fn run_user_store_tests<S>(store: Arc<S>)
+85 | | where
+86 | |     S: UserStore<User = TestUser>,
+   | |__________________________________^
+   |
+note: first possible panic found here
+  --> src/storage/conformance.rs:89:17
+   |
+89 |       let found = store
+   |  _________________^
+90 | |         .find_by_id(&1)
+91 | |         .await
+92 | |         .expect("find_by_id must not error");
+   | |____________________________________________^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: docs for function which may panic missing `# Panics` section
+   --> src/storage/conformance.rs:116:1
+    |
+116 | / pub async fn run_password_user_store_tests<S>(store: Arc<S>, hasher: &Argon2Hasher)
+117 | | where
+118 | |     S: PasswordUserStore<User = TestUser>,
+    | |__________________________________________^
+    |
+note: first possible panic found here
+   --> src/storage/conformance.rs:121:17
+    |
+121 |       let found = store
+    |  _________________^
+122 | |         .find_by_identifier("alice@example.com")
+123 | |         .await
+124 | |         .expect("find_by_identifier must not error");
+    | |____________________________________________________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: docs for function which may panic missing `# Panics` section
+   --> src/storage/conformance.rs:156:1
+    |
+156 | / pub async fn run_session_store_tests<S>(store: Arc<S>)
+157 | | where
+158 | |     S: SessionStore<u64>,
+    | |_________________________^
+    |
+note: first possible panic found here
+   --> src/storage/conformance.rs:168:5
+    |
+168 | /     store
+169 | |         .save_session(session.clone())
+170 | |         .await
+171 | |         .expect("save_session must not error");
+    | |______________________________________________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: this function has too many lines (109/100)
+   --> src/storage/conformance.rs:156:1
+    |
+156 | / pub async fn run_session_store_tests<S>(store: Arc<S>)
+157 | | where
+158 | |     S: SessionStore<u64>,
+    | |_________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#too_many_lines
+    = note: `-W clippy::too-many-lines` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+warning: docs for function which may panic missing `# Panics` section
+   --> src/storage/conformance.rs:296:1
+    |
+296 | / pub async fn run_engine_lifecycle_tests<U, S>(users: Arc<U>, sessions: Arc<S>)
+297 | | where
+298 | |     U: PasswordUserStore<User = TestUser>,
+299 | |     S: SessionStore<u64>,
+    | |_________________________^
+    |
+note: first possible panic found here
+   --> src/storage/conformance.rs:306:29
+    |
+306 |       let (authed, session) = engine
+    |  _____________________________^
+307 | |         .login("alice@example.com", "password123")
+308 | |         .await
+309 | |         .expect("login must succeed with correct credentials");
+    | |______________________________________________________________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: docs for function which may panic missing `# Panics` section
+   --> src/storage/conformance.rs:339:1
+    |
+339 | pub fn seeded_test_user(id: u64, email: &str) -> (TestUser, String) {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: first possible panic found here
+   --> src/storage/conformance.rs:341:16
+    |
+341 |       let hash = hasher
+    |  ________________^
+342 | |         .hash_password("password123")
+343 | |         .expect("hasher must not fail");
+    | |_______________________________________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#missing_panics_doc
+
+warning: this function could have a `#[must_use]` attribute
+   --> src/storage/conformance.rs:339:8
+    |
+339 | pub fn seeded_test_user(id: u64, email: &str) -> (TestUser, String) {
+    |        ^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#must_use_candidate
+help: add the attribute
+    |
+339 + #[must_use]
+340 | pub fn seeded_test_user(id: u64, email: &str) -> (TestUser, String) {
+    |
+
+warning: single-character string constant used as pattern
+   --> src/dioxus/server_fn.rs:621:33
+    |
+621 |             !raw_token.contains("="),
+    |                                 ^^^ help: consider using a `char`: `'='`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#single_char_pattern
+
+warning: single-character string constant used as pattern
+   --> src/dioxus/server_fn.rs:677:33
+    |
+677 |             !raw_token.contains("="),
+    |                                 ^^^ help: consider using a `char`: `'='`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#single_char_pattern
+
+warning: casting `u128` to `f64` may cause a loss of precision (`u128` is 128 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> src/lib.rs:456:21
+    |
+456 |         let ratio = miss_elapsed.as_micros() as f64 / hit_elapsed.as_micros() as f64;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_precision_loss
+    = note: `-W clippy::cast-precision-loss` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_precision_loss)]`
+
+warning: casting `u128` to `f64` may cause a loss of precision (`u128` is 128 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> src/lib.rs:456:55
+    |
+456 |         let ratio = miss_elapsed.as_micros() as f64 / hit_elapsed.as_micros() as f64;
+    |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_precision_loss
+
+warning: item in documentation is missing backticks
+    --> src/lib.rs:1020:37
+     |
+1020 |     /// Spec 16: validation updates last_active_at and refreshes expiry to created_at + ttl.
+     |                                     ^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+     |
+1020 -     /// Spec 16: validation updates last_active_at and refreshes expiry to created_at + ttl.
+1020 +     /// Spec 16: validation updates `last_active_at` and refreshes expiry to created_at + ttl.
+     |
+
+warning: item in documentation is missing backticks
+    --> src/lib.rs:1020:76
+     |
+1020 |     /// Spec 16: validation updates last_active_at and refreshes expiry to created_at + ttl.
+     |                                                                            ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+     |
+1020 -     /// Spec 16: validation updates last_active_at and refreshes expiry to created_at + ttl.
+1020 +     /// Spec 16: validation updates last_active_at and refreshes expiry to `created_at` + ttl.
+     |
+
+warning: item in documentation is missing backticks
+    --> src/lib.rs:1117:62
+     |
+1117 |     /// Spec 16: absolute TTL expires sessions regardless of idle_timeout or activity.
+     |                                                              ^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+     |
+1117 -     /// Spec 16: absolute TTL expires sessions regardless of idle_timeout or activity.
+1117 +     /// Spec 16: absolute TTL expires sessions regardless of `idle_timeout` or activity.
+     |
+
+warning: item in documentation is missing backticks
+   --> tests/concurrency_stress.rs:203:42
+    |
+203 | /// Spec 16: concurrent validates during single_active_session login must not
+    |                                          ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+    = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+    |
+203 - /// Spec 16: concurrent validates during single_active_session login must not
+203 + /// Spec 16: concurrent validates during `single_active_session` login must not
+    |
+
+warning: item in documentation is missing backticks
+   --> tests/concurrency_stress.rs:267:58
+    |
+267 | /// Spec 16: `logout_vs_validate_no_resurrection` — with idle_timeout enabled,
+    |                                                          ^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+    |
+267 - /// Spec 16: `logout_vs_validate_no_resurrection` — with idle_timeout enabled,
+267 + /// Spec 16: `logout_vs_validate_no_resurrection` — with `idle_timeout` enabled,
+    |
+
+warning: item in documentation is missing backticks
+   --> tests/concurrency_stress.rs:327:59
+    |
+327 | /// Spec 16: `rotate_vs_validate_old_session_gone` — with single_active_session,
+    |                                                           ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#doc_markdown
+help: try
+    |
+327 - /// Spec 16: `rotate_vs_validate_old_session_gone` — with single_active_session,
+327 + /// Spec 16: `rotate_vs_validate_old_session_gone` — with `single_active_session`,
+    |
+
+warning: `dioxus-auth` (test "auth_lifecycle_integration") generated 1 warning
+warning: `dioxus-auth` (test "sqlite_integration") generated 20 warnings (run `cargo clippy --fix --test "sqlite_integration" -p dioxus-auth -- -W clippy::pedantic` to apply 1 suggestion)
+warning: `dioxus-auth` (example "sqlite_adapter") generated 25 warnings (run `cargo clippy --fix --example "sqlite_adapter" -p dioxus-auth -- -W clippy::pedantic` to apply 1 suggestion)
+warning: `dioxus-auth` (test "transport_extract") generated 1 warning (run `cargo clippy --fix --test "transport_extract" -p dioxus-auth -- -W clippy::pedantic` to apply 1 suggestion)
+warning: `dioxus-auth` (lib test) generated 110 warnings (91 duplicates) (run `cargo clippy --fix --lib -p dioxus-auth --tests -- -W clippy::pedantic` to apply 9 suggestions)
+warning: `dioxus-auth` (test "concurrency_stress") generated 3 warnings (run `cargo clippy --fix --test "concurrency_stress" -p dioxus-auth -- -W clippy::pedantic` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.40s
