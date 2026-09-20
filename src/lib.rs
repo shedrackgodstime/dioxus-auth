@@ -9,7 +9,11 @@
 
 #![forbid(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
-#![forbid(missing_docs)]
+#![deny(missing_docs)]
+// reason: the Props derive emits `#[allow(missing_docs)]` on its generated
+// builder items, and `forbid` would reject that allow. `deny` still fails any
+// undocumented hand-written item while letting the derive annotate its own
+// generated surface. Mirrors the resolution used in dioxus's own crates.
 #![deny(clippy::missing_panics_doc)]
 #![deny(clippy::missing_errors_doc)]
 #![deny(clippy::missing_safety_doc)]
@@ -24,6 +28,8 @@
 // rule is stricter, so the conflicting style lint is disabled crate-wide.
 
 pub(crate) mod builder;
+#[cfg(feature = "dioxus")]
+mod dioxus;
 pub(crate) mod engine;
 pub(crate) mod error;
 pub(crate) mod hash;

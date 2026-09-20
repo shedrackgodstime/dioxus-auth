@@ -11,7 +11,7 @@
 use dioxus_auth::prelude::{Argon2Hasher, AuthError, AuthUser, PasswordHasher};
 
 /// A minimal user for exercising the auth core.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestUser {
     pub id: u64,
     pub name: String,

@@ -37,3 +37,11 @@ pub use crate::transport::TokenStorage;
 
 #[doc(inline)]
 pub use crate::user::AuthUser;
+
+#[cfg(feature = "dioxus")]
+#[doc(inline)]
+pub use crate::dioxus::{
+    AuthContext, AuthEngineHandle, AuthOperations, AuthProvider, AuthProviderProps,
+    RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAuthProps, TokenStorageHandle,
+    use_auth,
+};
