@@ -1,71 +1,40 @@
-//! In-memory user store.
+//! User storage capability traits.
+
+use std::fmt::Debug;
 
 use crate::error::AuthError;
 use crate::user::AuthUser;
-use std::fmt::Debug;
 
-/// In-memory user store implementation.
-#[derive(Debug, Default)]
-pub struct MemoryUserStore {
-    users: Vec<Box<dyn AuthUser>>,
+/// Stores users by identifier (read-only users of the engine).
+pub trait UserStore: Debug + Send + Sync {
+    /// The user identifier type.
+    type Id: Clone + Eq + Debug + Send + Sync + 'static;
+    /// The user type.
+    type User: AuthUser<Id = Self::Id>;
+
+    /// Finds a user by their identifier.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError>;
 }
 
-impl MemoryUserStore {
-    /// Creates a new in-memory user store.
-    #[must_use]
-    pub fn new() -> Self {
-        MemoryUserStore { users: Vec::new() }
-    }
-    /// Adds a user to the store.
-    pub fn add(&mut self, user: Box<dyn AuthUser>) {
-        self.users.push(user);
-    }
-}
+/// Stores users with password credentials.
+pub trait PasswordUserStore: UserStore {
+    /// Finds a user and their stored password hash by login identifier.
+    ///
+    /// The engine verifies `password` against the returned hash — the store
+    /// never receives plaintext passwords from the login path and never runs
+    /// verification itself. Returning the hash lets the engine apply timing
+    /// defense on unknown-user logins.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn find_by_identifier(&self, identifier: &str) -> Result<Option<(Self::User, String)>, AuthError>;
 
-impl crate::store::UserStore for MemoryUserStore {
-    fn find_by_id(&self, id: &str) -> Result<Option<Box<dyn AuthUser>>, AuthError> {
-        for user in &self.users {
-            if user.id() == id {
-                return Ok(Some(user.clone_box()));
-            }
-        }
-        Ok(None)
-    }
-    fn find_by_credentials(
-        &self,
-        _identifier: &str,
-        _password: &str,
-    ) -> Result<Option<Box<dyn AuthUser>>, AuthError> {
-        Ok(None)
-    }
-}
-
-/// A concrete in-memory user.
-#[derive(Debug)]
-pub struct MemoryUser {
-    id: String,
-    display_name: Option<String>,
-}
-
-impl MemoryUser {
-    /// Creates a new memory user.
-    #[must_use]
-    pub fn new(id: String, display_name: Option<String>) -> Self {
-        MemoryUser { id, display_name }
-    }
-}
-
-impl AuthUser for MemoryUser {
-    fn id(&self) -> String {
-        self.id.clone()
-    }
-    fn display_name(&self) -> Option<String> {
-        self.display_name.clone()
-    }
-    fn clone_box(&self) -> Box<dyn AuthUser> {
-        Box::new(MemoryUser {
-            id: self.id.clone(),
-            display_name: self.display_name.clone(),
-        })
-    }
+    /// Updates a user's stored password hash.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError>;
 }

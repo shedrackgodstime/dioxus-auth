@@ -1,35 +1,62 @@
-//! In-memory session store.
+//! Session storage capability trait.
 
-use crate::error::AuthError;
-use crate::status::SessionId;
-use crate::status::SessionRecord;
 use std::fmt::Debug;
 
-/// In-memory session store implementation.
-#[derive(Debug, Default)]
-pub struct MemorySessionStore {
-    sessions: Vec<SessionRecord>,
-}
+use crate::error::AuthError;
+use crate::session::Session;
+use crate::status::SessionId;
 
-impl MemorySessionStore {
-    /// Creates a new in-memory session store.
-    #[must_use]
-    pub fn new() -> Self {
-        MemorySessionStore {
-            sessions: Vec::new(),
-        }
-    }
-}
+/// Storage interface for session persistence and lifecycle.
+///
+/// Sessions are keyed by the **storage form** — `sha256(raw wire token)`.
+/// The engine hashes wire tokens before calling this trait, so the store
+/// only ever sees hashed ids and a leaked store yields no session-hijackable
+/// secrets.
+pub trait SessionStore: Debug + Send + Sync {
+    /// The user identifier type.
+    type Id: Clone + Eq + Debug + Send + Sync + 'static;
 
-impl crate::store::SessionStore for MemorySessionStore {
-    fn create(&self, _user_id: &str) -> Result<SessionId, AuthError> {
-        let id = SessionId::new(String::from("session-id"));
-        Ok(id)
-    }
-    fn get(&self, _id: &SessionId) -> Result<Option<SessionRecord>, AuthError> {
-        Ok(None)
-    }
-    fn delete(&self, _id: &SessionId) -> Result<(), AuthError> {
-        Ok(())
-    }
+    /// Saves a newly created or updated session.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn save_session(&self, session: Session<Self::Id>) -> Result<(), AuthError>;
+
+    /// Finds a session by its storage-form id.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn find_session(&self, id: &SessionId) -> Result<Option<Session<Self::Id>>, AuthError>;
+
+    /// Deletes a session by its storage-form id.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn delete_session(&self, id: &SessionId) -> Result<(), AuthError>;
+
+    /// Atomically extends a session's expiry + `last_active` only if it still exists.
+    ///
+    /// Closes the logout/rotate resurrection race. If the session was deleted
+    /// between the engine's read and this call, this must be a no-op.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn touch_session_if_present(
+        &self,
+        id: &SessionId,
+        new_expiry: u64,
+        last_active: u64,
+    ) -> Result<(), AuthError>;
+
+    /// Deletes all sessions belonging to a user.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn delete_user_sessions(&self, user_id: &Self::Id) -> Result<(), AuthError>;
+
+    /// Lists all sessions belonging to a user.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying store fails.
+    fn list_user_sessions(&self, user_id: &Self::Id) -> Result<Vec<Session<Self::Id>>, AuthError>;
 }

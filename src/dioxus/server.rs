@@ -11,3 +11,12 @@ pub struct ServerAuthContext;
 macro_rules! fullstack_server_fns {
     () => {};
 }
+
+/// Server authentication context extractor.
+impl ServerAuthContext {
+    /// Extracts auth context from a request.
+    #[must_use]
+    pub const fn from_request() -> Self {
+        Self
+    }
+}
