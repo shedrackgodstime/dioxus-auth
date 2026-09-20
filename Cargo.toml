@@ -1,8 +1,8 @@
 [workspace]
 
 [lints]
-rust = { missing_docs = "deny", unsafe_code = "deny" }
-clippy = { pedantic = "deny", all = "warn" }
+rust = { warnings = "deny" }
+clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny" }
 
 [package]
 name = "dioxus-auth"

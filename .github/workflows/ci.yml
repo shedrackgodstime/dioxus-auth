@@ -21,11 +21,15 @@ jobs:
           - stable
           - 1.85.0
         features:
-          - "--features dioxus"
           - "--no-default-features"
+          - "--features dioxus"
+          - "--features dioxus-fullstack"
+          - "--features axum"
         exclude:
           - rust: 1.85.0
             features: "--features dioxus-fullstack"
+          - rust: 1.85.0
+            features: "--features axum"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -36,8 +40,10 @@ jobs:
         run: cargo fmt -- --check
       - name: Check clippy
         run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
-      - name: Run tests
-        run: cargo test ${{ matrix.features }}
+      - name: Test all targets
+        run: cargo test --all-targets ${{ matrix.features }}
+      - name: Test doc
+        run: cargo test --doc ${{ matrix.features }}
 
   wasm:
     name: wasm32 check
@@ -73,3 +79,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
         run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus
+
+  packaging:
+    name: Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check packaging
+        run: bash scripts/check-packaging.sh
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Run coverage
+        run: cargo tarpaulin --all-features --out Xml

@@ -1,2 +1,5 @@
 /target
 /.cargo
+/.cargo_vcs_info.json
+Cargo.toml.orig
+Cargo.lock
