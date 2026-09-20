@@ -1,8 +1,8 @@
 # dioxus-auth
 
-Authentication and session management for Dioxus.
+Authentication and session management for [Dioxus](https://dioxuslabs.com).
 
-Secure password authentication and session management for Dioxus applications.
+Secure password authentication and session management for [Dioxus](https://dioxuslabs.com) applications.
 
 You own the database, users, and data. **dioxus-auth** provides the authentication and session layer around them.
 
@@ -15,84 +15,70 @@ You own the database, users, and data. **dioxus-auth** provides the authenticati
 
 ## Usage
 
-Add "dioxus-auth" to your Dioxus application:
+Add `dioxus-auth`:
 
 ```bash
 cargo add dioxus-auth
 ```
 
-1. Enable authentication
+### Setup
 
-Configure "dioxus-auth" with your application's user and session stores. Password authentication is built in — no extra toggle needed:
+Enable authentication and connect your stores:
 
 ```rust
-use dioxus_auth::prelude::*;
-use std::sync::Arc;
-
-let store = Arc::new(MemoryStore::<AppUser>::new());
-
-let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-    .idle_timeout_secs(30 * 60)
+let auth = AuthEngine::builder(user_store, session_store)
+    .password_auth(true)
     .build()?;
 ```
 
-Your application owns the database and decides how users and sessions are stored.
-
-2. Register and log in
-
-Create a user with a password:
+### Password authentication
 
 ```rust
-let hash = Argon2Hasher::new().hash("s3cret")?;
-store.insert_user_with_password(AppUser::new(1, "alice"), "alice", hash);
+auth.register("alice", "password")?;
+
+let user = auth.login("alice", "password").await?;
 ```
 
-Then log in -- the session is created automatically and returned with the user:
+### Logout
 
 ```rust
-let (user, session) = auth.login("alice", "s3cret")?;
+auth.logout().await?;
 ```
 
-3. Log out
+### Current user
 
 ```rust
-auth.logout(session.id())?;
+let auth = use_auth::<AppUser>();
+
+let user = auth.user();
 ```
 
-4. Use authentication in your app
-
-Reactive authentication state (`use_auth`, `AuthStatus`) ships with the Dioxus runtime layer, which is the next milestone and not available yet.
-
-5. Protect routes
-
-Route protection (`require_auth`, `RouteGate`) ships with the Dioxus runtime layer, which is the next milestone and not available yet.
-
-6. Protect server operations
-
-Server-side checks (`require_user`) ship with the Dioxus runtime layer, which is the next milestone and not available yet.
-
-7. Custom database
-
-"dioxus-auth" does not own your database.
-
-Bring your own user and session stores:
+### Protected routes
 
 ```rust
-let user_store = Arc::new(MyUserStore::new(db.clone()));
-let session_store = Arc::new(MySessionStore::new(db));
-
-let auth = AuthEngine::builder(user_store, session_store).build()?;
+require_auth();
 ```
 
-Your existing database remains the source of truth for your application's users and data.
+### Server authorization
 
-Other authentication methods
+```rust
+let user = require_user().await?;
+```
 
-Password authentication is the supported method today. Social authentication is planned but not implemented yet.
+### Custom stores
+
+```rust
+let auth = AuthEngine::builder(user_store, session_store)
+    .build()?;
+```
+
+Your application owns the database, users, and data.
+
+For advanced configuration, custom stores, sessions, and authentication providers, see the [API documentation](https://docs.rs/dioxus-auth) (docs.rs), or check out the full [guides](./docs/README.md).
 
 ## Status
 
-Early development. API may change before "1.0".
+Early development. Expect breaking changes.
 
 ## License
 
