@@ -2,17 +2,14 @@
 
 Authentication and session management for Dioxus.
 
-Secure, reactive authentication for Dioxus fullstack applications.
+Secure password authentication and session management for Dioxus applications.
 
 You own the database, users, and data. **dioxus-auth** provides the authentication and session layer around them.
 
 ## Features
 
-- Reactive auth state
 - Session management
-- Password & social authentication
-- Route protection
-- Server-side authorization
+- Password authentication (Argon2id, timing-attack mitigated)
 - Custom user and session stores
 - Secure defaults
 
@@ -20,15 +17,24 @@ You own the database, users, and data. **dioxus-auth** provides the authenticati
 
 Add "dioxus-auth" to your Dioxus application:
 
+```bash
 cargo add dioxus-auth
+```
 
 1. Enable authentication
 
-Configure "dioxus-auth" with your application's user and session stores.
+Configure "dioxus-auth" with your application's user and session stores. Password authentication is built in — no extra toggle needed:
 
-let auth = AuthEngine::builder(user_store, session_store)
-    .password_auth(true)
+```rust
+use dioxus_auth::prelude::*;
+use std::sync::Arc;
+
+let store = Arc::new(MemoryStore::<AppUser>::new());
+
+let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+    .idle_timeout_secs(30 * 60)
     .build()?;
+```
 
 Your application owns the database and decides how users and sessions are stored.
 
@@ -36,57 +42,34 @@ Your application owns the database and decides how users and sessions are stored
 
 Create a user with a password:
 
-auth.register("alice", "s3cret")?;
+```rust
+let hash = Argon2Hasher::new().hash("s3cret")?;
+store.insert_user_with_password(AppUser::new(1, "alice"), "alice", hash);
+```
 
-Then log in:
+Then log in -- the session is created automatically and returned with the user:
 
-let user = auth.login("alice", "s3cret").await?;
-
-The session is created automatically after a successful login.
+```rust
+let (user, session) = auth.login("alice", "s3cret")?;
+```
 
 3. Log out
 
-auth.logout().await?;
+```rust
+auth.logout(session.id())?;
+```
 
 4. Use authentication in your app
 
-Access the reactive authentication state from any component:
-
-let auth = use_auth::<AppUser>();
-
-if let Some(user) = auth.user() {
-    rsx! {
-        p { "Welcome, {user.username}" }
-    }
-}
-
-Authentication state updates reactively when the user logs in or out.
+Reactive authentication state (`use_auth`, `AuthStatus`) ships with the Dioxus runtime layer, which is the next milestone and not available yet.
 
 5. Protect routes
 
-Require authentication for protected routes:
-
-require_auth();
-
-rsx! {
-    Dashboard {}
-}
-
-Unauthenticated users can be redirected to your login page.
+Route protection (`require_auth`, `RouteGate`) ships with the Dioxus runtime layer, which is the next milestone and not available yet.
 
 6. Protect server operations
 
-Authentication can also be checked on the server:
-
-let user = require_user().await?;
-
-Use the returned user for authorization and application logic:
-
-let user = require_user().await?;
-
-get_private_data(user.id).await?;
-
-The same authentication state is used for both your UI and server-side operations.
+Server-side checks (`require_user`) ship with the Dioxus runtime layer, which is the next milestone and not available yet.
 
 7. Custom database
 
@@ -94,20 +77,18 @@ The same authentication state is used for both your UI and server-side operation
 
 Bring your own user and session stores:
 
-let user_store = MyUserStore::new(db.clone());
-let session_store = MySessionStore::new(db);
+```rust
+let user_store = Arc::new(MyUserStore::new(db.clone()));
+let session_store = Arc::new(MySessionStore::new(db));
 
-let auth = AuthEngine::builder(user_store, session_store)
-    .password_auth(true)
-    .build()?;
+let auth = AuthEngine::builder(user_store, session_store).build()?;
+```
 
 Your existing database remains the source of truth for your application's users and data.
 
 Other authentication methods
 
-Password authentication is only one option. Social authentication can be added when needed.
-
-See the documentation for configuring social providers and advanced authentication flows.
+Password authentication is the supported method today. Social authentication is planned but not implemented yet.
 
 ## Status
 
@@ -115,4 +96,4 @@ Early development. API may change before "1.0".
 
 ## License
 
-MIT
+MIT OR Apache-2.0
