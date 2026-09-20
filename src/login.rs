@@ -24,6 +24,7 @@ where
     /// Returns `AuthError::InvalidCredentials` for bad credentials,
     /// `AuthError::RateLimited` if the identifier is rate-limited, or a store
     /// or hasher error.
+    #[must_use = "the session and authenticated user should be used"]
     pub fn login(
         &self,
         identifier: &str,
@@ -134,6 +135,7 @@ where
     ///
     /// # Errors
     /// Returns a store error if the lookup fails.
+    #[must_use = "the existence check must be used"]
     pub fn identifier_exists(&self, identifier: &str) -> Result<bool, AuthError> {
         match self.users.find_by_identifier(identifier) {
             Ok(Some(_)) => Ok(true),

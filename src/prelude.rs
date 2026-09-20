@@ -7,7 +7,7 @@ pub use crate::builder::AuthEngineBuilder;
 pub use crate::engine::{AuthEngine, LoginOptions};
 
 #[doc(inline)]
-pub use crate::error::AuthError;
+pub use crate::error::{AuthError, AuthResult};
 
 #[doc(inline)]
 pub use crate::hash::Argon2Hasher;

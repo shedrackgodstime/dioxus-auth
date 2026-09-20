@@ -22,6 +22,7 @@ where
     ///
     /// # Errors
     /// Returns a store error if a lookup or update fails.
+    #[must_use = "the validated user must be used"]
     pub fn validate_session(&self, session_id: &SessionId) -> Result<Option<U::User>, AuthError> {
         let storage_id = session_id.hash_for_storage();
         let session = match self.sessions.find_session(&storage_id) {

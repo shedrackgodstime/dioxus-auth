@@ -65,11 +65,13 @@ where
     /// # Errors
     /// Returns `AuthError` if the default hasher cannot pre-compute the
     /// timing-defense dummy hash.
+    #[must_use = "the constructed engine must be used"]
     pub fn new(users: Arc<U>, sessions: Arc<S>) -> Result<Self, AuthError> {
         Self::builder(users, sessions).build()
     }
 
     /// Starts configuring an [`AuthEngine`] via [`AuthEngineBuilder`].
+    #[must_use = "builder configuration must be completed with `.build()`"]
     pub fn builder(users: Arc<U>, sessions: Arc<S>) -> AuthEngineBuilder<U, S> {
         AuthEngineBuilder::new(users, sessions)
     }

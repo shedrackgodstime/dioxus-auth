@@ -42,3 +42,15 @@ getrandom = { version = "0.2", features = ["js"] }
 serde_json = "1"
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["BroadcastChannel", "console", "Location", "MessageEvent", "Window", "Storage"] }
+
+[[test]]
+name = "conformance_user_store"
+path = "tests/conformance/user_store.rs"
+
+[[test]]
+name = "conformance_password_store"
+path = "tests/conformance/password_store.rs"
+
+[[test]]
+name = "conformance_session_store"
+path = "tests/conformance/session_store.rs"

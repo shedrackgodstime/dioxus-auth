@@ -37,6 +37,7 @@ pub trait TokenStorage: Debug + Send + Sync {
 ///
 /// # Errors
 /// Returns an error if the token cannot be extracted from the request.
+#[must_use = "the extracted token must be used"]
 pub const fn extract_session_token() -> Result<Option<String>, AuthError> {
     Ok(None)
 }

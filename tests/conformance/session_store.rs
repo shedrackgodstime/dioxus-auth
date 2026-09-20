@@ -1,0 +1,96 @@
+//! Conformance tests: `MemoryStore` as a `SessionStore`.
+
+#[path = "../common/mod.rs"]
+mod common;
+
+use common::TestUser;
+use dioxus_auth::session::Session;
+use dioxus_auth::status::SessionId;
+use dioxus_auth::store::{MemoryStore, SessionStore};
+
+fn storage_session(user_id: u64, created_at: u64, expires_at: u64) -> Session<u64> {
+    let storage_id = SessionId::generate().hash_for_storage();
+    Session::new(storage_id, user_id, created_at, expires_at)
+}
+
+#[test]
+fn save_then_find_roundtrip() {
+    let store = MemoryStore::<TestUser>::new();
+    let session = storage_session(5, 1000, 2000);
+    let id = session.id().clone();
+    store.save_session(session).unwrap();
+
+    let found = store.find_session(&id).unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().user_id(), &5);
+}
+
+#[test]
+fn find_missing_session_is_none() {
+    let store = MemoryStore::<TestUser>::new();
+
+    let found = store.find_session(&SessionId::generate()).unwrap();
+    assert!(found.is_none());
+}
+
+#[test]
+fn delete_session_removes_it() {
+    let store = MemoryStore::<TestUser>::new();
+    let session = storage_session(5, 1000, 2000);
+    let id = session.id().clone();
+    store.save_session(session).unwrap();
+
+    store.delete_session(&id).unwrap();
+
+    let found = store.find_session(&id).unwrap();
+    assert!(found.is_none());
+}
+
+#[test]
+fn delete_user_sessions_removes_only_that_user() {
+    let store = MemoryStore::<TestUser>::new();
+    let alice_session = storage_session(1, 1000, 2000);
+    let bob_session = storage_session(2, 1000, 2000);
+    store.save_session(alice_session).unwrap();
+    store.save_session(bob_session).unwrap();
+
+    store.delete_user_sessions(&1).unwrap();
+
+    assert_eq!(store.list_user_sessions(&1).unwrap().len(), 0);
+    let bob_sessions = store.list_user_sessions(&2).unwrap();
+    assert_eq!(bob_sessions.len(), 1);
+    assert_eq!(bob_sessions[0].user_id(), &2);
+}
+
+#[test]
+fn list_user_sessions_returns_matching_sessions_only() {
+    let store = MemoryStore::<TestUser>::new();
+    store.save_session(storage_session(1, 1000, 1200)).unwrap();
+    store.save_session(storage_session(1, 1300, 1500)).unwrap();
+    store.save_session(storage_session(2, 1000, 1200)).unwrap();
+
+    let alice_sessions = store.list_user_sessions(&1).unwrap();
+    assert_eq!(alice_sessions.len(), 2);
+}
+
+#[test]
+fn touch_session_if_present_extends_expiry_and_last_active() {
+    let store = MemoryStore::<TestUser>::new();
+    let session = storage_session(5, 1000, 2000);
+    let id = session.id().clone();
+    store.save_session(session).unwrap();
+
+    store.touch_session_if_present(&id, 9000, 8000).unwrap();
+
+    let found = store.find_session(&id).unwrap().unwrap();
+    assert_eq!(found.expires_at_unix(), 9000);
+    assert_eq!(found.last_active_at_unix(), Some(8000));
+}
+
+#[test]
+fn touch_session_if_present_is_no_op_for_missing() {
+    let store = MemoryStore::<TestUser>::new();
+
+    let result = store.touch_session_if_present(&SessionId::generate(), 9000, 8000);
+    assert!(result.is_ok());
+}

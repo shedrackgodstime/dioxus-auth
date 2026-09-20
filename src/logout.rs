@@ -17,6 +17,7 @@ where
     ///
     /// # Errors
     /// Returns a store error if the lookup or deletion fails.
+    #[must_use = "sign-out must be acknowledged"]
     pub fn logout(&self, session_id: &SessionId) -> Result<(), AuthError> {
         let storage_id = session_id.hash_for_storage();
         let session = match self.sessions.find_session(&storage_id) {
@@ -65,6 +66,7 @@ where
     ///
     /// # Errors
     /// Returns a store error if the deletion fails.
+    #[must_use = "session revocation should not be silently ignored"]
     pub fn revoke_all_user_sessions(&self, user_id: &U::Id) -> Result<(), AuthError> {
         self.sessions.delete_user_sessions(user_id)
     }

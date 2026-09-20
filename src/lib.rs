@@ -5,7 +5,16 @@
 //! storage is pluggable through the capability traits in [`store`].
 
 #![forbid(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 #![deny(missing_docs)]
+#![deny(clippy::missing_panics_doc)]
+#![deny(clippy::missing_errors_doc)]
+#![deny(clippy::missing_safety_doc)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::unwrap_in_result)]
+#![deny(clippy::panic_in_result_fn)]
 
 pub mod builder;
 #[cfg(feature = "dioxus")]

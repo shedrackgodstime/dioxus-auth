@@ -36,3 +36,6 @@ pub enum AuthError {
 pub const fn internal_error(msg: String) -> AuthError {
     AuthError::Internal(msg)
 }
+
+/// Convenience alias for results that fail with [`AuthError`].
+pub type AuthResult<T> = Result<T, AuthError>;
