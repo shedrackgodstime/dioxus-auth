@@ -19,7 +19,7 @@ You own the database, users, and data. **dioxus-auth** provides the authenticati
 ## Usage
 
 ```toml
-dioxus-auth = "0.x"
+dioxus-auth = "0.1.0"
 ```
 
 ```rust
