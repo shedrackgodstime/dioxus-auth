@@ -22,64 +22,27 @@ You own the database, users, and data. **dioxus-auth** provides the authenticati
 dioxus-auth = "0.x"
 ```
 
-### Core engine
-
-`AppUser` implements `AuthUser` (with `Id = u64`). Point the engine at any
-pair of stores that implement the capability traits; `MemoryStore` is the
-default in-process store:
-
 ```rust
 use dioxus_auth::prelude::*;
 use std::sync::Arc;
 
 let store = Arc::new(MemoryStore::<AppUser>::new());
 
-let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-    .session_ttl_secs(7 * 24 * 60 * 60) // absolute session lifetime
-    .idle_timeout_secs(30 * 60)         // slide expiry on activity
-    .single_active_session(true)        // rotate previous sessions on login
+let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+    .idle_timeout_secs(30 * 60) // little config: idle sessions expire
+    .single_active_session(true)
     .build()?;
-```
 
-### Register a user
-
-```rust
+// Password auth — register a user, then sign in.
 let hash = Argon2Hasher::new().hash("s3cret")?;
 store.insert_user_with_password(AppUser::new(1, "alice"), "alice", hash);
+
+let (user, session) = auth.login("alice", "s3cret")?;
+auth.validate_session(session.id())?;
+auth.logout(session.id())?;
 ```
 
-### Sign in and validate on every request
-
-```rust
-let (user, session) = engine.login("alice", "s3cret")?;
-assert_eq!(user.id(), 1);
-
-// Pass the raw session token with each request and validate it:
-if let Some(user) = engine.validate_session(session.id())? {
-    // authorize this request for `user`
-}
-```
-
-Pass `LoginOptions` to record client metadata on the session:
-
-```rust
-let (user, session) = engine.login_with_options(
-    "alice",
-    "s3cret",
-    LoginOptions::default()
-        .with_ip_address(Some("203.0.113.7"))
-        .with_user_agent(Some("dioxus/0.x")),
-)?;
-```
-
-### Sign out
-
-```rust
-engine.logout(session.id())?;              // invalidate the session
-engine.revoke_session(session.id())?;      // Ok(false) if it was already gone
-```
-
-### The Dioxus runtime binds the same engine to the UI:
+Then:
 
 ```rust
 let auth = use_auth::<AppUser>();
