@@ -17,6 +17,7 @@ pub trait RateLimiter: std::fmt::Debug + Send + Sync {
     /// # Errors
     /// Returns [`AuthError::RateLimited`] when the identifier has exceeded the
     /// allowed attempt count within the window.
+    #[must_use = "the rate-limit check must be used"]
     fn check(&self, identifier: &str) -> Result<(), AuthError>;
 
     /// Records a failed authentication attempt for the identifier.
@@ -34,11 +35,18 @@ pub trait RateLimiter: std::fmt::Debug + Send + Sync {
 ///
 /// Process-local and best-effort. For distributed deployments, implement
 /// `RateLimiter` with Redis, Memcached, or similar.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InMemoryRateLimiter {
     max_attempts: usize,
     window: Duration,
     attempts: RwLock<BTreeMap<String, Vec<SystemTime>>>,
+}
+
+impl Default for InMemoryRateLimiter {
+    /// 10 failed attempts per 15-minute window.
+    fn default() -> Self {
+        return Self::new(10, Duration::from_secs(15 * 60));
+    }
 }
 
 impl InMemoryRateLimiter {
@@ -48,11 +56,11 @@ impl InMemoryRateLimiter {
     /// * `window` — rolling time window for counting attempts
     #[must_use]
     pub const fn new(max_attempts: usize, window: Duration) -> Self {
-        Self {
+        return Self {
             max_attempts,
             window,
             attempts: RwLock::new(BTreeMap::new()),
-        }
+        };
     }
 }
 
@@ -61,17 +69,17 @@ impl RateLimiter for InMemoryRateLimiter {
         let now = SystemTime::now();
         let limited = {
             let mut attempts = self.attempts.write();
-            attempts
-                .get_mut(identifier)
-                .is_some_and(|timestamps| {
-                    timestamps.retain(|t| now.duration_since(*t).is_ok_and(|d| d < self.window));
-                    timestamps.len() >= self.max_attempts
-                })
+            attempts.get_mut(identifier).is_some_and(|timestamps| {
+                timestamps.retain(|t| {
+                    return now.duration_since(*t).is_ok_and(|d| return d < self.window);
+                });
+                return timestamps.len() >= self.max_attempts;
+            })
         };
         if limited {
             return Err(AuthError::RateLimited);
         }
-        Ok(())
+        return Ok(());
     }
 
     fn record_attempt(&self, identifier: &str) {

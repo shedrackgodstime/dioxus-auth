@@ -10,16 +10,59 @@ use crate::security::PasswordHasher;
 use crate::store::{PasswordUserStore, SessionStore};
 
 /// Options for [`AuthEngine::login_with_options`].
-#[derive(Debug, Clone, Copy, Default)]
+///
+/// Fields are private; read them through the accessors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoginOptions<'a> {
+    ip_address: Option<&'a str>,
+    user_agent: Option<&'a str>,
+}
+
+impl<'a> LoginOptions<'a> {
+    /// Creates empty login options.
+    #[must_use]
+    pub const fn new() -> Self {
+        return Self {
+            ip_address: None,
+            user_agent: None,
+        };
+    }
+
     /// Client IP address for session activity tracking.
-    pub ip_address: Option<&'a str>,
+    #[must_use]
+    pub const fn ip_address(&self) -> Option<&'a str> {
+        return self.ip_address;
+    }
+
     /// Client user agent for session activity tracking.
-    pub user_agent: Option<&'a str>,
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<&'a str> {
+        return self.user_agent;
+    }
+
+    /// Sets the client IP address.
+    #[must_use = "the returned options must be used"]
+    pub const fn with_ip_address(mut self, ip_address: Option<&'a str>) -> Self {
+        self.ip_address = ip_address;
+        return self;
+    }
+
+    /// Sets the client user agent.
+    #[must_use = "the returned options must be used"]
+    pub const fn with_user_agent(mut self, user_agent: Option<&'a str>) -> Self {
+        self.user_agent = user_agent;
+        return self;
+    }
+}
+
+impl Default for LoginOptions<'_> {
+    fn default() -> Self {
+        return Self::new();
+    }
 }
 
 /// Arc-wrapped user callback set by the builder.
-pub(crate) type UserCallback<U> = Arc<dyn Fn(&U) + Send + Sync>;
+pub type UserCallback<U> = Arc<dyn Fn(&U) + Send + Sync>;
 
 /// Central authentication flow orchestrator.
 ///
@@ -29,6 +72,9 @@ pub(crate) type UserCallback<U> = Arc<dyn Fn(&U) + Send + Sync>;
 ///
 /// Method implementations are split across the `login`, `logout`, `validate`,
 /// and `hooks` modules and attached here as inherent methods.
+///
+/// `Clone` clones the shared `Arc` handles and copies the plain scalar fields;
+/// it does not clone the inner user/session stores or hasher.
 #[derive(Clone)]
 pub struct AuthEngine<U, S>
 where
@@ -67,55 +113,55 @@ where
     /// timing-defense dummy hash.
     #[must_use = "the constructed engine must be used"]
     pub fn new(users: Arc<U>, sessions: Arc<S>) -> Result<Self, AuthError> {
-        Self::builder(users, sessions).build()
+        return Self::builder(users, sessions).build();
     }
 
     /// Starts configuring an [`AuthEngine`] via [`AuthEngineBuilder`].
     #[must_use = "builder configuration must be completed with `.build()`"]
     pub fn builder(users: Arc<U>, sessions: Arc<S>) -> AuthEngineBuilder<U, S> {
-        AuthEngineBuilder::new(users, sessions)
+        return AuthEngineBuilder::new(users, sessions);
     }
 
     /// Accesses the underlying user store.
     #[must_use]
     pub fn user_store(&self) -> &U {
-        &self.users
+        return &self.users;
     }
 
     /// Accesses the underlying session store.
     #[must_use]
     pub fn session_store(&self) -> &S {
-        &self.sessions
+        return &self.sessions;
     }
 
     /// Accesses the configured `PasswordHasher`.
     #[must_use]
     pub fn hasher(&self) -> &dyn PasswordHasher {
-        &*self.hasher
+        return &*self.hasher;
     }
 
     /// Configured session time-to-live in seconds.
     #[must_use]
     pub const fn session_ttl_secs(&self) -> u64 {
-        self.session_ttl_secs
+        return self.session_ttl_secs;
     }
 
     /// Configured idle timeout in seconds.
     #[must_use]
     pub const fn idle_timeout_secs(&self) -> Option<u64> {
-        self.idle_timeout_secs
+        return self.idle_timeout_secs;
     }
 
     /// Whether single active session is enforced.
     #[must_use]
     pub const fn single_active_session(&self) -> bool {
-        self.single_active_session
+        return self.single_active_session;
     }
 }
 
 /// Current UNIX timestamp in seconds.
-pub(crate) fn now_unix() -> u64 {
-    std::time::SystemTime::now()
+pub fn now_unix() -> u64 {
+    return std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
+        .map_or(0, |duration| return duration.as_secs());
 }

@@ -35,7 +35,7 @@ where
             Err(e) => return Err(e),
         }
         self.fire_on_sign_out(&user);
-        Ok(())
+        return Ok(());
     }
 
     /// Revokes a single session by its raw wire token.
@@ -59,7 +59,7 @@ where
                 Err(e) => return Err(e),
             }
         }
-        Ok(existed)
+        return Ok(existed);
     }
 
     /// Revokes all sessions belonging to a user.
@@ -68,6 +68,6 @@ where
     /// Returns a store error if the deletion fails.
     #[must_use = "session revocation should not be silently ignored"]
     pub fn revoke_all_user_sessions(&self, user_id: &U::Id) -> Result<(), AuthError> {
-        self.sessions.delete_user_sessions(user_id)
+        return self.sessions.delete_user_sessions(user_id);
     }
 }

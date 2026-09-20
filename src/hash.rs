@@ -1,8 +1,10 @@
 //! Argon2id password hashing implementation.
 
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHash, PasswordHasher as Argon2PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
+use argon2::password_hash::rand_core::OsRng;
+use argon2::password_hash::{
+    PasswordHash, PasswordHasher as Argon2PasswordHasher, PasswordVerifier, SaltString,
+};
 
 use crate::error::AuthError;
 use crate::security::PasswordHasher;
@@ -15,7 +17,7 @@ impl Argon2Hasher {
     /// Creates a new Argon2 hasher.
     #[must_use]
     pub const fn new() -> Self {
-        Self
+        return Self;
     }
 }
 
@@ -27,7 +29,7 @@ impl PasswordHasher for Argon2Hasher {
             Ok(encoded) => encoded,
             Err(_) => return Err(AuthError::PasswordHashError),
         };
-        Ok(encoded.to_string())
+        return Ok(encoded.to_string());
     }
 
     fn verify(&self, password: &str, hash: &str) -> Result<bool, AuthError> {
@@ -36,6 +38,6 @@ impl PasswordHasher for Argon2Hasher {
             Err(_) => return Err(AuthError::PasswordHashError),
         };
         let result = Argon2::default().verify_password(password.as_bytes(), &parsed);
-        Ok(result.is_ok())
+        return Ok(result.is_ok());
     }
 }

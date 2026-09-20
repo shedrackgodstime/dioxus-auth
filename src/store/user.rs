@@ -16,6 +16,7 @@ pub trait UserStore: Debug + Send + Sync {
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
+    #[must_use = "the store result must be used"]
     fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError>;
 }
 
@@ -30,11 +31,16 @@ pub trait PasswordUserStore: UserStore {
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
-    fn find_by_identifier(&self, identifier: &str) -> Result<Option<(Self::User, String)>, AuthError>;
+    #[must_use = "the lookup result must be used"]
+    fn find_by_identifier(
+        &self,
+        identifier: &str,
+    ) -> Result<Option<(Self::User, String)>, AuthError>;
 
     /// Updates a user's stored password hash.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
+    #[must_use = "a failed hash update must be handled"]
     fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError>;
 }

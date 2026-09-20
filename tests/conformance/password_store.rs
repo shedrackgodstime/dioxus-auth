@@ -3,8 +3,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-use common::{hash_password, TestUser};
-use dioxus_auth::store::{MemoryStore, PasswordUserStore};
+use common::{TestUser, hash_password};
+use dioxus_auth::prelude::{MemoryStore, PasswordUserStore};
 
 #[test]
 fn find_by_identifier_returns_user_and_stored_hash() {
@@ -12,7 +12,10 @@ fn find_by_identifier_returns_user_and_stored_hash() {
     let hash = hash_password("correct horse battery staple");
     store.insert_user_with_password(TestUser::new(3, "bob"), "bob@example.com", hash.clone());
 
-    let found = store.find_by_identifier("bob@example.com").unwrap().unwrap();
+    let found = store
+        .find_by_identifier("bob@example.com")
+        .unwrap()
+        .unwrap();
     assert_eq!(found.0.id, 3);
     assert_eq!(found.1, hash);
 }

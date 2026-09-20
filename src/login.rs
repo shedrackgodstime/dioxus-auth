@@ -30,7 +30,7 @@ where
         identifier: &str,
         password: &str,
     ) -> Result<(U::User, Session<U::Id>), AuthError> {
-        self.do_login(identifier, password, LoginOptions::default())
+        return self.do_login(identifier, password, LoginOptions::default());
     }
 
     /// Authenticates a user with optional session metadata (IP, user agent).
@@ -44,7 +44,7 @@ where
         password: &str,
         options: LoginOptions<'_>,
     ) -> Result<(U::User, Session<U::Id>), AuthError> {
-        self.do_login(identifier, password, options)
+        return self.do_login(identifier, password, options);
     }
 
     pub(crate) fn do_login(
@@ -107,10 +107,10 @@ where
         if let Some(auth) = &auth_hash {
             storage_session = storage_session.with_auth_hash(auth.clone());
         }
-        if let Some(ip) = options.ip_address {
+        if let Some(ip) = options.ip_address() {
             storage_session = storage_session.with_ip_address(ip);
         }
-        if let Some(ua) = options.user_agent {
+        if let Some(ua) = options.user_agent() {
             storage_session = storage_session.with_user_agent(ua);
         }
         match self.sessions.save_session(storage_session) {
@@ -128,7 +128,7 @@ where
         if let Some(limiter) = &self.rate_limiter {
             limiter.record_success(&limiter_key);
         }
-        Ok((user, wire_session))
+        return Ok((user, wire_session));
     }
 
     /// Whether an identifier (e.g. email or username) exists in the store.
@@ -138,9 +138,9 @@ where
     #[must_use = "the existence check must be used"]
     pub fn identifier_exists(&self, identifier: &str) -> Result<bool, AuthError> {
         match self.users.find_by_identifier(identifier) {
-            Ok(Some(_)) => Ok(true),
-            Ok(None) => Ok(false),
-            Err(e) => Err(e),
+            Ok(Some(_)) => return Ok(true),
+            Ok(None) => return Ok(false),
+            Err(e) => return Err(e),
         }
     }
 }

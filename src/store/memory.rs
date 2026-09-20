@@ -28,39 +28,41 @@ pub struct MemoryStore<User: AuthUser> {
 
 impl<User: AuthUser> Default for MemoryStore<User> {
     fn default() -> Self {
-        Self {
+        return Self {
             users: RwLock::new(Vec::new()),
             credentials: RwLock::new(Vec::new()),
             sessions: RwLock::new(Vec::new()),
-        }
+        };
     }
 }
 
 impl<User: AuthUser + Clone> Clone for MemoryStore<User> {
     fn clone(&self) -> Self {
-        Self {
+        return Self {
             users: RwLock::new(cloned_or_empty(&self.users)),
             credentials: RwLock::new(cloned_or_empty(&self.credentials)),
             sessions: RwLock::new(cloned_or_empty(&self.sessions)),
-        }
+        };
     }
 }
 
 fn cloned_or_empty<T: Clone>(lock: &RwLock<Vec<T>>) -> Vec<T> {
-    lock.try_read().map_or_else(Vec::new, |guard| guard.clone())
+    return lock
+        .try_read()
+        .map_or_else(Vec::new, |guard| return guard.clone());
 }
 
 impl<User: AuthUser> MemoryStore<User> {
     /// Creates a new empty in-memory store.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        return Self::default();
     }
 
     /// Inserts or updates a user without credentials.
     pub fn insert_user(&self, user: User) {
         let mut users = self.users.write();
-        if let Some(existing) = users.iter_mut().find(|u| u.id() == user.id()) {
+        if let Some(existing) = users.iter_mut().find(|u| return u.id() == user.id()) {
             *existing = user;
         } else {
             users.push(user);
@@ -80,7 +82,10 @@ impl<User: AuthUser> MemoryStore<User> {
         let hash = password_hash.into();
         {
             let mut credentials = self.credentials.write();
-            if let Some(entry) = credentials.iter_mut().find(|(ident, _, _)| *ident == identifier) {
+            if let Some(entry) = credentials
+                .iter_mut()
+                .find(|(ident, _, _)| return *ident == identifier)
+            {
                 entry.1 = id;
                 entry.2 = hash;
             } else {
@@ -97,9 +102,9 @@ impl<User: AuthUser + Clone> UserStore for MemoryStore<User> {
     fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError> {
         let user = {
             let users = self.users.read();
-            users.iter().find(|u| &u.id() == id).cloned()
+            users.iter().find(|u| return &u.id() == id).cloned()
         };
-        Ok(user)
+        return Ok(user);
     }
 }
 
@@ -112,8 +117,8 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             let credentials = self.credentials.read();
             credentials
                 .iter()
-                .find(|(ident, _, _)| ident == identifier)
-                .map(|(_, user_id, hash)| (user_id.clone(), hash.clone()))
+                .find(|(ident, _, _)| return ident == identifier)
+                .map(|(_, user_id, hash)| return (user_id.clone(), hash.clone()))
         };
         let (user_id, password_hash) = match credential {
             Some(credential) => credential,
@@ -121,13 +126,13 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
         };
         let found = {
             let users = self.users.read();
-            users.iter().find(|u| u.id() == user_id).cloned()
+            users.iter().find(|u| return u.id() == user_id).cloned()
         };
         let user = match found {
             Some(user) => user,
             None => return Ok(None),
         };
-        Ok(Some((user, password_hash)))
+        return Ok(Some((user, password_hash)));
     }
 
     fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError> {
@@ -140,7 +145,7 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
                 }
             }
         }
-        Ok(())
+        return Ok(());
     }
 }
 
@@ -150,29 +155,29 @@ impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
     fn save_session(&self, session: Session<Self::Id>) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            if let Some(existing) = sessions.iter_mut().find(|s| s.id() == session.id()) {
+            if let Some(existing) = sessions.iter_mut().find(|s| return s.id() == session.id()) {
                 *existing = session;
             } else {
                 sessions.push(session);
             }
         }
-        Ok(())
+        return Ok(());
     }
 
     fn find_session(&self, id: &SessionId) -> Result<Option<Session<Self::Id>>, AuthError> {
         let session = {
             let sessions = self.sessions.read();
-            sessions.iter().find(|s| s.id() == id).cloned()
+            sessions.iter().find(|s| return s.id() == id).cloned()
         };
-        Ok(session)
+        return Ok(session);
     }
 
     fn delete_session(&self, id: &SessionId) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            sessions.retain(|s| s.id() != id);
+            sessions.retain(|s| return s.id() != id);
         }
-        Ok(())
+        return Ok(());
     }
 
     fn touch_session_if_present(
@@ -183,22 +188,22 @@ impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
     ) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            if let Some(session) = sessions.iter_mut().find(|s| s.id() == id) {
+            if let Some(session) = sessions.iter_mut().find(|s| return s.id() == id) {
                 let updated = session
                     .clone()
                     .set_expiry_and_last_active(new_expiry, last_active);
                 *session = updated;
             }
         }
-        Ok(())
+        return Ok(());
     }
 
     fn delete_user_sessions(&self, user_id: &Self::Id) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            sessions.retain(|s| s.user_id() != user_id);
+            sessions.retain(|s| return s.user_id() != user_id);
         }
-        Ok(())
+        return Ok(());
     }
 
     fn list_user_sessions(&self, user_id: &Self::Id) -> Result<Vec<Session<Self::Id>>, AuthError> {
@@ -206,10 +211,10 @@ impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
             let sessions = self.sessions.read();
             sessions
                 .iter()
-                .filter(|s| s.user_id() == user_id)
+                .filter(|s| return s.user_id() == user_id)
                 .cloned()
                 .collect()
         };
-        Ok(sessions)
+        return Ok(sessions);
     }
 }

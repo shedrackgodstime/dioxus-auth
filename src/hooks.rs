@@ -1,7 +1,5 @@
 //! Authentication hook firing.
 
-use std::panic::AssertUnwindSafe;
-
 use crate::engine::{AuthEngine, UserCallback};
 use crate::store::{PasswordUserStore, SessionStore};
 
@@ -23,9 +21,12 @@ where
     }
 }
 
-/// Fires a hook best-effort: a panicking hook must not break the auth flow.
-pub(crate) fn fire_hook<U>(hook: Option<&UserCallback<U>>, user: &U) {
+/// Fires a hook.
+///
+/// Per RULES §8.5 a panicking hook indicates a programming error: it is
+/// intentionally not caught. The panic stops the program.
+pub fn fire_hook<U>(hook: Option<&UserCallback<U>>, user: &U) {
     if let Some(hook) = hook {
-        drop(std::panic::catch_unwind(AssertUnwindSafe(|| hook(user))));
+        hook(user);
     }
 }

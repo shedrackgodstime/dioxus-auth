@@ -1,27 +1,27 @@
 //! End-to-end tests for the auth-engine lifecycle (login → validate → logout).
 
+// reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
+// conflicting style lint `needless_return` is allowed with this justification.
+#![allow(clippy::needless_return)]
+
 mod common;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
-use common::{hash_password, TestUser};
-use dioxus_auth::engine::AuthEngine;
-use dioxus_auth::error::AuthError;
-use dioxus_auth::rate_limit::InMemoryRateLimiter;
-use dioxus_auth::status::SessionId;
-use dioxus_auth::store::MemoryStore;
+use common::{TestUser, hash_password};
+use dioxus_auth::prelude::{
+    AuthEngine, AuthError, InMemoryRateLimiter, MemoryStore, SessionId, SessionStore, UserStore,
+};
 
 fn seeded_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUser>> {
     let store = MemoryStore::<TestUser>::new();
-    store.insert_user_with_password(
-        TestUser::new(1, "alice"),
-        "alice",
-        hash_password("s3cret"),
-    );
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("s3cret"));
     let store = Arc::new(store);
-    AuthEngine::builder(Arc::clone(&store), store)
+    return AuthEngine::builder(Arc::clone(&store), store)
         .build()
-        .expect("engine construction must succeed")
+        .expect("engine construction must succeed");
 }
 
 #[test]
@@ -155,4 +155,134 @@ fn successful_validation_keeps_the_session_active() {
     let validated = engine.validate_session(session.id()).unwrap().unwrap();
 
     assert_eq!(validated.id, 1);
+}
+
+#[test]
+fn engine_getters_expose_configured_defaults() {
+    let engine = seeded_engine();
+
+    assert_eq!(engine.session_ttl_secs(), 7 * 24 * 60 * 60);
+    assert_eq!(engine.idle_timeout_secs(), None);
+    assert!(!engine.single_active_session());
+    assert!(engine.user_store().find_by_id(&1).unwrap().is_some());
+    assert!(
+        engine
+            .session_store()
+            .find_session(&SessionId::new("0".repeat(64)))
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        engine
+            .hasher()
+            .verify("s3cret", &hash_password("s3cret"))
+            .unwrap()
+    );
+}
+
+#[test]
+fn builder_ttl_and_idle_timeout_flow_through_to_getters() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .session_ttl(Duration::from_secs(30))
+        .idle_timeout(Duration::from_secs(10))
+        .build()
+        .expect("engine construction must succeed");
+
+    assert_eq!(engine.session_ttl_secs(), 30);
+    assert_eq!(engine.idle_timeout_secs(), Some(10));
+}
+
+#[test]
+fn login_after_sign_out_revives_the_account() {
+    let engine = seeded_engine();
+    let (_, session) = engine.login("alice", "s3cret").unwrap();
+    engine.logout(session.id()).unwrap();
+
+    let (user, new_session) = engine.login("alice", "s3cret").unwrap();
+    assert_eq!(user.id, 1);
+    assert_ne!(session.id().as_str(), new_session.id().as_str());
+    assert!(engine.validate_session(new_session.id()).unwrap().is_some());
+}
+
+#[test]
+fn identifier_exists_returns_true_for_registered_account() {
+    let engine = seeded_engine();
+    let exists = engine.identifier_exists("alice").unwrap();
+
+    assert!(exists);
+}
+
+#[test]
+fn identifier_exists_returns_false_for_unknown_identifier() {
+    let engine = seeded_engine();
+    let exists = engine.identifier_exists("ghost").unwrap();
+
+    assert!(!exists);
+}
+
+#[test]
+fn sign_in_hook_is_fired_on_successful_login() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let fired = Arc::new(AtomicBool::new(false));
+    let fired_flag = Arc::clone(&fired);
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .on_sign_in(move |user| {
+            assert_eq!(user.id, 1);
+            fired_flag.store(true, Ordering::SeqCst);
+        })
+        .build()
+        .expect("engine construction must succeed");
+
+    engine.login("alice", "pw").unwrap();
+
+    assert!(fired.load(Ordering::SeqCst));
+}
+
+#[test]
+fn sign_out_hook_is_fired_on_logout() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let fired = Arc::new(AtomicBool::new(false));
+    let fired_flag = Arc::clone(&fired);
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .on_sign_out(move |_user| {
+            fired_flag.store(true, Ordering::SeqCst);
+        })
+        .build()
+        .expect("engine construction must succeed");
+
+    let (_, session) = engine.login("alice", "pw").unwrap();
+    engine.logout(session.id()).unwrap();
+
+    assert!(fired.load(Ordering::SeqCst));
+}
+
+#[test]
+fn on_session_validated_hook_is_fired_per_validation() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let count = Arc::new(AtomicBool::new(false));
+    let count_flag = Arc::clone(&count);
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .on_session_validated(move |_user| {
+            count_flag.store(true, Ordering::SeqCst);
+        })
+        .build()
+        .expect("engine construction must succeed");
+
+    let (_, session) = engine.login("alice", "pw").unwrap();
+    engine.validate_session(session.id()).unwrap();
+
+    assert!(count.load(Ordering::SeqCst));
+    assert_eq!(
+        engine.login("alice", "wrong").unwrap_err(),
+        AuthError::InvalidCredentials
+    );
 }

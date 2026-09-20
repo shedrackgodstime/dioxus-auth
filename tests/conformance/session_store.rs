@@ -1,16 +1,18 @@
 //! Conformance tests: `MemoryStore` as a `SessionStore`.
 
+// reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
+// conflicting style lint `needless_return` is allowed with this justification.
+#![allow(clippy::needless_return)]
+
 #[path = "../common/mod.rs"]
 mod common;
 
 use common::TestUser;
-use dioxus_auth::session::Session;
-use dioxus_auth::status::SessionId;
-use dioxus_auth::store::{MemoryStore, SessionStore};
+use dioxus_auth::prelude::{MemoryStore, Session, SessionId, SessionStore};
 
 fn storage_session(user_id: u64, created_at: u64, expires_at: u64) -> Session<u64> {
     let storage_id = SessionId::generate().hash_for_storage();
-    Session::new(storage_id, user_id, created_at, expires_at)
+    return Session::new(storage_id, user_id, created_at, expires_at);
 }
 
 #[test]

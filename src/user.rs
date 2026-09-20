@@ -29,7 +29,7 @@ pub trait AuthUser: Debug + Send + Sync + 'static {
     /// checks or token versions).
     #[must_use]
     fn session_auth_hash(&self) -> Option<&str> {
-        None
+        return None;
     }
 
     /// Clones this user as a trait object.

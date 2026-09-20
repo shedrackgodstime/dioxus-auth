@@ -18,6 +18,9 @@ use crate::store::{PasswordUserStore, SessionStore};
 const DUMMY_PASSWORD: &str = "dioxus-auth-timing-defense-dummy-password-do-not-use";
 
 /// Fluent builder for constructing an [`AuthEngine`].
+///
+/// `Clone` clones the shared `Arc` handles and copies the plain scalar fields;
+/// it does not clone the inner stores or hasher.
 #[derive(Clone)]
 #[must_use = "call `.build()` to construct the engine"]
 pub struct AuthEngineBuilder<U, S>
@@ -45,7 +48,7 @@ where
     /// Creates a new builder with the given user and session stores.
     #[must_use = "a builder must eventually be built"]
     pub fn new(users: Arc<U>, sessions: Arc<S>) -> Self {
-        Self {
+        return Self {
             users,
             sessions,
             hasher: None,
@@ -56,80 +59,77 @@ where
             on_sign_out: None,
             on_session_validated: None,
             rate_limiter: None,
-        }
+        };
     }
 
     /// Overrides the default hasher (defaults to [`Argon2Hasher`]).
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub fn hasher(mut self, hasher: impl PasswordHasher + 'static) -> Self {
         self.hasher = Some(Arc::new(hasher));
-        self
+        return self;
     }
 
     /// Sets the session TTL.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn session_ttl(mut self, duration: Duration) -> Self {
         self.session_ttl_secs = duration.as_secs();
-        self
+        return self;
     }
 
     /// Sets the session TTL in seconds.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn session_ttl_secs(mut self, secs: u64) -> Self {
         self.session_ttl_secs = secs;
-        self
+        return self;
     }
 
     /// Sets the idle timeout (max time without validated activity).
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn idle_timeout(mut self, duration: Duration) -> Self {
         self.idle_timeout_secs = Some(duration.as_secs());
-        self
+        return self;
     }
 
     /// Sets the idle timeout in seconds.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn idle_timeout_secs(mut self, secs: u64) -> Self {
         self.idle_timeout_secs = Some(secs);
-        self
+        return self;
     }
 
     /// Enforces single active session per user on login.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn single_active_session(mut self, enabled: bool) -> Self {
         self.single_active_session = enabled;
-        self
+        return self;
     }
 
     /// Hook called on successful sign-in.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub fn on_sign_in(mut self, hook: impl Fn(&U::User) + Send + Sync + 'static) -> Self {
         self.on_sign_in = Some(Arc::new(hook));
-        self
+        return self;
     }
 
     /// Hook called on sign-out.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub fn on_sign_out(mut self, hook: impl Fn(&U::User) + Send + Sync + 'static) -> Self {
         self.on_sign_out = Some(Arc::new(hook));
-        self
+        return self;
     }
 
     /// Hook called after successful session validation.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
-    pub fn on_session_validated(
-        mut self,
-        hook: impl Fn(&U::User) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_session_validated(mut self, hook: impl Fn(&U::User) + Send + Sync + 'static) -> Self {
         self.on_session_validated = Some(Arc::new(hook));
-        self
+        return self;
     }
 
     /// Sets a custom rate limiter.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub fn rate_limiter(mut self, limiter: impl RateLimiter + 'static) -> Self {
         self.rate_limiter = Some(Arc::new(limiter));
-        self
+        return self;
     }
 
     /// Builds the authentication engine.
@@ -146,7 +146,7 @@ where
             Ok(hash) => hash,
             Err(e) => return Err(e),
         };
-        Ok(AuthEngine {
+        return Ok(AuthEngine {
             users: self.users,
             sessions: self.sessions,
             hasher,
@@ -158,6 +158,6 @@ where
             on_session_validated: self.on_session_validated,
             rate_limiter: self.rate_limiter,
             dummy_hash,
-        })
+        });
     }
 }

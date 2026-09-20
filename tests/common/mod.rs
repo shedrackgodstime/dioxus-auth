@@ -4,10 +4,11 @@
 // would otherwise trip `dead_code` in that specific binary.
 
 #![allow(dead_code)]
+#![allow(clippy::needless_return)]
+// reason: RULES 13.5/14.5 require explicit `return`; the reason'd allow mirrors
+// the same resolution already applied in src/lib.rs for the lib crate.
 
-use dioxus_auth::hash::Argon2Hasher;
-use dioxus_auth::security::PasswordHasher;
-use dioxus_auth::user::AuthUser;
+use dioxus_auth::prelude::{Argon2Hasher, AuthUser, PasswordHasher};
 
 /// A minimal user for exercising the auth core.
 #[derive(Debug, Clone)]
@@ -20,19 +21,19 @@ impl AuthUser for TestUser {
     type Id = u64;
 
     fn id(&self) -> Self::Id {
-        self.id
+        return self.id;
     }
 
     fn display_name(&self) -> Option<String> {
-        Some(self.name.clone())
+        return Some(self.name.clone());
     }
 
     fn session_auth_hash(&self) -> Option<&str> {
-        None
+        return None;
     }
 
     fn clone_box(&self) -> Box<dyn AuthUser<Id = Self::Id>> {
-        Box::new(self.clone())
+        return Box::new(self.clone());
     }
 }
 
@@ -40,10 +41,10 @@ impl TestUser {
     /// Creates a test user.
     #[must_use]
     pub fn new(id: u64, name: impl Into<String>) -> Self {
-        Self {
+        return Self {
             id,
             name: name.into(),
-        }
+        };
     }
 }
 
@@ -53,7 +54,7 @@ impl TestUser {
 /// Panics if hashing fails; Argon2 hashing cannot fail for a well-formed input.
 #[must_use]
 pub fn hash_password(password: &str) -> String {
-    Argon2Hasher::new()
+    return Argon2Hasher::new()
         .hash(password)
-        .expect("Argon2 hashing cannot fail for valid input")
+        .expect("Argon2 hashing cannot fail for valid input");
 }

@@ -34,32 +34,29 @@ where
         let now = crate::engine::now_unix();
 
         if session.is_expired_at(now) {
-            return match self.sessions.delete_session(&storage_id) {
-                Ok(()) => Ok(None),
-                Err(e) => Err(e),
-            };
+            if let Err(e) = self.drop_session(&storage_id) {
+                return Err(e);
+            }
+            return Ok(None);
         }
 
         let user = match self.users.find_by_id(session.user_id()) {
             Ok(Some(user)) => user,
             Ok(None) => {
-                match self.sessions.delete_session(&storage_id) {
-                    Ok(()) => {}
-                    Err(e) => return Err(e),
+                if let Err(e) = self.drop_session(&storage_id) {
+                    return Err(e);
                 }
                 return Ok(None);
             }
             Err(e) => return Err(e),
         };
 
-        if let (Some(current_hash), Some(session_hash)) = (
-            user.session_auth_hash(),
-            session.auth_hash(),
-        ) {
+        if let (Some(current_hash), Some(session_hash)) =
+            (user.session_auth_hash(), session.auth_hash())
+        {
             if current_hash != session_hash {
-                match self.sessions.delete_session(&storage_id) {
-                    Ok(()) => {}
-                    Err(e) => return Err(e),
+                if let Err(e) = self.drop_session(&storage_id) {
+                    return Err(e);
                 }
                 return Ok(None);
             }
@@ -68,9 +65,8 @@ where
         if let Some(idle) = self.idle_timeout_secs {
             if let Some(last_active) = session.last_active_at_unix() {
                 if now.saturating_sub(last_active) >= idle {
-                    match self.sessions.delete_session(&storage_id) {
-                        Ok(()) => {}
-                        Err(e) => return Err(e),
+                    if let Err(e) = self.drop_session(&storage_id) {
+                        return Err(e);
                     }
                     return Ok(None);
                 }
@@ -78,12 +74,22 @@ where
         }
 
         let new_expiry = session.created_at_unix() + self.session_ttl_secs;
-        match self.sessions.touch_session_if_present(&storage_id, new_expiry, now) {
-            Ok(()) => {}
-            Err(e) => return Err(e),
+        if let Err(e) = self
+            .sessions
+            .touch_session_if_present(&storage_id, new_expiry, now)
+        {
+            return Err(e);
         }
 
         self.fire_on_session_validated(&user);
-        Ok(Some(user))
+        return Ok(Some(user));
+    }
+
+    /// Deletes an invalid session, propagating store errors.
+    fn drop_session(&self, id: &SessionId) -> Result<(), AuthError> {
+        if let Err(e) = self.sessions.delete_session(id) {
+            return Err(e);
+        }
+        return Ok(());
     }
 }

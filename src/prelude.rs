@@ -1,4 +1,6 @@
 //! Curated public API surface.
+//!
+//! This is the only public import path: `use dioxus_auth::prelude::*`.
 
 #[doc(inline)]
 pub use crate::builder::AuthEngineBuilder;
@@ -7,7 +9,7 @@ pub use crate::builder::AuthEngineBuilder;
 pub use crate::engine::{AuthEngine, LoginOptions};
 
 #[doc(inline)]
-pub use crate::error::{AuthError, AuthResult};
+pub use crate::error::AuthError;
 
 #[doc(inline)]
 pub use crate::hash::Argon2Hasher;
@@ -28,13 +30,10 @@ pub use crate::status::{AuthStatus, SessionId};
 pub use crate::store::{MemoryStore, PasswordUserStore, SessionStore, UserStore};
 
 #[doc(inline)]
-pub use crate::transport::{
-    extract_session_token, MemoryTokenStorage, TokenStorage,
-};
+pub use crate::token::MemoryTokenStorage;
+
+#[doc(inline)]
+pub use crate::transport::TokenStorage;
 
 #[doc(inline)]
 pub use crate::user::AuthUser;
-
-#[cfg(feature = "dioxus")]
-#[doc(inline)]
-pub use crate::dioxus::*;

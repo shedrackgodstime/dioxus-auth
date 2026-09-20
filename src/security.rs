@@ -1,27 +1,138 @@
 //! Security configuration and password-hashing capability trait.
 
 use std::fmt::Debug;
-use std::net::IpAddr;
 
 use crate::error::AuthError;
 
 /// Configuration for cookie-based sessions.
+///
+/// Fields are private; read or change them through the accessors and the
+/// `with_*` setters. Secure defaults are active on [`CookieConfig::new`].
 #[derive(Debug, Clone)]
 pub struct CookieConfig {
+    name: String,
+    http_only: bool,
+    secure: bool,
+    same_site: SameSite,
+    path: String,
+    domain: Option<String>,
+    max_age: Option<u64>,
+}
+
+impl CookieConfig {
+    /// Creates the default session-cookie configuration.
+    ///
+    /// Defaults: `name = "session"`, `http_only = true`, `secure = true`,
+    /// `same_site = SameSite::Lax`, `path = "/"`, no `domain`, no `max_age`.
+    #[must_use = "the cookie configuration must be used"]
+    pub fn new() -> Self {
+        return Self {
+            name: String::from("session"),
+            http_only: true,
+            secure: true,
+            same_site: SameSite::Lax,
+            path: String::from("/"),
+            domain: None,
+            max_age: None,
+        };
+    }
+
     /// The cookie name.
-    pub name: String,
+    #[must_use]
+    pub fn name(&self) -> &str {
+        return &self.name;
+    }
+
     /// Whether the cookie is HTTP-only.
-    pub http_only: bool,
+    #[must_use]
+    pub const fn http_only(&self) -> bool {
+        return self.http_only;
+    }
+
     /// Whether the cookie is secure (HTTPS only).
-    pub secure: bool,
+    #[must_use]
+    pub const fn secure(&self) -> bool {
+        return self.secure;
+    }
+
     /// The [`SameSite`] policy.
-    pub same_site: SameSite,
+    #[must_use]
+    pub const fn same_site(&self) -> SameSite {
+        return self.same_site;
+    }
+
     /// The cookie path.
-    pub path: String,
+    #[must_use]
+    pub fn path(&self) -> &str {
+        return &self.path;
+    }
+
     /// The cookie domain.
-    pub domain: Option<String>,
+    #[must_use]
+    pub fn domain(&self) -> Option<&str> {
+        return self.domain.as_deref();
+    }
+
     /// The cookie max age in seconds.
-    pub max_age: Option<u64>,
+    #[must_use]
+    pub const fn max_age(&self) -> Option<u64> {
+        return self.max_age;
+    }
+
+    /// Sets the cookie name.
+    #[must_use = "the returned configuration must be used"]
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        return self;
+    }
+
+    /// Sets whether the cookie is HTTP-only.
+    #[must_use = "the returned configuration must be used"]
+    pub const fn with_http_only(mut self, http_only: bool) -> Self {
+        self.http_only = http_only;
+        return self;
+    }
+
+    /// Sets whether the cookie is secure (HTTPS only).
+    #[must_use = "the returned configuration must be used"]
+    pub const fn with_secure(mut self, secure: bool) -> Self {
+        self.secure = secure;
+        return self;
+    }
+
+    /// Sets the [`SameSite`] policy.
+    #[must_use = "the returned configuration must be used"]
+    pub const fn with_same_site(mut self, same_site: SameSite) -> Self {
+        self.same_site = same_site;
+        return self;
+    }
+
+    /// Sets the cookie path.
+    #[must_use = "the returned configuration must be used"]
+    pub fn with_path(mut self, path: String) -> Self {
+        self.path = path;
+        return self;
+    }
+
+    /// Sets the cookie domain.
+    #[must_use = "the returned configuration must be used"]
+    pub fn with_domain(mut self, domain: Option<String>) -> Self {
+        self.domain = domain;
+        return self;
+    }
+
+    /// Sets the cookie max age in seconds.
+    #[must_use = "the returned configuration must be used"]
+    pub const fn with_max_age(mut self, max_age: Option<u64>) -> Self {
+        self.max_age = max_age;
+        return self;
+    }
+}
+
+impl Default for CookieConfig {
+    fn default() -> Self {
+        return Self::new();
+    }
 }
 
 /// The [`SameSite`] cookie policy.
@@ -46,19 +157,13 @@ impl OriginValidation {
     /// Creates a new origin validator.
     #[must_use]
     pub const fn new(allowed_origins: Vec<String>) -> Self {
-        Self { allowed_origins }
+        return Self { allowed_origins };
     }
 
     /// Validates an origin header.
     #[must_use]
     pub fn validate(&self, origin: &str) -> bool {
-        self.allowed_origins.iter().any(|o| o == origin)
-    }
-
-    /// Validates an origin from an IP address.
-    #[must_use]
-    pub const fn validate_ip(&self, _ip: IpAddr) -> bool {
-        true
+        return self.allowed_origins.iter().any(|o| return o == origin);
     }
 }
 
@@ -68,11 +173,13 @@ pub trait PasswordHasher: Debug + Send + Sync {
     ///
     /// # Errors
     /// Returns `AuthError::PasswordHashError` if the password cannot be hashed.
+    #[must_use = "the encoded hash must be used"]
     fn hash(&self, password: &str) -> Result<String, AuthError>;
 
     /// Verifies a password against a PHC-encoded hash.
     ///
     /// # Errors
     /// Returns `AuthError::PasswordHashError` if the hash is malformed.
+    #[must_use = "the verification result must be used"]
     fn verify(&self, password: &str, hash: &str) -> Result<bool, AuthError>;
 }

@@ -2,7 +2,7 @@
 
 [lints]
 rust = { warnings = "deny" }
-clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny" }
+clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny", implicit_return = "deny" }
 
 [package]
 name = "dioxus-auth"
@@ -14,34 +14,35 @@ description = "Dioxus-native authentication and session management."
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/shedrackgodstime/dioxus-auth"
+homepage = "https://github.com/shedrackgodstime/dioxus-auth"
 documentation = "https://docs.rs/dioxus-auth"
 keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
+include = [
+    ".github/workflows/ci.yml",
+    ".gitignore",
+    "AGENTS.md",
+    "Cargo.toml",
+    "LICENSE",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "README.md",
+    "clippy.toml",
+    "rustfmt.toml",
+    "scripts/check-packaging.sh",
+    "src/**",
+]
 
 [features]
 default = []
-dioxus = ["dep:dioxus"]
-dioxus-fullstack = ["dioxus", "dioxus/fullstack", "dep:http"]
-axum = ["dep:axum", "dep:tower", "dep:http"]
 
 [dependencies]
 argon2 = { version = "0.5", default-features = false, features = ["std", "password-hash", "alloc"] }
 hex = "0.4"
 parking_lot = "0.12"
 rand_core = { version = "0.6", features = ["std"] }
-serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 thiserror = "2.0"
-dioxus = { version = "0.7", default-features = false, features = ["hooks", "signals", "macro", "html", "router"], optional = true }
-http = { version = "1", optional = true }
-axum = { version = "0.8", optional = true }
-tower = { version = "0.5", optional = true }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
-serde_json = "1"
-wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["BroadcastChannel", "console", "Location", "MessageEvent", "Window", "Storage"] }
 
 [[test]]
 name = "conformance_user_store"
