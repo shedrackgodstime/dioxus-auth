@@ -1,11 +1,11 @@
 //! Authentication hook firing.
 
 use crate::engine::{AuthEngine, UserCallback};
-use crate::store::{PasswordUserStore, SessionStore};
+use crate::store::{SessionStore, UserStore};
 
 impl<U, S> AuthEngine<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     pub(crate) fn fire_on_sign_in(&self, user: &U::User) {

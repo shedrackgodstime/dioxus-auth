@@ -3,11 +3,11 @@
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::status::SessionId;
-use crate::store::{PasswordUserStore, SessionStore};
+use crate::store::{SessionStore, UserStore};
 
 impl<U, S> AuthEngine<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     /// Invalidates and revokes an active session (logout).

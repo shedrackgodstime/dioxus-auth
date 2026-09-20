@@ -8,7 +8,7 @@ use crate::error::AuthError;
 use crate::hash::Argon2Hasher;
 use crate::rate_limit::RateLimiter;
 use crate::security::PasswordHasher;
-use crate::store::{PasswordUserStore, SessionStore};
+use crate::store::{SessionStore, UserStore};
 
 /// Constant plaintext used to pre-compute the timing-defense dummy hash.
 ///
@@ -25,7 +25,7 @@ const DUMMY_PASSWORD: &str = "dioxus-auth-timing-defense-dummy-password-do-not-u
 #[must_use = "call `.build()` to construct the engine"]
 pub struct AuthEngineBuilder<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     users: Arc<U>,
@@ -42,7 +42,7 @@ where
 
 impl<U, S> AuthEngineBuilder<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     /// Creates a new builder with the given user and session stores.

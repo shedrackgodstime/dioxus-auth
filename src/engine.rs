@@ -7,7 +7,7 @@ use crate::builder::AuthEngineBuilder;
 use crate::error::AuthError;
 use crate::rate_limit::RateLimiter;
 use crate::security::PasswordHasher;
-use crate::store::{PasswordUserStore, SessionStore};
+use crate::store::{SessionStore, UserStore};
 
 /// Options for [`AuthEngine::login_with_options`].
 ///
@@ -78,7 +78,7 @@ pub type UserCallback<U> = Arc<dyn Fn(&U) + Send + Sync>;
 #[derive(Clone)]
 pub struct AuthEngine<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     pub(crate) users: Arc<U>,
@@ -102,7 +102,7 @@ where
 
 impl<U, S> AuthEngine<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     /// Creates a new [`AuthEngine`] with the default Argon2id hasher and

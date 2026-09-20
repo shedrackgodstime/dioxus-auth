@@ -3,12 +3,12 @@
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::status::SessionId;
-use crate::store::{PasswordUserStore, SessionStore};
+use crate::store::{SessionStore, UserStore};
 use crate::user::AuthUser;
 
 impl<U, S> AuthEngine<U, S>
 where
-    U: PasswordUserStore,
+    U: UserStore,
     S: SessionStore<Id = U::Id>,
 {
     /// Validates an incoming raw wire session id.
