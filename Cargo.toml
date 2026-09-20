@@ -21,7 +21,6 @@ categories = ["authentication", "web-programming"]
 include = [
     ".github/workflows/ci.yml",
     ".gitignore",
-    "AGENTS.md",
     "Cargo.toml",
     "LICENSE",
     "LICENSE-MIT",

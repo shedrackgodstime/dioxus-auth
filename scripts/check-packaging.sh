@@ -8,7 +8,6 @@ whitelist=(
     '^\.cargo_vcs_info\.json$'
     '^\.github/workflows/ci\.yml$'
     '^\.gitignore$'
-    '^AGENTS\.md$'
     '^Cargo\.lock$'
     '^Cargo\.toml$'
     # reason: cargo always ships its normalized original manifest in the crate;
