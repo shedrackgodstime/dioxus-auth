@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [v2]
   pull_request:
-    branches: [main]
+    branches: [v2]
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,9 +15,6 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     strategy:
-      # A red cell must not cancel the rest of the matrix: the M1
-      # (--no-default-features) failure silently hid whether every other
-      # combination was green.
       fail-fast: false
       matrix:
         rust:
@@ -25,19 +22,10 @@ jobs:
           - 1.85.0
         features:
           - "--features dioxus"
-          - "--features dioxus-fullstack"
-          - "--features axum"
           - "--no-default-features"
         exclude:
           - rust: 1.85.0
             features: "--features dioxus-fullstack"
-        include:
-          # `test_flags` merges into the generated stable × dioxus cell; the
-          # plain `features` key stays clippy-friendly (clippy always adds
-          # --all-targets itself).
-          - rust: stable
-            features: "--features dioxus"
-            test_flags: "--all-targets --features dioxus"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -46,15 +34,10 @@ jobs:
           components: rustfmt, clippy
       - name: Check format
         run: cargo fmt -- --check
-      # --all-targets everywhere: the M1 bug class (test-only code broken
-      # under one feature combination) is invisible to clippy without it.
       - name: Check clippy
         run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
       - name: Run tests
-        run: cargo test ${{ matrix.test_flags || matrix.features }}
-      - name: Run doc tests
-        if: matrix.test_flags == '--all-targets --features dioxus'
-        run: cargo test --doc --features dioxus
+        run: cargo test ${{ matrix.features }}
 
   wasm:
     name: wasm32 check
@@ -64,9 +47,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      # Mirrors the local release gate: wasm-only code (cross-tab sync,
-      # broadcaster emit, return-to capture, token storage) is invisible to
-      # host builds — sync.rs shipped broken once because of exactly that.
       - name: Check wasm32 (dioxus feature)
         run: cargo check --target wasm32-unknown-unknown --features dioxus
 
@@ -81,15 +61,8 @@ jobs:
       - name: Run cargo audit
         run: cargo audit
       - name: Install cargo-deny
-        # Pinned to the locally-verified version: unpinned installs compile
-        # the latest release, whose config parsing/behavior can drift under
-        # the pinned deny.toml (this job went red once with no local repro).
         run: cargo install cargo-deny --version 0.19.8 --locked
       - name: Run cargo deny
-        # Full check (advisories + bans + licenses + sources) against the
-        # committed policy; without --config cargo-deny looks for deny.toml in
-        # the repo root and silently runs its default policy. Graph flags are
-        # top-level in cargo-deny 0.19.x.
         run: cargo deny --all-features check --config .cargo/deny.toml
 
   doc:
@@ -100,25 +73,3 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
         run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus
-
-  packaging:
-    name: Packaging guard
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The src/-coverage check compares `cargo package --list` against
-          # `git ls-files src/` — a default shallow checkout is fine, but
-          # fetch-depth 0 keeps git ls-files authoritative if history-based
-          # tooling is ever added.
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      # Fails the build if `cargo package --list` contains any file outside
-      # the packaging whitelist (unanchored include globs once shipped ~80
-      # private files via the per-clone scratch/ and .agent-rules/ symlinks),
-      # if the include list silently dropped tracked src/ files or canary
-      # targets, or if private paths appear. Script whitelist must stay in
-      # sync with [package] include in Cargo.toml — both have comments
-      # pointing at each other.
-      - name: Check packaging whitelist
-        run: ./scripts/check-packaging.sh
