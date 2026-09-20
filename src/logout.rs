@@ -13,12 +13,15 @@ where
     /// Invalidates and revokes an active session (logout).
     ///
     /// The `session_id` is the raw wire token; the engine hashes it before
-    /// touching the store.
+    /// touching the store. Malformed wire tokens are a cheap no-op rejection.
     ///
     /// # Errors
     /// Returns a store error if the lookup or deletion fails.
     #[must_use = "sign-out must be acknowledged"]
     pub fn logout(&self, session_id: &SessionId) -> Result<(), AuthError> {
+        if !SessionId::is_valid_wire_format(session_id.as_str()) {
+            return Ok(());
+        }
         let storage_id = session_id.hash_for_storage();
         let session = match self.sessions.find_session(&storage_id) {
             Ok(Some(session)) => session,
@@ -41,12 +44,16 @@ where
     /// Revokes a single session by its raw wire token.
     ///
     /// Returns `Ok(true)` if the session existed and was revoked,
-    /// `Ok(false)` if it did not exist.
+    /// `Ok(false)` if it did not exist. Malformed wire tokens report
+    /// `Ok(false)` without any store access.
     ///
     /// # Errors
     /// Returns a store error if the lookup or deletion fails.
     #[must_use = "session revocation should not be silently ignored"]
     pub fn revoke_session(&self, session_id: &SessionId) -> Result<bool, AuthError> {
+        if !SessionId::is_valid_wire_format(session_id.as_str()) {
+            return Ok(false);
+        }
         let storage_id = session_id.hash_for_storage();
         let existed = match self.sessions.find_session(&storage_id) {
             Ok(Some(_)) => true,

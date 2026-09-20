@@ -5,13 +5,29 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
+mod common;
+
+use std::sync::Arc;
+
+use common::{IdentityHasher, TestUser, hash_password};
 use dioxus_auth::prelude::{
-    Argon2Hasher, AuthError, AuthStatus, CookieConfig, InMemoryRateLimiter, MemoryTokenStorage,
-    OriginValidation, PasswordHasher, RateLimiter, SameSite, Session, SessionId, TokenStorage,
+    Argon2Hasher, AuthEngine, AuthError, AuthStatus, CookieConfig, InMemoryRateLimiter,
+    LoginOptions, MemoryStore, MemoryTokenStorage, OriginValidation, PasswordHasher,
+    PasswordUserStore, RateLimiter, SameSite, Session, SessionId, SessionStore, TokenStorage,
+    UserStore,
 };
 
 fn storage_session() -> Session<u64> {
     return Session::new(SessionId::generate(), 1, 1000, 2000);
+}
+
+fn seeded_login_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUser>> {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    return AuthEngine::builder(Arc::clone(&store), store)
+        .build()
+        .expect("engine construction must succeed");
 }
 
 #[test]
@@ -183,4 +199,96 @@ fn auth_status_variants_compare_by_value() {
     );
     assert_eq!(AuthStatus::<u64>::Guest, AuthStatus::<u64>::Guest);
     assert_eq!(AuthStatus::<u64>::Loading, AuthStatus::<u64>::Loading);
+}
+
+#[test]
+fn malformed_wire_tokens_are_cheap_rejections() {
+    let engine = seeded_login_engine();
+    let malformed = SessionId::new("not-a-64-char-hex-token");
+
+    assert!(engine.validate_session(&malformed).unwrap().is_none());
+    assert!(engine.logout(&malformed).is_ok());
+    assert!(!engine.revoke_session(&malformed).unwrap());
+}
+
+#[test]
+fn login_options_accessors_and_helpers() {
+    let empty = LoginOptions::new();
+    assert_eq!(empty.ip_address(), None);
+    assert_eq!(empty.user_agent(), None);
+    assert_eq!(LoginOptions::default(), empty);
+
+    let filled = empty
+        .with_ip_address(Some("198.51.100.1"))
+        .with_user_agent(Some("agent"));
+    assert_eq!(filled.ip_address(), Some("198.51.100.1"));
+    assert_eq!(filled.user_agent(), Some("agent"));
+}
+
+#[test]
+fn login_without_options_has_no_client_metadata() {
+    let engine = seeded_login_engine();
+
+    let (_, session) = engine.login("alice", "pw").unwrap();
+    assert_eq!(session.ip_address(), None);
+    assert_eq!(session.user_agent(), None);
+}
+
+#[test]
+fn login_with_options_records_ip_and_user_agent() {
+    let engine = seeded_login_engine();
+    let options = LoginOptions::new()
+        .with_ip_address(Some("203.0.113.7"))
+        .with_user_agent(Some("dioxus-test/1.0"));
+
+    let (user, session) = engine.login_with_options("alice", "pw", options).unwrap();
+    assert_eq!(user.id, 1);
+    assert_eq!(session.ip_address(), Some("203.0.113.7"));
+    assert_eq!(session.user_agent(), Some("dioxus-test/1.0"));
+
+    let storage_id = session.id().hash_for_storage();
+    let stored = engine
+        .session_store()
+        .find_session(&storage_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.ip_address(), Some("203.0.113.7"));
+    assert_eq!(stored.user_agent(), Some("dioxus-test/1.0"));
+}
+
+#[test]
+fn custom_hasher_override_is_used_for_verification() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", String::from("correct"));
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+        .hasher(IdentityHasher)
+        .build()
+        .expect("engine construction must succeed");
+
+    assert!(engine.hasher().verify("x", "x").unwrap());
+    let (user, _) = engine.login("alice", "correct").unwrap();
+    assert_eq!(user.id, 1);
+    let result = engine.login("alice", "wrong");
+    assert_eq!(result.unwrap_err(), AuthError::InvalidCredentials);
+}
+
+#[test]
+fn memory_store_clone_is_independent() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let session = Session::new(SessionId::generate().hash_for_storage(), 1, 100, 200);
+    store.save_session(session.clone()).unwrap();
+
+    let clone = store.clone();
+    assert!(clone.find_by_identifier("alice").unwrap().is_some());
+    assert!(clone.find_session(session.id()).unwrap().is_some());
+
+    clone.insert_user(TestUser::new(2, "bob"));
+    clone.delete_session(session.id()).unwrap();
+
+    assert!(store.find_by_id(&2).unwrap().is_none());
+    assert!(clone.find_by_id(&2).unwrap().is_some());
+    assert!(store.find_session(session.id()).unwrap().is_some());
+    assert!(clone.find_session(session.id()).unwrap().is_none());
 }

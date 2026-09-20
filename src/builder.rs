@@ -1,9 +1,10 @@
 //! Builder for the authentication engine.
 
+use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::engine::{AuthEngine, UserCallback};
+use crate::engine::{AuthEngine, UserCallback, now_unix};
 use crate::error::AuthError;
 use crate::hash::Argon2Hasher;
 use crate::rate_limit::RateLimiter;
@@ -38,6 +39,32 @@ where
     on_sign_out: Option<UserCallback<U::User>>,
     on_session_validated: Option<UserCallback<U::User>>,
     rate_limiter: Option<Arc<dyn RateLimiter>>,
+    now: Arc<dyn Fn() -> u64 + Send + Sync>,
+}
+
+impl<U, S> fmt::Debug for AuthEngineBuilder<U, S>
+where
+    U: UserStore,
+    S: SessionStore<Id = U::Id>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // reason: the clock is a closure; it is irrelevant for debugging and is
+        // elided, and callbacks are reported as (un)set instead of rendered.
+        return f
+            .debug_struct("AuthEngineBuilder")
+            .field("users", &self.users)
+            .field("sessions", &self.sessions)
+            .field("hasher", &self.hasher)
+            .field("session_ttl_secs", &self.session_ttl_secs)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
+            .field("single_active_session", &self.single_active_session)
+            .field("on_sign_in", &self.on_sign_in.is_some())
+            .field("on_sign_out", &self.on_sign_out.is_some())
+            .field("on_session_validated", &self.on_session_validated.is_some())
+            .field("rate_limiter", &self.rate_limiter)
+            .field("now", &"<clock>")
+            .finish();
+    }
 }
 
 impl<U, S> AuthEngineBuilder<U, S>
@@ -59,6 +86,7 @@ where
             on_sign_out: None,
             on_session_validated: None,
             rate_limiter: None,
+            now: Arc::new(now_unix),
         };
     }
 
@@ -132,6 +160,16 @@ where
         return self;
     }
 
+    /// Overrides the clock producing session timestamps.
+    ///
+    /// Defaults to the real system clock. Tests inject a deterministic clock to
+    /// exercise idle-timeout and absolute-TTL expiry without sleeping.
+    #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
+    pub fn with_clock(mut self, now: impl Fn() -> u64 + Send + Sync + 'static) -> Self {
+        self.now = Arc::new(now);
+        return self;
+    }
+
     /// Builds the authentication engine.
     ///
     /// # Errors
@@ -158,6 +196,7 @@ where
             on_session_validated: self.on_session_validated,
             rate_limiter: self.rate_limiter,
             dummy_hash,
+            now: self.now,
         });
     }
 }

@@ -1,6 +1,6 @@
 //! Central authentication flow orchestrator.
 
-use std::fmt::Debug;
+use std::fmt;
 use std::sync::Arc;
 
 use crate::builder::AuthEngineBuilder;
@@ -98,6 +98,34 @@ where
     /// take indistinguishable time. This closes the user-enumeration timing
     /// side-channel.
     pub(crate) dummy_hash: String,
+    /// Clock producing the current UNIX timestamp in seconds.
+    pub(crate) now: Arc<dyn Fn() -> u64 + Send + Sync>,
+}
+
+impl<U, S> fmt::Debug for AuthEngine<U, S>
+where
+    U: UserStore,
+    S: SessionStore<Id = U::Id>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // reason: the dummy hash is a constant and the clock is a closure; both
+        // are irrelevant for debugging and are elided.
+        return f
+            .debug_struct("AuthEngine")
+            .field("users", &self.users)
+            .field("sessions", &self.sessions)
+            .field("hasher", &self.hasher)
+            .field("session_ttl_secs", &self.session_ttl_secs)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
+            .field("single_active_session", &self.single_active_session)
+            .field("on_sign_in", &self.on_sign_in.is_some())
+            .field("on_sign_out", &self.on_sign_out.is_some())
+            .field("on_session_validated", &self.on_session_validated.is_some())
+            .field("rate_limiter", &self.rate_limiter)
+            .field("dummy_hash", &self.dummy_hash.len())
+            .field("now", &"<clock>")
+            .finish();
+    }
 }
 
 impl<U, S> AuthEngine<U, S>

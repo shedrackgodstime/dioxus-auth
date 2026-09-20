@@ -8,13 +8,30 @@
 // reason: RULES 13.5/14.5 require explicit `return`; the reason'd allow mirrors
 // the same resolution already applied in src/lib.rs for the lib crate.
 
-use dioxus_auth::prelude::{Argon2Hasher, AuthUser, PasswordHasher};
+use dioxus_auth::prelude::{Argon2Hasher, AuthError, AuthUser, PasswordHasher};
 
 /// A minimal user for exercising the auth core.
 #[derive(Debug, Clone)]
 pub struct TestUser {
     pub id: u64,
     pub name: String,
+}
+
+/// A password hasher that treats the stored string as the plaintext.
+///
+/// Used to make credential verification instant in tests that exercise
+/// concurrency or expiry rather than hashing behavior.
+#[derive(Debug)]
+pub struct IdentityHasher;
+
+impl PasswordHasher for IdentityHasher {
+    fn hash(&self, password: &str) -> Result<String, AuthError> {
+        return Ok(String::from(password));
+    }
+
+    fn verify(&self, password: &str, hash: &str) -> Result<bool, AuthError> {
+        return Ok(password == hash);
+    }
 }
 
 impl AuthUser for TestUser {

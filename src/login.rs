@@ -88,7 +88,7 @@ where
             return Err(AuthError::InvalidCredentials);
         }
 
-        let now = crate::engine::now_unix();
+        let now = (self.now)();
         let expires_at = now + self.session_ttl_secs;
         let user_id = user.id();
 
@@ -103,7 +103,8 @@ where
         let storage_id = raw_id.hash_for_storage();
         let auth_hash = user.session_auth_hash().map(str::to_string);
 
-        let mut storage_session = Session::new(storage_id, user_id.clone(), now, expires_at);
+        let mut storage_session =
+            Session::new(storage_id, user_id.clone(), now, expires_at).with_last_active(now);
         if let Some(auth) = &auth_hash {
             storage_session = storage_session.with_auth_hash(auth.clone());
         }
@@ -118,11 +119,16 @@ where
             Err(e) => return Err(e),
         }
 
-        let wire_session = Session::new(raw_id, user_id, now, expires_at);
-        let wire_session = match auth_hash {
-            Some(auth) => wire_session.with_auth_hash(auth),
-            None => wire_session,
-        };
+        let mut wire_session = Session::new(raw_id, user_id, now, expires_at).with_last_active(now);
+        if let Some(auth) = &auth_hash {
+            wire_session = wire_session.with_auth_hash(auth.clone());
+        }
+        if let Some(ip) = options.ip_address() {
+            wire_session = wire_session.with_ip_address(ip);
+        }
+        if let Some(ua) = options.user_agent() {
+            wire_session = wire_session.with_user_agent(ua);
+        }
 
         self.fire_on_sign_in(&user);
         if let Some(limiter) = &self.rate_limiter {

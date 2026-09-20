@@ -16,6 +16,9 @@ where
     /// The engine hashes the wire token to its storage form before querying
     /// the store, so the store only ever sees `sha256(raw)`.
     ///
+    /// Malformed wire tokens (anything [`SessionId::is_valid_wire_format`]
+    /// rejects) are a cheap rejection before any hashing or lookup.
+    ///
     /// Checks that the session exists, is not expired, loads the corresponding
     /// user, and ensures the `auth_hash` has not been invalidated (e.g. by a
     /// password change). Idle timeout and sliding TTL are applied on success.
@@ -24,6 +27,9 @@ where
     /// Returns a store error if a lookup or update fails.
     #[must_use = "the validated user must be used"]
     pub fn validate_session(&self, session_id: &SessionId) -> Result<Option<U::User>, AuthError> {
+        if !SessionId::is_valid_wire_format(session_id.as_str()) {
+            return Ok(None);
+        }
         let storage_id = session_id.hash_for_storage();
         let session = match self.sessions.find_session(&storage_id) {
             Ok(Some(session)) => session,
@@ -31,7 +37,7 @@ where
             Err(e) => return Err(e),
         };
 
-        let now = crate::engine::now_unix();
+        let now = (self.now)();
 
         if session.is_expired_at(now) {
             if let Err(e) = self.drop_session(&storage_id) {
@@ -73,12 +79,18 @@ where
             }
         }
 
-        let new_expiry = session.created_at_unix() + self.session_ttl_secs;
-        if let Err(e) = self
-            .sessions
-            .touch_session_if_present(&storage_id, new_expiry, now)
-        {
-            return Err(e);
+        // reason: the storage record already carries `created + ttl` as its
+        // expiry, so without an idle timeout the only per-validation write
+        // (updating `last_active`) has no reader. Touching is therefore gated
+        // on a configured idle timeout (Spec 16 §2.1 "cheap write").
+        if self.idle_timeout_secs.is_some() {
+            let new_expiry = session.created_at_unix() + self.session_ttl_secs;
+            if let Err(e) = self
+                .sessions
+                .touch_session_if_present(&storage_id, new_expiry, now)
+            {
+                return Err(e);
+            }
         }
 
         self.fire_on_session_validated(&user);
