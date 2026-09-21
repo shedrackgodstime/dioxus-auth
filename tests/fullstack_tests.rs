@@ -158,6 +158,23 @@ fn error_code(result: &Result<TestUser, ServerFnError>) -> u16 {
     };
 }
 
+/// Asserts a response carries an emptied session cookie with `Max-Age=0`.
+fn assert_cleared_cookie(headers: &HeaderMap) {
+    let set_cookie = headers
+        .get(http::header::SET_COOKIE)
+        .expect("logout must set a response cookie")
+        .to_str()
+        .expect("the Set-Cookie header must be valid");
+    assert!(
+        set_cookie.contains("Max-Age=0"),
+        "logout must emit a clearing cookie"
+    );
+    assert!(
+        response_token(headers).is_empty(),
+        "logout must clear the cookie value"
+    );
+}
+
 #[tokio::test]
 async fn login_sets_a_valid_session_cookie() {
     let config = config();
@@ -218,20 +235,7 @@ async fn logout_clears_the_cookie_and_revokes_the_session() {
 
     let (result, headers) = run_logout(&config, Some(&token)).await;
     result.expect("logout must succeed");
-
-    let set_cookie = headers
-        .get(http::header::SET_COOKIE)
-        .expect("logout must set a response cookie")
-        .to_str()
-        .expect("the Set-Cookie header must be valid");
-    assert!(
-        set_cookie.contains("Max-Age=0"),
-        "logout must emit a clearing cookie"
-    );
-    assert!(
-        response_token(&headers).is_empty(),
-        "logout must clear the cookie value"
-    );
+    assert_cleared_cookie(&headers);
 
     let session = run_session(&config, Some(&token)).await;
     assert_eq!(error_code(&session), 401, "the session must be revoked");
@@ -242,20 +246,7 @@ async fn logout_clears_the_cookie_for_guests() {
     let config = config();
     let (result, headers) = run_logout(&config, None).await;
     result.expect("guest logout must succeed");
-
-    let set_cookie = headers
-        .get(http::header::SET_COOKIE)
-        .expect("guest logout must set a response cookie")
-        .to_str()
-        .expect("the Set-Cookie header must be valid");
-    assert!(
-        set_cookie.contains("Max-Age=0"),
-        "guest logout must emit a clearing cookie"
-    );
-    assert!(
-        response_token(&headers).is_empty(),
-        "guest logout must clear the cookie value"
-    );
+    assert_cleared_cookie(&headers);
 }
 
 #[tokio::test]
