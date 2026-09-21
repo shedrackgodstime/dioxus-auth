@@ -18,7 +18,8 @@ use tower::Service;
 
 use crate::dioxus::server::ServerAuthConfig;
 use crate::dioxus::server::blocking::run_blocking;
-use crate::dioxus::server::server_fn::authenticate_headers;
+use crate::dioxus::server::server_fn::{ServerError, authenticate_headers};
+use crate::error::AuthError;
 use crate::user::AuthUser;
 
 type BoxFuture = Pin<Box<dyn Future<Output = Result<Response, Infallible>> + Send + 'static>>;
@@ -165,9 +166,16 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
                 move || return authenticate_headers(&config, &headers)
             })
             .await;
-            let authenticated = match validation {
-                Ok(Ok((_, user))) => user.is_some(),
-                Ok(Err(_)) | Err(_) => false,
+            let outcome = match validation {
+                Ok(outcome) => outcome,
+                Err(_) => return Ok(server_error()),
+            };
+            let authenticated = match outcome {
+                Ok((_, Some(_))) => true,
+                Err(ServerError::Engine(AuthError::Internal(_))) => {
+                    return Ok(server_error());
+                }
+                Ok((_, None)) | Err(_) => false,
             };
             if !authenticated {
                 return Ok(unauthorized());
@@ -179,6 +187,14 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
 
 fn unauthorized() -> Response {
     return (StatusCode::UNAUTHORIZED, String::from("unauthorized")).into_response();
+}
+
+fn server_error() -> Response {
+    return (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        String::from("internal server error"),
+    )
+        .into_response();
 }
 
 /// Redacted debug: the inner route carries handler state not worth rendering.

@@ -25,6 +25,13 @@ impl CookieConfig {
     /// Defaults: `name = "session"`, `http_only = true`, `secure = true`,
     /// `same_site = SameSite::Lax`, `path = "/"`, no `domain`, no `max_age`.
     ///
+    /// `max_age` defaults to `None` (a session cookie that dies with the
+    /// browser session), independent of the engine's session TTL: size
+    /// [`with_max_age`](Self::with_max_age) to the engine TTL for persistent
+    /// login. Server-side sessions outlive a vanished cookie in that case;
+    /// stores drop expired sessions lazily on use, so long-lived deployments
+    /// want a store with background cleanup.
+    ///
     /// # Examples
     ///
     /// ```

@@ -17,7 +17,10 @@ use crate::user::AuthUser;
 /// The engine is responsible for passing the storage form.
 ///
 /// Lookups are linear scans over `Vec`s — appropriate for the default
-/// single-process development store. `Clone` neither blocks nor panics on a
+/// single-process development store. Expired sessions are dropped lazily on
+/// use, never by a background task, so this store is unsuitable for
+/// long-lived deployments without external cleanup.
+/// `Clone` neither blocks nor panics on a
 /// poisoned lock: it falls back to an empty store (see `cloned_or_empty`).
 #[derive(Debug)]
 pub struct MemoryStore<User: AuthUser> {
