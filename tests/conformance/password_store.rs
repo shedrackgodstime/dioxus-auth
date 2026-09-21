@@ -2,9 +2,12 @@
 
 #[path = "../common/mod.rs"]
 mod common;
+#[path = "../common/password.rs"]
+mod password;
 
-use common::{TestUser, hash_password};
+use common::TestUser;
 use dioxus_auth::prelude::{MemoryStore, PasswordUserStore};
+use password::hash_password;
 
 #[test]
 fn find_by_identifier_returns_user_and_stored_hash() {

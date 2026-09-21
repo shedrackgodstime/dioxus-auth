@@ -16,10 +16,12 @@
 #![allow(clippy::unused_async)]
 
 mod common;
+#[path = "common/identity_hasher.rs"]
+mod identity_hasher;
 
 use std::sync::Arc;
 
-use common::{IdentityHasher, TestUser};
+use common::TestUser;
 use dioxus_auth::prelude::{
     AuthEngine, AuthEngineHandle, AuthLayer, CookieConfig, LoginRequest, MemoryStore,
     RequireAuthLayer, ServerAuthConfig, ServerFnError, SessionId, current_user,
@@ -32,6 +34,7 @@ use dioxus_fullstack::axum::{
     routing::get,
 };
 use dioxus_fullstack::http::{self, HeaderMap, StatusCode};
+use identity_hasher::IdentityHasher;
 use tower::ServiceExt;
 
 dioxus_auth::fullstack_server_fns!(TestUser);

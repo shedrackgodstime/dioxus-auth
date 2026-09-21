@@ -180,6 +180,7 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
 ///
 /// Returns the well-formed wire token and validated user. A missing or
 /// malformed token yields `(None, None)`; engine failures are returned.
+#[must_use = "the validated session must be used"]
 pub fn authenticate_headers<U: AuthUser>(
     config: &ServerAuthConfig<U>,
     headers: &http::HeaderMap,
@@ -239,6 +240,7 @@ fn current_config<U: AuthUser>() -> Result<ServerAuthConfig<U>, ServerError> {
 /// # Errors
 /// Returns `ServerError::AlreadyInitialized` if a configuration for this user
 /// type is already registered.
+#[must_use = "initialization errors must be handled"]
 pub fn register_global<U: AuthUser>(config: ServerAuthConfig<U>) -> Result<(), ServerError> {
     let mut lock = global_registry().lock();
     let key = TypeId::of::<ServerAuthConfig<U>>();

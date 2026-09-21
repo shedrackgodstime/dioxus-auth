@@ -6,16 +6,22 @@
 #![allow(clippy::needless_return)]
 
 mod common;
+#[path = "common/identity_hasher.rs"]
+mod identity_hasher;
+#[path = "common/password.rs"]
+mod password;
 
 use std::sync::Arc;
 
-use common::{IdentityHasher, TestUser, VersionedUser, hash_password};
+use common::TestUser;
 use dioxus_auth::prelude::{
-    Argon2Hasher, AuthEngine, AuthError, AuthStatus, CookieConfig, InMemoryRateLimiter,
+    Argon2Hasher, AuthEngine, AuthError, AuthStatus, AuthUser, CookieConfig, InMemoryRateLimiter,
     LoginOptions, MemoryStore, MemoryTokenStorage, OriginValidation, PasswordHasher,
     PasswordUserStore, RateLimiter, SameSite, Session, SessionId, SessionStore, TokenStorage,
     UserStore,
 };
+use identity_hasher::IdentityHasher;
+use password::hash_password;
 
 fn storage_session() -> Session<u64> {
     return Session::new(SessionId::generate(), 1, 1000, 2000);
@@ -28,6 +34,46 @@ fn seeded_login_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUs
     return AuthEngine::builder(Arc::clone(&store), store)
         .build()
         .expect("engine construction must succeed");
+}
+
+/// A user whose credential version (`session_auth_hash`) can be rotated.
+#[derive(Debug, Clone)]
+struct VersionedUser {
+    id: u64,
+    name: String,
+    version: String,
+}
+
+impl AuthUser for VersionedUser {
+    type Id = u64;
+
+    fn id(&self) -> Self::Id {
+        return self.id;
+    }
+
+    fn display_name(&self) -> Option<String> {
+        return Some(self.name.clone());
+    }
+
+    fn session_auth_hash(&self) -> Option<&str> {
+        return Some(&self.version);
+    }
+
+    fn clone_box(&self) -> Box<dyn AuthUser<Id = Self::Id>> {
+        return Box::new(self.clone());
+    }
+}
+
+impl VersionedUser {
+    /// Creates a versioned test user.
+    #[must_use]
+    fn new(id: u64, name: impl Into<String>, version: impl Into<String>) -> Self {
+        return Self {
+            id,
+            name: name.into(),
+            version: version.into(),
+        };
+    }
 }
 
 #[test]

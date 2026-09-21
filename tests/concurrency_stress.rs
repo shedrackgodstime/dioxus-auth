@@ -9,13 +9,16 @@
 #![allow(clippy::needless_return)]
 
 mod common;
+#[path = "common/identity_hasher.rs"]
+mod identity_hasher;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use common::{IdentityHasher, TestUser};
+use common::TestUser;
 use dioxus_auth::prelude::{AuthEngine, AuthError, MemoryStore, Session, SessionId, SessionStore};
+use identity_hasher::IdentityHasher;
 use parking_lot::Mutex;
 
 const FIVE_SECONDS: Duration = Duration::from_secs(60);

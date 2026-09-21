@@ -13,6 +13,7 @@ use crate::user::AuthUser;
 /// # Errors
 /// Returns `ServerError::AlreadyInitialized` if a configuration for this user
 /// type was already registered.
+#[must_use = "initialization errors must be handled"]
 pub fn server_init<U: AuthUser>(config: ServerAuthConfig<U>) -> Result<(), ServerError> {
     return super::server_fn::register_global(config);
 }

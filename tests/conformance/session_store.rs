@@ -51,27 +51,37 @@ fn delete_session_removes_it() {
 #[test]
 fn delete_user_sessions_removes_only_that_user() {
     let store = MemoryStore::<TestUser>::new();
-    let alice_session = storage_session(1, 1000, 2000);
-    let bob_session = storage_session(2, 1000, 2000);
+    let alice = TestUser::new(1, "alice");
+    let bob = TestUser::new(2, "bob");
+    let alice_session = storage_session(alice.id, 1000, 2000);
+    let bob_session = storage_session(bob.id, 1000, 2000);
     store.save_session(alice_session).unwrap();
     store.save_session(bob_session).unwrap();
 
-    store.delete_user_sessions(&1).unwrap();
+    store.delete_user_sessions(&alice.id).unwrap();
 
-    assert_eq!(store.list_user_sessions(&1).unwrap().len(), 0);
-    let bob_sessions = store.list_user_sessions(&2).unwrap();
+    assert_eq!(store.list_user_sessions(&alice.id).unwrap().len(), 0);
+    let bob_sessions = store.list_user_sessions(&bob.id).unwrap();
     assert_eq!(bob_sessions.len(), 1);
-    assert_eq!(bob_sessions[0].user_id(), &2);
+    assert_eq!(bob_sessions[0].user_id(), &bob.id);
 }
 
 #[test]
 fn list_user_sessions_returns_matching_sessions_only() {
     let store = MemoryStore::<TestUser>::new();
-    store.save_session(storage_session(1, 1000, 1200)).unwrap();
-    store.save_session(storage_session(1, 1300, 1500)).unwrap();
-    store.save_session(storage_session(2, 1000, 1200)).unwrap();
+    let alice = TestUser::new(1, "alice");
+    let bob = TestUser::new(2, "bob");
+    store
+        .save_session(storage_session(alice.id, 1000, 1200))
+        .unwrap();
+    store
+        .save_session(storage_session(alice.id, 1300, 1500))
+        .unwrap();
+    store
+        .save_session(storage_session(bob.id, 1000, 1200))
+        .unwrap();
 
-    let alice_sessions = store.list_user_sessions(&1).unwrap();
+    let alice_sessions = store.list_user_sessions(&alice.id).unwrap();
     assert_eq!(alice_sessions.len(), 2);
 }
 

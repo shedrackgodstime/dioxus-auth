@@ -63,6 +63,8 @@ macro_rules! fullstack_server_fns {
     ($user:ty, $login:literal, $logout:literal, $session:literal) => {
         #[doc = concat!("Authenticates the user and sets the session cookie. `", $login, "`.")]
         #[::dioxus_fullstack::post($login)]
+        // reason: generated fns keep the crate's explicit-return style, use `?`
+        // for the fallible wire calls, and are async per the server-fn contract.
         #[allow(
             clippy::needless_return,
             clippy::question_mark_used,
@@ -83,6 +85,8 @@ macro_rules! fullstack_server_fns {
 
         #[doc = concat!("Revokes the current session and clears the cookie. The clearing cookie is always emitted, so guest logout is idempotent. `", $logout, "`.")]
         #[::dioxus_fullstack::post($logout)]
+        // reason: generated fns keep the crate's explicit-return style, use `?`
+        // for the fallible wire calls, and are async per the server-fn contract.
         #[allow(
             clippy::needless_return,
             clippy::question_mark_used,
@@ -99,6 +103,8 @@ macro_rules! fullstack_server_fns {
 
         #[doc = concat!("Resolves the current session. `", $session, "`.")]
         #[::dioxus_fullstack::post($session)]
+        // reason: generated fns keep the crate's explicit-return style, use `?`
+        // for the fallible wire calls, and are async per the server-fn contract.
         #[allow(
             clippy::needless_return,
             clippy::question_mark_used,

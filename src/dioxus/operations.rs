@@ -19,18 +19,21 @@ pub trait AuthOperations<T: AuthUser>: Send + Sync {
     ///
     /// # Errors
     /// Mirrors [`AuthEngine::login`](crate::engine::AuthEngine::login).
+    #[must_use = "the authenticated user and wire session must be used"]
     fn login(&self, identifier: &str, password: &str) -> Result<(T, SessionId), AuthError>;
 
     /// Revokes a session, identified here by its raw wire token.
     ///
     /// # Errors
     /// Mirrors [`AuthEngine::logout`](crate::engine::AuthEngine::logout).
+    #[must_use = "session revocation errors must be handled"]
     fn logout(&self, session_id: &SessionId) -> Result<(), AuthError>;
 
     /// Validates a raw wire token and resolves the current user.
     ///
     /// # Errors
     /// Mirrors [`AuthEngine::validate_session`](crate::engine::AuthEngine::validate_session).
+    #[must_use = "the validated user must be used"]
     fn validate(&self, session_id: &SessionId) -> Result<Option<T>, AuthError>;
 }
 

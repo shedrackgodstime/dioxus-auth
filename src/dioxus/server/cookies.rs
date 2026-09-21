@@ -6,6 +6,7 @@ use crate::dioxus::server::ServerError;
 use crate::security::{CookieConfig, SameSite};
 
 /// Extracts the value of the named cookie from the request's `Cookie` header.
+#[must_use]
 pub fn request_cookie_token(headers: &http::HeaderMap, name: &str) -> Option<String> {
     let mut token = None;
     for value in headers.get_all(http::header::COOKIE) {
@@ -54,6 +55,7 @@ pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
 /// # Errors
 /// Returns `ServerError::MissingContext` outside a request context, or
 /// `ServerError::InvalidCookieValue` if the value cannot be a header.
+#[must_use = "cookie write errors must be handled"]
 pub fn write_session_cookie(cfg: &CookieConfig, token: Option<&str>) -> Result<(), ServerError> {
     let ctx = match FullstackContext::current() {
         Some(ctx) => ctx,

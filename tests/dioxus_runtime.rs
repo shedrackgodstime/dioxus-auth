@@ -6,12 +6,14 @@
 #![allow(clippy::needless_return)]
 
 mod common;
+#[path = "common/identity_hasher.rs"]
+mod identity_hasher;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use common::{IdentityHasher, TestUser};
+use common::TestUser;
 use dioxus::prelude::{Callback, Element, Props, VNode, rsx};
 use dioxus_auth::prelude::{
     AuthContext, AuthEngine, AuthEngineHandle, AuthProvider, AuthStatus, MemoryStore,
@@ -23,6 +25,7 @@ use dioxus_router::{
     Routable,
     components::{HistoryProvider, Router},
 };
+use identity_hasher::IdentityHasher;
 
 thread_local! {
     static CONTEXT_SLOT: RefCell<Option<AuthContext<TestUser>>> = const { RefCell::new(None) };
@@ -59,6 +62,7 @@ struct ProbeProps {
     marker: u8,
 }
 
+// reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 fn Probe(_: ProbeProps) -> Element {
     let auth = use_auth::<TestUser>();
@@ -79,6 +83,7 @@ struct ContextCaptureProps {
     marker: u8,
 }
 
+// reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 fn ContextCapture(_: ContextCaptureProps) -> Element {
     let auth = use_auth::<TestUser>();
@@ -103,6 +108,7 @@ struct HomeProps {
     marker: u8,
 }
 
+// reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 fn Home(_: HomeProps) -> Element {
     return rsx! {
@@ -119,6 +125,7 @@ struct LoginProps {
     marker: u8,
 }
 
+// reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 fn Login(_: LoginProps) -> Element {
     return rsx! {
@@ -136,6 +143,7 @@ struct StateRootProps {
     token_storage: TokenStorageHandle,
 }
 
+// reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 fn StateRoot(props: StateRootProps) -> Element {
     return rsx! {
@@ -156,6 +164,7 @@ struct RouterRootProps {
     token_storage: TokenStorageHandle,
 }
 
+// reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 fn RouterRoot(props: RouterRootProps) -> Element {
     let history = props.history;

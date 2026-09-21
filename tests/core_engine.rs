@@ -5,15 +5,18 @@
 #![allow(clippy::needless_return)]
 
 mod common;
+#[path = "common/password.rs"]
+mod password;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use common::{TestUser, hash_password};
+use common::TestUser;
 use dioxus_auth::prelude::{
     AuthEngine, AuthError, InMemoryRateLimiter, MemoryStore, SessionId, SessionStore, UserStore,
 };
+use password::hash_password;
 
 fn seeded_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUser>> {
     let store = MemoryStore::<TestUser>::new();
