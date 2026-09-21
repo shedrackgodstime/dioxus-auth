@@ -28,7 +28,7 @@ pub fn request_cookie_token(headers: &http::HeaderMap, name: &str) -> Option<Str
 #[must_use]
 pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
     let mut attributes = vec![
-        format!("{}={}", cfg.name(), token.unwrap_or_default()),
+        format!("{}={}", cfg.name(), token.unwrap_or("")),
         format!("Path={}", cfg.path()),
     ];
     if cfg.http_only() {

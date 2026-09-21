@@ -1,11 +1,11 @@
 //! Request-scoped server authentication context.
 
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use dioxus_fullstack::{FullstackContext, http};
 use parking_lot::Mutex;
+use rustc_hash::FxHashMap;
 
 use crate::dioxus::operations::AuthEngineHandle;
 use crate::dioxus::server::cookies::request_cookie_token;
@@ -201,10 +201,10 @@ pub fn authenticate_headers<U: AuthUser>(
 }
 
 type BoxedConfig = Arc<dyn Any + Send + Sync>;
-static GLOBAL: OnceLock<Mutex<HashMap<TypeId, BoxedConfig>>> = OnceLock::new();
+static GLOBAL: OnceLock<Mutex<FxHashMap<TypeId, BoxedConfig>>> = OnceLock::new();
 
-fn global_registry() -> &'static Mutex<HashMap<TypeId, BoxedConfig>> {
-    return GLOBAL.get_or_init(|| return Mutex::new(HashMap::new()));
+fn global_registry() -> &'static Mutex<FxHashMap<TypeId, BoxedConfig>> {
+    return GLOBAL.get_or_init(|| return Mutex::new(FxHashMap::default()));
 }
 
 /// Locates the engine configuration for this request or process.
