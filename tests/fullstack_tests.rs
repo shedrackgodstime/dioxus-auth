@@ -1,5 +1,5 @@
 //! End-to-end tests for the fullstack server slice: the generated server
-//! functions, cookie handling, and the filets middleware.
+//! functions, cookie handling, and the fullstack middleware.
 //!
 //! Runs natively with both the `dioxus-fullstack` and `server` features:
 //! `cargo test --features dioxus-fullstack,server --test fullstack_tests`.
@@ -22,7 +22,7 @@ use std::sync::Arc;
 use common::{IdentityHasher, TestUser};
 use dioxus_auth::prelude::{
     AuthEngine, AuthEngineHandle, AuthLayer, CookieConfig, LoginRequest, MemoryStore,
-    RequireAuthLayer, ServerAuthConfig, ServerError, ServerFnError, SessionId, require_user,
+    RequireAuthLayer, ServerAuthConfig, ServerFnError, SessionId, current_user,
 };
 use dioxus_fullstack::FullstackContext;
 use dioxus_fullstack::axum::{
@@ -39,11 +39,12 @@ dioxus_auth::fullstack_server_fns!(TestUser);
 const COOKIE: &str = "dioxus_auth_test_session";
 const IDENTIFIER: &str = "ada";
 const PASSWORD: &str = "loves auth";
+const USER_ID: u64 = 7;
 
 /// A server auth configuration with one seeded identity: `ada` / `loves auth`.
 fn config() -> ServerAuthConfig<TestUser> {
     let store = MemoryStore::<TestUser>::new();
-    store.insert_user_with_password(TestUser::new(7, "ada"), IDENTIFIER, PASSWORD);
+    store.insert_user_with_password(TestUser::new(USER_ID, IDENTIFIER), IDENTIFIER, PASSWORD);
     let store = Arc::new(store);
     let engine = Arc::new(
         AuthEngine::builder(Arc::clone(&store), store)
@@ -58,11 +59,15 @@ fn config() -> ServerAuthConfig<TestUser> {
 }
 
 /// Builds request parts for a server-function call: the config rides along in
-/// the request extensions exactly as [`auth_middleware`] would install it.
-fn parts(config: &ServerAuthConfig<TestUser>, token: Option<&str>) -> http::request::Parts {
+/// the request extensions exactly as [`AuthLayer`] would install it.
+fn parts(
+    config: &ServerAuthConfig<TestUser>,
+    token: Option<&str>,
+    uri: &str,
+) -> http::request::Parts {
     let mut request = http::Request::builder()
         .method(http::Method::POST)
-        .uri("/api/auth/session")
+        .uri(uri)
         .extension(Arc::new(config.clone()));
     if let Some(token) = token {
         request = request.header(http::header::COOKIE, format!("{COOKIE}={token}"));
@@ -93,14 +98,16 @@ fn response_token(headers: &HeaderMap) -> String {
 async fn run_login(
     config: &ServerAuthConfig<TestUser>,
     cookie: Option<&str>,
+    password: &str,
 ) -> (Result<TestUser, ServerFnError>, HeaderMap) {
-    let context = FullstackContext::new(parts(config, cookie));
+    let password = String::from(password);
+    let context = FullstackContext::new(parts(config, cookie, "/api/auth/login"));
     let probe = context.clone();
     let result = context
         .scope(async move {
             return dioxus_auth_login(LoginRequest {
                 identifier: String::from(IDENTIFIER),
-                password: String::from(PASSWORD),
+                password,
             })
             .await;
         })
@@ -118,7 +125,7 @@ async fn run_session(
     config: &ServerAuthConfig<TestUser>,
     cookie: Option<&str>,
 ) -> Result<TestUser, ServerFnError> {
-    let context = FullstackContext::new(parts(config, cookie));
+    let context = FullstackContext::new(parts(config, cookie, "/api/auth/session"));
     return context
         .scope(async move { return dioxus_auth_session().await })
         .await;
@@ -129,7 +136,7 @@ async fn run_logout(
     config: &ServerAuthConfig<TestUser>,
     cookie: Option<&str>,
 ) -> (Result<(), ServerFnError>, HeaderMap) {
-    let context = FullstackContext::new(parts(config, cookie));
+    let context = FullstackContext::new(parts(config, cookie, "/api/auth/logout"));
     let probe = context.clone();
     let result = context
         .scope(async move { return dioxus_auth_logout().await })
@@ -154,10 +161,10 @@ fn error_code(result: &Result<TestUser, ServerFnError>) -> u16 {
 #[tokio::test]
 async fn login_sets_a_valid_session_cookie() {
     let config = config();
-    let (result, headers) = run_login(&config, None).await;
+    let (result, headers) = run_login(&config, None, PASSWORD).await;
 
     let user = result.expect("login must succeed");
-    assert_eq!(user.id, 7);
+    assert_eq!(user.id, USER_ID);
 
     let token = response_token(&headers);
     assert!(
@@ -166,22 +173,13 @@ async fn login_sets_a_valid_session_cookie() {
     );
     let session = run_session(&config, Some(&token)).await;
     let resolved = session.expect("the session must resolve");
-    assert_eq!(resolved.id, 7);
+    assert_eq!(resolved.id, USER_ID);
 }
 
 #[tokio::test]
 async fn login_rejects_wrong_password_with_401() {
     let config = config();
-    let context = FullstackContext::new(parts(&config, None));
-    let result = context
-        .scope(async move {
-            return dioxus_auth_login(LoginRequest {
-                identifier: String::from(IDENTIFIER),
-                password: String::from("not the password"),
-            })
-            .await;
-        })
-        .await;
+    let (result, _) = run_login(&config, None, "not the password").await;
     assert_eq!(error_code(&result), 401);
 }
 
@@ -202,21 +200,20 @@ async fn session_returns_401_for_malformed_tokens() {
 #[tokio::test]
 async fn session_resolves_the_authenticated_user() {
     let config = config();
-    let (login, _) = run_login(&config, None).await;
+    let (login, headers) = run_login(&config, None, PASSWORD).await;
     assert!(login.is_ok());
 
-    let token = run_login(&config, None).await.1;
-    let token = response_token(&token);
+    let token = response_token(&headers);
     let user = run_session(&config, Some(&token))
         .await
         .expect("session must resolve");
-    assert_eq!(user.id, 7);
+    assert_eq!(user.id, USER_ID);
 }
 
 #[tokio::test]
 async fn logout_clears_the_cookie_and_revokes_the_session() {
     let config = config();
-    let (_login, headers) = run_login(&config, None).await;
+    let (_login, headers) = run_login(&config, None, PASSWORD).await;
     let token = response_token(&headers);
 
     let (result, headers) = run_logout(&config, Some(&token)).await;
@@ -231,19 +228,45 @@ async fn logout_clears_the_cookie_and_revokes_the_session() {
         set_cookie.contains("Max-Age=0"),
         "logout must emit a clearing cookie"
     );
+    assert!(
+        response_token(&headers).is_empty(),
+        "logout must clear the cookie value"
+    );
 
     let session = run_session(&config, Some(&token)).await;
     assert_eq!(error_code(&session), 401, "the session must be revoked");
 }
 
 #[tokio::test]
+async fn logout_clears_the_cookie_for_guests() {
+    let config = config();
+    let (result, headers) = run_logout(&config, None).await;
+    result.expect("guest logout must succeed");
+
+    let set_cookie = headers
+        .get(http::header::SET_COOKIE)
+        .expect("guest logout must set a response cookie")
+        .to_str()
+        .expect("the Set-Cookie header must be valid");
+    assert!(
+        set_cookie.contains("Max-Age=0"),
+        "guest logout must emit a clearing cookie"
+    );
+    assert!(
+        response_token(&headers).is_empty(),
+        "guest logout must clear the cookie value"
+    );
+}
+
+#[tokio::test]
 async fn current_user_guest_defaults_to_none() {
     let config = config();
-    let context = FullstackContext::new(parts(&config, None));
+    let context = FullstackContext::new(parts(&config, None, "/api/auth/session"));
     let resolved = context
-        .scope(async move { return require_user::<TestUser>().err() })
+        .scope(async move { return current_user::<TestUser>() })
         .await;
-    assert!(matches!(resolved, Some(ServerError::MissingSession)));
+    let user = resolved.expect("guest lookup must succeed");
+    assert!(user.is_none(), "guests must resolve to no user");
 }
 
 #[tokio::test]
@@ -273,7 +296,7 @@ async fn probe(Extension(_config): Extension<Arc<ServerAuthConfig<TestUser>>>) -
 }
 
 #[tokio::test]
-async fn auth_middleware_attaches_the_config_to_every_request() {
+async fn auth_layer_attaches_the_config_to_every_request() {
     let config = config();
     let app = Router::new()
         .route("/", get(probe))
@@ -288,13 +311,13 @@ async fn auth_middleware_attaches_the_config_to_every_request() {
 }
 
 #[tokio::test]
-async fn require_auth_middleware_rejects_guests_and_accepts_valid_sessions() {
+async fn require_auth_layer_rejects_guests_and_accepts_valid_sessions() {
     let config = config();
-    let (_login, headers) = run_login(&config, None).await;
+    let (_login, headers) = run_login(&config, None, PASSWORD).await;
     let token = response_token(&headers);
     let app = Router::new()
         .route("/", get(probe))
-        .layer(RequireAuthLayer::for_config(config));
+        .layer(RequireAuthLayer::new(config));
 
     let guest = Request::builder()
         .uri("/")

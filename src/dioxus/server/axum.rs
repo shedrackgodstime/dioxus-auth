@@ -16,12 +16,24 @@ use tower::Layer;
 use tower::Service;
 
 use crate::dioxus::server::ServerAuthConfig;
-use crate::dioxus::server::cookies::request_cookie_token;
-use crate::status::SessionId;
+use crate::dioxus::server::server_fn::authenticate_headers;
 use crate::user::AuthUser;
 
 type BoxFuture =
     Pin<Box<dyn Future<Output = Result<Response, std::convert::Infallible>> + Send + 'static>>;
+
+const fn service_ready() -> std::task::Poll<Result<(), std::convert::Infallible>> {
+    return std::task::Poll::Ready(Ok(()));
+}
+
+fn forward(mut inner: Route, request: Request) -> BoxFuture {
+    return Box::pin(async move {
+        return match inner.call(request).await {
+            Ok(response) => Ok(response),
+            Err(infallible) => match infallible {},
+        };
+    });
+}
 
 /// Server auth middleware that makes the engine available to every request.
 ///
@@ -73,26 +85,21 @@ impl<U: AuthUser> Service<Request> for AuthService<U> {
         &mut self,
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        return std::task::Poll::Ready(Ok(()));
+        return service_ready();
     }
 
     fn call(&mut self, request: Request) -> Self::Future {
         let config = Arc::clone(&self.config);
-        let mut inner = self.inner.clone();
-        return Box::pin(async move {
-            let mut request = request;
-            request.extensions_mut().insert(config);
-            return match inner.call(request).await {
-                Ok(response) => Ok(response),
-                Err(infallible) => match infallible {},
-            };
-        });
+        let inner = self.inner.clone();
+        let mut request = request;
+        request.extensions_mut().insert(config);
+        return forward(inner, request);
     }
 }
 
 /// Server auth middleware that resolves the session and rejects guests.
 ///
-/// Validates the session cookie like
+/// Validates the session cookie with the same helper as
 /// [`ServerAuthContext::from_request`](super::server_fn::ServerAuthContext::from_request);
 /// unauthenticated or invalid requests receive `401 Unauthorized` without
 /// reaching the handler. Authenticated requests continue with the engine in
@@ -105,7 +112,7 @@ pub struct RequireAuthLayer<U: AuthUser> {
 impl<U: AuthUser> RequireAuthLayer<U> {
     /// Builds the requiring middleware from a server auth configuration.
     #[must_use]
-    pub fn for_config(config: ServerAuthConfig<U>) -> Self {
+    pub fn new(config: ServerAuthConfig<U>) -> Self {
         return Self {
             config: Arc::new(config),
         };
@@ -139,30 +146,23 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
         &mut self,
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        return std::task::Poll::Ready(Ok(()));
+        return service_ready();
     }
 
     fn call(&mut self, request: Request) -> Self::Future {
         let config = Arc::clone(&self.config);
-        let mut inner = self.inner.clone();
+        let inner = self.inner.clone();
         return Box::pin(async move {
             let mut request = request;
             request.extensions_mut().insert(Arc::clone(&config));
-            let Some(token) = request_cookie_token(request.headers(), config.cookie().name())
-            else {
-                return Ok(unauthorized());
+            let authenticated = match authenticate_headers(&config, request.headers()) {
+                Ok((_, user)) => user.is_some(),
+                Err(_) => false,
             };
-            if !SessionId::is_valid_wire_format(&token) {
+            if !authenticated {
                 return Ok(unauthorized());
             }
-            let validated = config.engine().engine().validate(&SessionId::new(token));
-            return match validated {
-                Ok(Some(_)) => match inner.call(request).await {
-                    Ok(response) => Ok(response),
-                    Err(infallible) => match infallible {},
-                },
-                Ok(None) | Err(_) => Ok(unauthorized()),
-            };
+            return forward(inner, request).await;
         });
     }
 }

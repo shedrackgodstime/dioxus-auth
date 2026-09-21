@@ -29,11 +29,12 @@ dioxus_auth::fullstack_server_fns!(TestUser);
 const COOKIE: &str = "dioxus_auth_global_test_session";
 const IDENTIFIER: &str = "ada";
 const PASSWORD: &str = "loves auth";
+const USER_ID: u64 = 7;
 
 /// Builds a fresh engine + config with the shared seeded identity.
 fn fresh_config() -> ServerAuthConfig<TestUser> {
     let store = MemoryStore::<TestUser>::new();
-    store.insert_user_with_password(TestUser::new(7, "ada"), IDENTIFIER, PASSWORD);
+    store.insert_user_with_password(TestUser::new(USER_ID, IDENTIFIER), IDENTIFIER, PASSWORD);
     let store = Arc::new(store);
     let engine = Arc::new(
         AuthEngine::builder(Arc::clone(&store), store)
@@ -53,10 +54,8 @@ fn fresh_config() -> ServerAuthConfig<TestUser> {
 
 /// Builds request parts with no request extension, so the process-global
 /// registry is the only way the configuration can resolve.
-fn parts(token: Option<&str>) -> http::request::Parts {
-    let mut request = http::Request::builder()
-        .method(http::Method::POST)
-        .uri("/api/auth/login");
+fn parts(token: Option<&str>, uri: &str) -> http::request::Parts {
+    let mut request = http::Request::builder().method(http::Method::POST).uri(uri);
     if let Some(token) = token {
         request = request.header(http::header::COOKIE, format!("{COOKIE}={token}"));
     }
@@ -87,7 +86,7 @@ async fn run_login_global(
     identifier: &str,
     password: &str,
 ) -> (Result<TestUser, ServerFnError>, HeaderMap) {
-    let context = FullstackContext::new(parts(None));
+    let context = FullstackContext::new(parts(None, "/api/auth/login"));
     let probe = context.clone();
     let result = context
         .scope(async move {
@@ -107,13 +106,13 @@ async fn run_login_global(
 }
 
 async fn run_session_global(cookie: Option<&str>) -> Result<TestUser, ServerFnError> {
-    let context = FullstackContext::new(parts(cookie));
+    let context = FullstackContext::new(parts(cookie, "/api/auth/session"));
     return context
         .scope(async move { return dioxus_auth_session().await })
         .await;
 }
 
-fn code(result: &Result<TestUser, ServerFnError>) -> u16 {
+fn error_code(result: &Result<TestUser, ServerFnError>) -> u16 {
     return match result {
         Err(ServerFnError::ServerError { code, .. }) => *code,
         Err(other) => panic!("unexpected server fn error shape: {other:?}"),
@@ -126,7 +125,7 @@ async fn guest_requests_resolve_via_the_process_global_config() {
     let _config = fresh_config();
     let result = run_session_global(None).await;
     assert_eq!(
-        code(&result),
+        error_code(&result),
         401,
         "a guest session must report 401, not 500"
     );
@@ -142,7 +141,7 @@ async fn authenticated_sessions_resolve_via_the_process_global_config() {
     let user = run_session_global(Some(&token))
         .await
         .expect("the session must resolve against the global config");
-    assert_eq!(user.id, 7);
+    assert_eq!(user.id, USER_ID);
 }
 
 #[tokio::test]

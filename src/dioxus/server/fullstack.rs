@@ -28,6 +28,12 @@
 //! [`server_init`](super::registry::server_init) or an axum
 //! [`AuthLayer`](super::axum::AuthLayer).
 
+use dioxus_fullstack::ServerFnError;
+
+use crate::dioxus::server::ServerError;
+use crate::dioxus::server::server_fn::auth_error_status;
+use crate::error::AuthError;
+
 /// The wire input for the generated login server function.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LoginRequest {
@@ -41,7 +47,7 @@ pub struct LoginRequest {
 /// `dioxus_auth_session` server functions for the given user type.
 ///
 /// Endpoints default to `POST /api/auth/login`, `POST /api/auth/logout`, and
-/// `GET /api/auth/session`; a second macro arm accepts the three endpoint
+/// `POST /api/auth/session`; a second macro arm accepts the three endpoint
 /// paths explicitly.
 #[macro_export]
 macro_rules! fullstack_server_fns {
@@ -75,7 +81,7 @@ macro_rules! fullstack_server_fns {
             return Ok(user);
         }
 
-        #[doc = concat!("Revokes the current session and clears the cookie. `", $logout, "`.")]
+        #[doc = concat!("Revokes the current session and clears the cookie. The clearing cookie is always emitted, so guest logout is idempotent. `", $logout, "`.")]
         #[::dioxus_fullstack::post($logout)]
         #[allow(
             clippy::needless_return,
@@ -86,8 +92,8 @@ macro_rules! fullstack_server_fns {
             let context = $crate::prelude::ServerAuthContext::<$user>::from_request()?;
             if let Some(token) = context.token() {
                 context.engine().engine().logout(token)?;
-                $crate::prelude::write_session_cookie(context.config().cookie(), None)?;
             }
+            $crate::prelude::write_session_cookie(context.config().cookie(), None)?;
             return Ok(());
         }
 
@@ -105,18 +111,9 @@ macro_rules! fullstack_server_fns {
     };
 }
 
-use dioxus_fullstack::ServerFnError;
-
-use crate::dioxus::server::ServerError;
-use crate::error::AuthError;
-
 impl From<AuthError> for ServerFnError {
     fn from(error: AuthError) -> Self {
-        let code = match error {
-            AuthError::InvalidCredentials | AuthError::PasswordHashError => 401,
-            AuthError::RateLimited => 429,
-            AuthError::Internal(_) => 500,
-        };
+        let code = auth_error_status(&error);
         return Self::ServerError {
             message: error.to_string(),
             code,

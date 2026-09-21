@@ -5,7 +5,9 @@ use crate::user::AuthUser;
 
 /// Registers the process-wide server auth configuration.
 ///
-/// Applies when no per-request middleware is present (background tasks, tests,
+/// This is the single canonical registration path: the only registration
+/// function re-exported through the crate prelude. It applies when no
+/// per-request middleware is present (background tasks, tests,
 /// or routers that do not attach [`AuthLayer`](super::axum::AuthLayer)).
 ///
 /// # Errors
