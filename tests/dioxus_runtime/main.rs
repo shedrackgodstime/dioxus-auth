@@ -6,8 +6,10 @@ mod common;
 #[path = "../common/identity_hasher.rs"]
 mod identity_hasher;
 
+mod classify;
 mod components;
 mod guards;
 mod handles;
 mod harness;
+mod restore;
 mod state;
