@@ -159,10 +159,10 @@ async fn missing_configuration_errors_instead_of_panicking() {
     let result = context
         .scope(async move { return dioxus_auth_session().await })
         .await;
-    match result {
-        Err(ServerFnError::ServerError { code: 500, .. }) => {}
-        other => panic!("expected 500, got {other:?}"),
-    }
+    assert!(
+        matches!(result, Err(ServerFnError::ServerError { code: 500, .. })),
+        "expected a 500 server error, got {result:?}"
+    );
 }
 
 #[tokio::test]

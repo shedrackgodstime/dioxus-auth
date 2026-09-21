@@ -1,4 +1,4 @@
 # dioxus-auth - Guides
 
-This directory will holds deeper guides for `dioxus-auth`.
+This directory holds deeper guides for `dioxus-auth`.
 

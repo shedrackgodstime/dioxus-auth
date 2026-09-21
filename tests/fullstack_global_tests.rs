@@ -98,8 +98,9 @@ async fn logout_revokes_the_global_session() {
 #[tokio::test]
 async fn second_initialization_is_rejected() {
     let config = fresh_config();
-    match server_init(config) {
-        Err(ServerError::AlreadyInitialized) => {}
-        other => panic!("expected AlreadyInitialized, got {other:?}"),
-    }
+    let result = server_init(config);
+    assert!(
+        matches!(result, Err(ServerError::AlreadyInitialized)),
+        "expected AlreadyInitialized, got {result:?}"
+    );
 }
