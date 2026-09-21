@@ -156,8 +156,9 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
         return Box::pin(async move {
             let mut request = request;
             request.extensions_mut().insert(Arc::clone(&config));
-            // Validation (store lookups under locks) runs on the blocking
-            // pool so the worker executing this request stays responsive.
+            // reason: validation does store lookups under locks; running it
+            // on the worker would stall the request loop, so the headers are
+            // cloned once and the check goes to the blocking pool.
             let headers = request.headers().clone();
             let validation = run_blocking({
                 let config = Arc::clone(&config);
@@ -165,8 +166,8 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
             })
             .await;
             let authenticated = match validation {
-                Ok((_, user)) => user.is_some(),
-                Err(_) => false,
+                Ok(Ok((_, user))) => user.is_some(),
+                Ok(Err(_)) | Err(_) => false,
             };
             if !authenticated {
                 return Ok(unauthorized());

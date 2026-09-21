@@ -92,8 +92,8 @@ macro_rules! fullstack_server_fns {
         #[must_use = "sign-out must be acknowledged"]
         pub async fn dioxus_auth_logout() -> $crate::prelude::ServerFnResult<()> {
             let context = $crate::prelude::ServerAuthContext::<$user>::from_request().await?;
-            if let Some(token) = context.token().cloned() {
-                context.logout(&token).await?;
+            if let Some(token) = context.token() {
+                context.logout(token).await?;
             }
             $crate::prelude::write_session_cookie(context.config().cookie(), None)?;
             return Ok(());

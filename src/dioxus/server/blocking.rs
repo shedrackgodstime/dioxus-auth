@@ -26,24 +26,30 @@ fn runtime_available() -> bool {
 /// awaits its completion, so the async worker never executes the closure.
 /// Without a runtime context the closure runs inline (there is no worker to
 /// starve).
-pub(super) async fn run_blocking<T, F>(operation: F) -> T
+///
+/// A spawned task that panics unwinds through the awaiting caller, per the
+/// crate's panic model. A task lost to runtime shutdown surfaces as `Err`,
+/// since no output value exists to return.
+#[must_use = "the blocking result must be used"]
+pub(super) async fn run_blocking<T, F>(operation: F) -> Result<T, tokio::task::JoinError>
 where
     T: Send + 'static,
     F: FnOnce() -> T + Send + 'static,
 {
     if !runtime_available() {
-        return operation();
+        return Ok(operation());
     }
     let joined = tokio::task::spawn_blocking(operation).await;
     return match joined {
-        Ok(value) => value,
+        Ok(value) => Ok(value),
         Err(join_error) => {
-            // reason: a freshly spawned blocking task can only fail by
-            // panicking; surface panics instead of swallowing them.
             if join_error.is_panic() {
+                // reason: engine panics are programming errors; re-raising
+                // preserves the crate's panic model instead of converting a
+                // crash into a return value.
                 std::panic::resume_unwind(join_error.into_panic());
             }
-            unreachable!("non-panic JoinError cannot occur for a spawned blocking task");
+            return Err(join_error);
         }
     };
 }

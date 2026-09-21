@@ -15,6 +15,7 @@ mod fullstack_shared;
 #[path = "../common/identity_hasher.rs"]
 mod identity_hasher;
 
+mod blocking;
 mod harness;
 mod middleware;
 mod server_fns;

@@ -131,7 +131,9 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
         };
         let session = match FullstackContext::current() {
             Some(ctx) => {
-                // The parts guard must be dropped before the await below.
+                // reason: the parts guard borrows request state that must be
+                // released before the await below; holding it across the
+                // blocking dispatch would needlessly extend the borrow.
                 let headers = {
                     let parts = ctx.parts_mut();
                     parts.headers.clone()
@@ -142,8 +144,9 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
                 })
                 .await
                 {
-                    Ok(session) => session,
-                    Err(error) => return Err(error),
+                    Ok(Ok(session)) => session,
+                    Ok(Err(error)) => return Err(error),
+                    Err(_) => return Err(blocking_cancelled()),
                 }
             }
             None => (None, None),
@@ -210,8 +213,9 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
         })
         .await;
         let (user, token) = match outcome {
-            Ok(pair) => pair,
-            Err(error) => return Err(ServerError::from(error)),
+            Ok(Ok(pair)) => pair,
+            Ok(Err(error)) => return Err(ServerError::from(error)),
+            Err(_) => return Err(blocking_cancelled()),
         };
         return Ok((user, token));
     }
@@ -229,11 +233,19 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
         let engine = Arc::clone(self.engine().engine());
         let token = token.clone();
         let outcome = run_blocking(move || return engine.logout(&token)).await;
-        return match outcome {
-            Ok(()) => Ok(()),
-            Err(error) => Err(ServerError::from(error)),
-        };
+        match outcome {
+            Ok(Ok(())) => return Ok(()),
+            Ok(Err(error)) => return Err(ServerError::from(error)),
+            Err(_) => return Err(blocking_cancelled()),
+        }
     }
+}
+
+/// Maps a blocking task lost to runtime shutdown to an internal error.
+fn blocking_cancelled() -> ServerError {
+    return ServerError::Engine(AuthError::Internal(String::from(
+        "the blocking task was cancelled",
+    )));
 }
 
 /// Validates the session cookie carried by request headers.
