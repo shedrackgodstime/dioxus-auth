@@ -16,6 +16,7 @@ mod guards;
 mod hooks;
 mod operations;
 mod provider;
+mod restore;
 mod storage;
 
 #[cfg(feature = "dioxus-fullstack")]
@@ -26,6 +27,7 @@ pub use guards::{RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAu
 pub use hooks::use_auth;
 pub use operations::{AuthEngineHandle, AuthOperations};
 pub use provider::{AuthProvider, AuthProviderProps};
+pub use restore::{RestoreClassify, RestoreVerdict};
 pub use storage::TokenStorageHandle;
 
 #[cfg(feature = "dioxus-fullstack")]

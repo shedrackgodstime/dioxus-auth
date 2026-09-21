@@ -76,8 +76,17 @@ pub fn state_dom(
     storage: TokenStorageHandle,
 ) -> VirtualDom {
     let handle = AuthEngineHandle::from(engine);
+    return erased_state_dom(handle, storage);
+}
+
+/// Builds the state tree over a type-erased engine, for tests that substitute
+/// their own `AuthOperations` implementation (failure injection, fakes).
+pub fn erased_state_dom(
+    engine: AuthEngineHandle<TestUser>,
+    storage: TokenStorageHandle,
+) -> VirtualDom {
     let props = StateRootProps {
-        engine: handle,
+        engine,
         token_storage: storage,
     };
     return VirtualDom::new_with_props(StateRoot, props);

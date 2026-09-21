@@ -87,12 +87,10 @@ where
 
     if context.is_loading() {
         // reason: the first render settles the identity from storage; a
-        // storage failure is demoted to guest so the tree always sees a
-        // defined state.
-        match context.restore() {
-            Ok(()) => {}
-            Err(_) => context.set_guest(),
-        }
+        // definitive rejection demotes to guest, while an unknown outcome
+        // (storage failure, rate limit, transport error) leaves the tree in
+        // Loading so a network blip never silently signs the user out.
+        let _verdict = context.restore();
     }
 
     return rsx! {

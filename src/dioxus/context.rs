@@ -11,6 +11,7 @@ use crate::status::{AuthStatus, SessionId};
 use crate::user::AuthUser;
 
 use super::operations::{AuthEngineHandle, AuthOperations};
+use super::restore::{RestoreClassify, RestoreVerdict};
 use super::storage::TokenStorageHandle;
 
 /// Reactive authentication state for the subtree under an
@@ -124,20 +125,27 @@ impl<T: AuthUser + Clone> AuthContext<T> {
 
     /// Restores state from the persisted token (used by the provider on mount).
     ///
-    /// A stored token the engine rejects demotes the context to guest; the
-    /// stale token is left in storage so third-party backends keep their own
-    /// retry semantics.
+    /// The outcome is classified (see [`RestoreVerdict`]):
     ///
-    /// # Errors
-    /// Returns a storage error when the token cannot be read; the context is
-    /// demoted to guest so callers can treat failure as a fresh start.
-    #[must_use = "the restore result must be handled"]
-    pub fn restore(&self) -> Result<(), AuthError> {
+    /// - [`RestoreVerdict::Restored`]: a stored token was accepted and the
+    ///   context is authenticated.
+    /// - [`RestoreVerdict::Unauthenticated`]: no usable token existed, or the
+    ///   server definitively rejected the stored token — the context is a
+    ///   guest. The rejected token is left in storage so third-party backends
+    ///   keep their own retry semantics.
+    /// - [`RestoreVerdict::Unknown`]: the attempt failed before the session
+    ///   question could be answered (storage read failure, rate limiting,
+    ///   transport errors surfacing as [`AuthError::Internal`]) — the context
+    ///   is deliberately left in Loading so a network blip never silently
+    ///   demotes a live session to guest. Callers may retry.
+    #[must_use = "the restore verdict must be handled"]
+    pub fn restore(&self) -> RestoreVerdict {
         let stored = match self.storage.retrieve() {
             Ok(stored) => stored,
             Err(e) => {
-                self.set_guest();
-                return Err(e);
+                // Storage failures do not answer the session question; leave
+                // the context in Loading for a retry.
+                return e.restore_verdict();
             }
         };
         return match stored {
@@ -151,18 +159,26 @@ impl<T: AuthUser + Clone> AuthContext<T> {
                         *token.write() = Some(wire);
                         *status.write() = AuthStatus::Authenticated(user);
                         *persisted.write() = true;
-                        Ok(())
+                        RestoreVerdict::Restored
                     }
                     Ok(None) => {
                         self.set_guest();
-                        Ok(())
+                        RestoreVerdict::Unauthenticated
                     }
-                    Err(e) => Err(e),
+                    Err(e) => {
+                        let verdict = e.restore_verdict();
+                        if verdict == RestoreVerdict::Unauthenticated {
+                            // A definitive rejection must also settle the
+                            // context; unknown outcomes stay in Loading.
+                            self.set_guest();
+                        }
+                        verdict
+                    }
                 }
             }
             _ => {
                 self.set_guest();
-                Ok(())
+                RestoreVerdict::Unauthenticated
             }
         };
     }
