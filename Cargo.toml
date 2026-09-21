@@ -8,6 +8,12 @@ clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo
 name = "dioxus-auth"
 version = "0.2.0"
 edition = "2024"
+# MSRV applies to the core library (default features) and is CI-gated in the
+# dedicated "MSRV (1.85.0)" job (`cargo check/clippy --lib`). The `dioxus` and
+# `dioxus-fullstack` layers follow the Dioxus ecosystem's MSRV, which is higher
+# (upstream deps like yoke 0.8 under-declare their true rustc requirement), so
+# those layers are gated on stable only. See the comment block in
+# .github/workflows/ci.yml before touching this value.
 rust-version = "1.85"
 authors = ["Shedrack Godstime <shedrackgodstime@gmail.com>"]
 description = "Dioxus-native authentication and session management."

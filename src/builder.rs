@@ -173,10 +173,9 @@ where
     /// Returns `AuthError` if the timing-defense dummy hash cannot be computed.
     #[must_use = "the constructed engine must be used"]
     pub fn build(self) -> Result<AuthEngine<U, S>, AuthError> {
-        let hasher = match self.hasher {
-            Some(hasher) => hasher,
-            None => Arc::new(Argon2Hasher::new()),
-        };
+        let hasher = self
+            .hasher
+            .unwrap_or_else(|| return Arc::new(Argon2Hasher::new()));
         let dummy_hash = match hasher.hash(DUMMY_PASSWORD) {
             Ok(hash) => hash,
             Err(e) => return Err(e),

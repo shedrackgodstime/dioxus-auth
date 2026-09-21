@@ -2,7 +2,9 @@
 ignore = []
 
 [licenses]
-allow = ["MIT", "Apache-2.0"]
+# BSD-3-Clause: subtle (crypto crate). Unicode-3.0: unicode-ident. Both are
+# OSI-approved; this list was derived from the resolved tree, not guessed.
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "Unicode-3.0"]
 
 [licenses.private]
 registries = []

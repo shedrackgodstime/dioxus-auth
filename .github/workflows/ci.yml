@@ -14,17 +14,10 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        rust:
-          - stable
-          - 1.85.0
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
       - name: Check format
         run: cargo fmt -- --check
@@ -41,9 +34,37 @@ jobs:
       - name: Test doc
         run: cargo test --doc
 
+  msrv:
+    # MSRV gate: the core library (default features) must build on the
+    # declared rust-version. Scoped to `--lib` because upstream dioxus deps
+    # (yoke 0.8 declares rust-version "1.82" but its proc-macro needs an API
+    # stabilized after 1.85) cannot compile on 1.85 even under MSRV-aware
+    # resolution. The dioxus/fullstack layers follow Dioxus's MSRV, not ours,
+    # and are fully gated on stable above.
+    name: MSRV (1.85.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+          components: rustfmt, clippy
+      - name: Check format
+        run: cargo fmt -- --check
+      - name: Check library on MSRV
+        run: cargo check --lib
+      - name: Check clippy on MSRV
+        run: cargo clippy --lib -- -D warnings -W clippy::pedantic
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    env:
+      # No lockfile is committed: jobs resolve dependencies fresh, and
+      # MSRV-aware resolution (rust-version = 1.85) would pin `time` below
+      # the RUSTSEC-2026-0009 fix line (>= 0.3.47). Advisories must be
+      # judged on the newest resolution, not the MSRV-capped one.
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: allow
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
