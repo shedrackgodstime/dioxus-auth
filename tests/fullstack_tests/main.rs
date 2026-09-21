@@ -16,6 +16,7 @@ mod fullstack_shared;
 mod identity_hasher;
 
 mod blocking;
+mod cookies;
 mod harness;
 mod middleware;
 mod server_fns;

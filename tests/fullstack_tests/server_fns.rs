@@ -247,6 +247,7 @@ fn auth_errors_map_to_status_codes() {
         (AuthError::InvalidCredentials, 401),
         (AuthError::PasswordHashError, 401),
         (AuthError::RateLimited, 429),
+        (AuthError::Csrf, 403),
         (AuthError::Internal(String::from("boom")), 500),
     ];
     for (error, expected) in cases {

@@ -67,6 +67,34 @@ fn origin_validation_matches_exact_origins() {
 }
 
 #[test]
+fn cookie_host_only_and_origins_roundtrip_through_setters() {
+    let config = CookieConfig::new()
+        .with_host_only(true)
+        .with_expected_origins(vec![String::from("https://app.example.com")]);
+    assert!(config.host_only());
+    let expected = config.expected_origins().expect("origins must be set");
+    assert!(expected.validate("https://app.example.com"));
+    assert!(!CookieConfig::new().host_only());
+    assert!(CookieConfig::new().expected_origins().is_none());
+}
+
+#[test]
+fn check_origin_passes_without_config_and_enforces_with_config() {
+    let open = CookieConfig::new();
+    assert!(open.check_origin(None).is_ok());
+    assert!(open.check_origin(Some("https://evil.example.com")).is_ok());
+
+    let gated =
+        CookieConfig::new().with_expected_origins(vec![String::from("https://app.example.com")]);
+    assert!(gated.check_origin(Some("https://app.example.com")).is_ok());
+    assert_eq!(gated.check_origin(None), Err(AuthError::Csrf));
+    assert_eq!(
+        gated.check_origin(Some("https://evil.example.com")),
+        Err(AuthError::Csrf)
+    );
+}
+
+#[test]
 fn memory_token_storage_roundtrip_and_clear() {
     let mut storage = MemoryTokenStorage::new();
     assert_eq!(storage.retrieve().unwrap(), None);

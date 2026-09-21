@@ -17,6 +17,8 @@ pub struct CookieConfig {
     path: String,
     domain: Option<String>,
     max_age: Option<u64>,
+    host_only: bool,
+    expected_origins: Option<OriginValidation>,
 }
 
 impl CookieConfig {
@@ -57,6 +59,8 @@ impl CookieConfig {
             path: String::from("/"),
             domain: None,
             max_age: None,
+            host_only: false,
+            expected_origins: None,
         };
     }
 
@@ -100,6 +104,41 @@ impl CookieConfig {
     #[must_use]
     pub const fn max_age(&self) -> Option<u64> {
         return self.max_age;
+    }
+
+    /// Whether the `__Host-` cookie prefix is enforced.
+    ///
+    /// When true, the session cookie is emitted as `__Host-<name>` with a
+    /// forced `Path=/` and no `Domain`, and only that prefixed name is
+    /// accepted back — a sibling-app cookie shadow cannot displace it.
+    #[must_use]
+    pub const fn host_only(&self) -> bool {
+        return self.host_only;
+    }
+
+    /// The origins accepted for state-changing cookie operations, if any.
+    #[must_use]
+    pub const fn expected_origins(&self) -> Option<&OriginValidation> {
+        return self.expected_origins.as_ref();
+    }
+
+    /// Validates the request origin for state-changing cookie operations.
+    ///
+    /// Returns `Ok(())` when no origins are configured; otherwise requires a
+    /// present, exactly-matching origin.
+    ///
+    /// # Errors
+    /// Returns `AuthError::Csrf` for a missing or mismatched origin while
+    /// origins are configured.
+    #[must_use = "origin rejections must be handled"]
+    pub fn check_origin(&self, origin: Option<&str>) -> Result<(), AuthError> {
+        let Some(expected) = &self.expected_origins else {
+            return Ok(());
+        };
+        return match origin {
+            Some(origin) if expected.validate(origin) => Ok(()),
+            _ => Err(AuthError::Csrf),
+        };
     }
 
     /// Sets the cookie name.
@@ -148,6 +187,20 @@ impl CookieConfig {
     #[must_use = "the returned configuration must be used"]
     pub const fn with_max_age(mut self, max_age: Option<u64>) -> Self {
         self.max_age = max_age;
+        return self;
+    }
+
+    /// Enforces the `__Host-` cookie prefix and its scope rules.
+    #[must_use = "the returned configuration must be used"]
+    pub const fn with_host_only(mut self, host_only: bool) -> Self {
+        self.host_only = host_only;
+        return self;
+    }
+
+    /// Requires a matching origin for state-changing cookie operations.
+    #[must_use = "the returned configuration must be used"]
+    pub fn with_expected_origins(mut self, origins: Vec<String>) -> Self {
+        self.expected_origins = Some(OriginValidation::new(origins));
         return self;
     }
 }

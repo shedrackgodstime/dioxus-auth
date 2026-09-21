@@ -5,9 +5,18 @@ use dioxus_fullstack::{FullstackContext, http};
 use crate::dioxus::server::ServerError;
 use crate::security::{CookieConfig, SameSite};
 
-/// Extracts the value of the named cookie from the request's `Cookie` header.
+/// Extracts the value of the session cookie from the request's `Cookie` header.
+///
+/// When the configuration is host-only, only the `__Host-`-prefixed name is
+/// accepted; otherwise only the bare name is accepted, so a prefixed shadow
+/// cannot displace it.
 #[must_use]
-pub fn request_cookie_token(headers: &http::HeaderMap, name: &str) -> Option<String> {
+pub fn request_cookie_token(headers: &http::HeaderMap, cfg: &CookieConfig) -> Option<String> {
+    let expected = if cfg.host_only() {
+        format!("__Host-{}", cfg.name())
+    } else {
+        String::from(cfg.name())
+    };
     let mut token = None;
     for value in headers.get_all(http::header::COOKIE) {
         let Ok(value) = value.to_str() else {
@@ -15,7 +24,7 @@ pub fn request_cookie_token(headers: &http::HeaderMap, name: &str) -> Option<Str
         };
         for pair in value.split(';') {
             let mut kv = pair.trim().splitn(2, '=');
-            if kv.next() == Some(name) {
+            if kv.next() == Some(expected.as_str()) {
                 token = kv.next().map(str::to_owned);
             }
         }
@@ -25,16 +34,25 @@ pub fn request_cookie_token(headers: &http::HeaderMap, name: &str) -> Option<Str
 
 /// Builds the value of a [`Set-Cookie`](http::header::SET_COOKIE) header for
 /// the session cookie. `None` emits a clearing cookie.
+///
+/// A host-only configuration emits the `__Host-`-prefixed name with a forced
+/// `Path=/`, no `Domain`, and `Secure`.
 #[must_use]
 pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
+    let name = if cfg.host_only() {
+        format!("__Host-{}", cfg.name())
+    } else {
+        String::from(cfg.name())
+    };
+    let path = if cfg.host_only() { "/" } else { cfg.path() };
     let mut attributes = vec![
-        format!("{}={}", cfg.name(), token.unwrap_or("")),
-        format!("Path={}", cfg.path()),
+        format!("{name}={}", token.unwrap_or("")),
+        format!("Path={path}"),
     ];
     if cfg.http_only() {
         attributes.push(String::from("HttpOnly"));
     }
-    if cfg.secure() {
+    if cfg.secure() || cfg.host_only() {
         attributes.push(String::from("Secure"));
     }
     attributes.push(format!("SameSite={}", same_site_name(cfg.same_site())));
@@ -43,8 +61,10 @@ pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
     } else if let Some(max_age) = cfg.max_age() {
         attributes.push(format!("Max-Age={max_age}"));
     }
-    if let Some(domain) = cfg.domain() {
-        attributes.push(format!("Domain={domain}"));
+    if !cfg.host_only() {
+        if let Some(domain) = cfg.domain() {
+            attributes.push(format!("Domain={domain}"));
+        }
     }
     return attributes.join("; ");
 }

@@ -56,6 +56,7 @@ pub const fn auth_error_status(error: &AuthError) -> u16 {
     return match error {
         AuthError::InvalidCredentials | AuthError::PasswordHashError => 401,
         AuthError::RateLimited => 429,
+        AuthError::Csrf => 403,
         AuthError::Internal(_) => 500,
     };
 }
@@ -261,7 +262,7 @@ pub fn authenticate_headers<U: AuthUser>(
     config: &ServerAuthConfig<U>,
     headers: &http::HeaderMap,
 ) -> Result<(Option<SessionId>, Option<U>), ServerError> {
-    let token = match request_cookie_token(headers, config.cookie().name()) {
+    let token = match request_cookie_token(headers, config.cookie()) {
         Some(token) => token,
         None => return Ok((None, None)),
     };
