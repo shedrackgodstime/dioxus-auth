@@ -1,4 +1,5 @@
-/target
+# Unanchored so per-example build dirs (examples/*/target) are covered too.
+target
 /.cargo
 /.cargo_vcs_info.json
 Cargo.toml.orig
@@ -8,3 +9,6 @@ Cargo.lock
 # scripts/check-packaging.sh report the KB files as shipping in the crate.
 /scratch
 /.agent-rules
+
+# Separate project cloned into the examples dir; has its own git history.
+/examples/utmelab
