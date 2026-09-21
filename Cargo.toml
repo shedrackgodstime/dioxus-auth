@@ -130,3 +130,10 @@ required-features = ["dioxus-fullstack", "server"]
 name = "fullstack_global_tests"
 path = "tests/fullstack_global_tests.rs"
 required-features = ["dioxus-fullstack", "server"]
+
+# Compile-checked mirrors of the README quickstart snippets (review finding
+# N9): plain snippets must fail CI when the documented API drifts.
+[[test]]
+name = "readme_snippets"
+path = "tests/readme_snippets.rs"
+required-features = []
