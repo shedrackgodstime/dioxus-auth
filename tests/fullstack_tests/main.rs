@@ -19,6 +19,7 @@ mod blocking;
 mod cookies;
 mod harness;
 mod middleware;
+mod origins;
 mod server_fns;
 
 use common::TestUser;

@@ -86,7 +86,7 @@ pub fn response_token(headers: &HeaderMap, cookie_name: &str) -> String {
 }
 
 /// Extracts the `ServerFnError::ServerError` code from a result.
-pub fn error_code(result: &Result<TestUser, ServerFnError>) -> u16 {
+pub fn error_code<T: std::fmt::Debug>(result: &Result<T, ServerFnError>) -> u16 {
     return match result {
         Err(ServerFnError::ServerError { code, .. }) => *code,
         Err(other) => panic!("unexpected server fn error shape: {other:?}"),

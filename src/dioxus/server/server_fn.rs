@@ -198,14 +198,26 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
     /// async worker via the blocking boundary; see
     /// the `blocking` module.
     ///
+    /// When the configuration sets expected origins, the request must carry
+    /// a present, matching `Origin` header: login is state-changing.
+    ///
     /// # Errors
-    /// Returns the engine's login error verbatim.
+    /// Returns the engine's login error verbatim, or `ServerError::Engine`
+    /// wrapping `AuthError::Csrf` for a missing or mismatched origin.
     #[must_use = "the authenticated user and session must be used"]
     pub async fn login(
         &self,
         identifier: &str,
         password: &str,
     ) -> Result<(U, SessionId), ServerError> {
+        match self
+            .config
+            .cookie()
+            .check_origin(request_origin().as_deref())
+        {
+            Ok(()) => {}
+            Err(error) => return Err(ServerError::Engine(error)),
+        }
         let engine = Arc::clone(self.engine().engine());
         let identifier = String::from(identifier);
         let password = String::from(password);
@@ -227,10 +239,22 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
     /// async worker via the blocking boundary; see
     /// the `blocking` module.
     ///
+    /// When the configuration sets expected origins, the request must carry
+    /// a present, matching `Origin` header: logout is state-changing.
+    ///
     /// # Errors
-    /// Returns the engine's logout error verbatim.
+    /// Returns the engine's logout error verbatim, or `ServerError::Engine`
+    /// wrapping `AuthError::Csrf` for a missing or mismatched origin.
     #[must_use = "session revocation errors must be handled"]
     pub async fn logout(&self, token: &SessionId) -> Result<(), ServerError> {
+        match self
+            .config
+            .cookie()
+            .check_origin(request_origin().as_deref())
+        {
+            Ok(()) => {}
+            Err(error) => return Err(ServerError::Engine(error)),
+        }
         let engine = Arc::clone(self.engine().engine());
         let token = token.clone();
         let outcome = run_blocking(move || return engine.logout(&token)).await;
@@ -247,6 +271,22 @@ fn blocking_cancelled() -> ServerError {
     return ServerError::Engine(AuthError::Internal(String::from(
         "the blocking task was cancelled",
     )));
+}
+
+/// Reads the request's `Origin` header, if the current request carries one.
+fn request_origin() -> Option<String> {
+    let ctx = match FullstackContext::current() {
+        Some(ctx) => ctx,
+        None => return None,
+    };
+    let parts = ctx.parts_mut();
+    let origin = parts
+        .headers
+        .get(http::header::ORIGIN)
+        .and_then(|header| return header.to_str().ok())
+        .map(String::from);
+    drop(parts);
+    return origin;
 }
 
 /// Validates the session cookie carried by request headers.

@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use axum::extract::Request;
-use axum::http::StatusCode;
+use axum::http::{self, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::Route;
 use tower::Layer;
@@ -157,6 +157,20 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
         return Box::pin(async move {
             let mut request = request;
             request.extensions_mut().insert(Arc::clone(&config));
+            // reason: state-changing requests run the origin gate before any
+            // session work, so a forged cross-site request fails closed even
+            // when it carries no session; safe methods keep working without
+            // an Origin, which browsers omit on same-origin navigations.
+            if !is_safe_method(request.method()) {
+                let origin = request
+                    .headers()
+                    .get(http::header::ORIGIN)
+                    .and_then(|header| return header.to_str().ok());
+                match config.cookie().check_origin(origin) {
+                    Ok(()) => {}
+                    Err(_) => return Ok(forbidden()),
+                }
+            }
             // reason: validation does store lookups under locks; running it
             // on the worker would stall the request loop, so the headers are
             // cloned once and the check goes to the blocking pool.
@@ -187,6 +201,16 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
 
 fn unauthorized() -> Response {
     return (StatusCode::UNAUTHORIZED, String::from("unauthorized")).into_response();
+}
+
+fn forbidden() -> Response {
+    return (StatusCode::FORBIDDEN, String::from("forbidden")).into_response();
+}
+
+/// Whether the request method never changes state, so ambient credentials
+/// need no origin backstop.
+const fn is_safe_method(method: &Method) -> bool {
+    return matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS);
 }
 
 fn server_error() -> Response {

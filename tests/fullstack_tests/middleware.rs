@@ -18,14 +18,14 @@ use super::common::TestUser;
 use super::fullstack_shared::{
     IDENTIFIER, PASSWORD, USER_ID, request_parts, response_token, run_login,
 };
-use super::harness::{COOKIE, config, probe};
+use super::harness::{COOKIE, ORIGIN, config, origin_parts, origins_config, probe};
 use super::identity_hasher::IdentityHasher;
 
 #[tokio::test]
 async fn auth_layer_attaches_the_config_to_every_request() {
     let config = config();
     let app = Router::new()
-        .route("/", get(probe))
+        .route("/", get(probe).post(probe))
         .layer(AuthLayer::new(config));
 
     let request = Request::builder()
@@ -43,7 +43,7 @@ async fn require_auth_layer_rejects_guests_and_accepts_valid_sessions() {
     let (_login, headers) = run_login(parts, IDENTIFIER, PASSWORD).await;
     let token = response_token(&headers, COOKIE);
     let app = Router::new()
-        .route("/", get(probe))
+        .route("/", get(probe).post(probe))
         .layer(RequireAuthLayer::new(config));
 
     let guest = Request::builder()
@@ -119,7 +119,7 @@ async fn require_auth_layer_reports_store_failures_as_500() {
         CookieConfig::new().with_name(String::from(COOKIE)),
     );
     let app = Router::new()
-        .route("/", get(probe))
+        .route("/", get(probe).post(probe))
         .layer(RequireAuthLayer::new(config));
 
     let token = SessionId::generate();
@@ -131,4 +131,60 @@ async fn require_auth_layer_reports_store_failures_as_500() {
         .expect("request construction must succeed");
     let response = app.oneshot(request).await.expect("the router must respond");
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn require_auth_layer_rejects_forged_origins_on_writes() {
+    let config = origins_config();
+    let login_parts = origin_parts(&config, None, "/api/auth/login", Some(ORIGIN));
+    let (login, headers) = run_login(login_parts, IDENTIFIER, PASSWORD).await;
+    assert!(login.is_ok());
+    let token = response_token(&headers, COOKIE);
+    let app = Router::new()
+        .route("/", get(probe).post(probe))
+        .layer(RequireAuthLayer::new(config));
+
+    let forged = Request::builder()
+        .method(http::Method::POST)
+        .uri("/")
+        .header(http::header::COOKIE, format!("{COOKIE}={token}"))
+        .header(http::header::ORIGIN, "https://evil.example.com")
+        .body(Body::empty())
+        .expect("request construction must succeed");
+    let response = app
+        .clone()
+        .oneshot(forged)
+        .await
+        .expect("the router must respond");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let honest = Request::builder()
+        .method(http::Method::POST)
+        .uri("/")
+        .header(http::header::COOKIE, format!("{COOKIE}={token}"))
+        .header(http::header::ORIGIN, ORIGIN)
+        .body(Body::empty())
+        .expect("request construction must succeed");
+    let response = app.oneshot(honest).await.expect("the router must respond");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn require_auth_layer_allows_safe_reads_without_origin() {
+    let config = origins_config();
+    let login_parts = origin_parts(&config, None, "/api/auth/login", Some(ORIGIN));
+    let (login, headers) = run_login(login_parts, IDENTIFIER, PASSWORD).await;
+    assert!(login.is_ok());
+    let token = response_token(&headers, COOKIE);
+    let app = Router::new()
+        .route("/", get(probe).post(probe))
+        .layer(RequireAuthLayer::new(config));
+
+    let read = Request::builder()
+        .uri("/")
+        .header(http::header::COOKIE, format!("{COOKIE}={token}"))
+        .body(Body::empty())
+        .expect("request construction must succeed");
+    let response = app.oneshot(read).await.expect("the router must respond");
+    assert_eq!(response.status(), StatusCode::OK);
 }
