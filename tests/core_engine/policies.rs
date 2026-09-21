@@ -47,6 +47,51 @@ fn single_active_session_invalidates_the_previous_session() {
     assert!(engine.validate_session(second.id()).unwrap().is_some());
 }
 
+/// A corrupt stored hash must be indistinguishable from a wrong password in
+/// the login error channel: same `InvalidCredentials` variant, so a corrupted
+/// row cannot confirm "identifier exists" to an attacker probing login.
+#[test]
+fn malformed_stored_hash_is_indistinguishable_from_wrong_password() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", "not-a-phc-hash");
+    let corrupt = Arc::new(store);
+    let corrupt_engine = AuthEngine::builder(Arc::clone(&corrupt), corrupt)
+        .build()
+        .expect("engine construction must succeed");
+
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "bob"), "bob", hash_password("pw"));
+    let healthy = Arc::new(store);
+    let healthy_engine = AuthEngine::builder(Arc::clone(&healthy), healthy)
+        .build()
+        .expect("engine construction must succeed");
+
+    let corrupt_result = corrupt_engine.login("alice", "whatever");
+    let wrong_password_result = healthy_engine.login("bob", "wrong");
+    let unknown_user_result = healthy_engine.login("ghost", "wrong");
+
+    assert_eq!(
+        corrupt_result.unwrap_err(),
+        AuthError::InvalidCredentials,
+        "corrupt stored hash must not surface a distinct error variant"
+    );
+    assert_eq!(
+        wrong_password_result.unwrap_err(),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        unknown_user_result.unwrap_err(),
+        AuthError::InvalidCredentials
+    );
+
+    // The hasher's `Err` channel stays intact for direct callers, where no
+    // enumeration oracle exists.
+    assert_eq!(
+        corrupt_engine.hasher().verify("pw", "not-a-phc-hash"),
+        Err(AuthError::PasswordHashError)
+    );
+}
+
 #[test]
 fn failed_attempts_are_rate_limited() {
     let store = MemoryStore::<TestUser>::new();

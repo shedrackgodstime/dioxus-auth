@@ -130,10 +130,17 @@ where
             return Err(AuthError::InvalidCredentials);
         };
 
-        let is_valid = match self.hasher.verify(password, &password_hash) {
-            Ok(valid) => valid,
-            Err(e) => return Err(e),
-        };
+        // reason: a malformed stored hash must not be distinguishable from a
+        // wrong password through this error channel — a distinct, fast
+        // `PasswordHashError` would confirm "identifier exists and its stored
+        // hash is garbage" to an attacker probing login. `unwrap_or(false)`
+        // collapses it to a miss here; the hasher's `Err` channel stays
+        // available to direct callers (account setup, admin tooling) where no
+        // oracle exists.
+        let is_valid = self
+            .hasher
+            .verify(password, &password_hash)
+            .unwrap_or(false);
         if !is_valid {
             if let Some(limiter) = &self.rate_limiter {
                 limiter.record_attempt(limiter_key);

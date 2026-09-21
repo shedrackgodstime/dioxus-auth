@@ -15,7 +15,7 @@ pub use crate::error::AuthError;
 pub use crate::hash::Argon2Hasher;
 
 #[doc(inline)]
-pub use crate::rate_limit::{InMemoryRateLimiter, RateLimiter};
+pub use crate::rate_limit::{InMemoryRateLimiter, RateLimiter, RateLimiterClock};
 
 #[doc(inline)]
 pub use crate::security::{CookieConfig, OriginValidation, PasswordHasher, SameSite};

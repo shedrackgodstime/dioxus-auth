@@ -1,6 +1,7 @@
 //! Authentication rate limiting.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use parking_lot::RwLock;
@@ -30,6 +31,9 @@ pub trait RateLimiter: std::fmt::Debug + Send + Sync {
 /// Default rate-limit window: 15 minutes, in seconds.
 const DEFAULT_WINDOW_SECS: u64 = 15 * 60;
 
+/// Wall-clock source producing the current instant.
+pub type RateLimiterClock = Arc<dyn Fn() -> SystemTime + Send + Sync>;
+
 /// In-memory sliding-window rate limiter.
 ///
 /// Tracks failed login attempts per identifier within a rolling time window.
@@ -38,11 +42,23 @@ const DEFAULT_WINDOW_SECS: u64 = 15 * 60;
 ///
 /// Process-local and best-effort. For distributed deployments, implement
 /// `RateLimiter` with Redis, Memcached, or similar.
-#[derive(Debug)]
 pub struct InMemoryRateLimiter {
     max_attempts: usize,
     window: Duration,
     attempts: RwLock<BTreeMap<String, Vec<SystemTime>>>,
+    now: RateLimiterClock,
+}
+
+impl std::fmt::Debug for InMemoryRateLimiter {
+    // reason: the clock is a closure and carries nothing debuggable; elide it
+    // rather than derive a Debug that cannot hold the field.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return f
+            .debug_struct("InMemoryRateLimiter")
+            .field("max_attempts", &self.max_attempts)
+            .field("window", &self.window)
+            .finish_non_exhaustive();
+    }
 }
 
 impl Default for InMemoryRateLimiter {
@@ -53,23 +69,37 @@ impl Default for InMemoryRateLimiter {
 }
 
 impl InMemoryRateLimiter {
-    /// Creates a new in-memory rate limiter.
+    /// Creates a new in-memory rate limiter on the system clock.
     ///
     /// * `max_attempts` — maximum failed attempts allowed within `window`
     /// * `window` — rolling time window for counting attempts
     #[must_use]
-    pub const fn new(max_attempts: usize, window: Duration) -> Self {
+    pub fn new(max_attempts: usize, window: Duration) -> Self {
+        return Self::with_clock(max_attempts, window, Arc::new(SystemTime::now));
+    }
+
+    /// Creates a new in-memory rate limiter on a custom clock.
+    ///
+    /// Tests inject a deterministic clock to exercise window expiry without
+    /// sleeping.
+    ///
+    /// * `max_attempts` — maximum failed attempts allowed within `window`
+    /// * `window` — rolling time window for counting attempts
+    /// * `now` — clock producing the current instant
+    #[must_use]
+    pub fn with_clock(max_attempts: usize, window: Duration, now: RateLimiterClock) -> Self {
         return Self {
             max_attempts,
             window,
             attempts: RwLock::new(BTreeMap::new()),
+            now,
         };
     }
 }
 
 impl RateLimiter for InMemoryRateLimiter {
     fn check(&self, identifier: &str) -> Result<(), AuthError> {
-        let now = SystemTime::now();
+        let now = (self.now)();
         let limited = {
             let mut attempts = self.attempts.write();
             attempts.get_mut(identifier).is_some_and(|timestamps| {
@@ -86,7 +116,7 @@ impl RateLimiter for InMemoryRateLimiter {
     }
 
     fn record_attempt(&self, identifier: &str) {
-        let now = SystemTime::now();
+        let now = (self.now)();
         let mut attempts = self.attempts.write();
         attempts
             .entry(identifier.to_string())

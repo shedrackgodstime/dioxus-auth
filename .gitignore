@@ -3,3 +3,8 @@
 /.cargo_vcs_info.json
 Cargo.toml.orig
 Cargo.lock
+# Per-clone symlinks into the private knowledge base (agent rules, scratch
+# notes). Untracked but followed by cargo's package walk, which made
+# scripts/check-packaging.sh report the KB files as shipping in the crate.
+/scratch
+/.agent-rules

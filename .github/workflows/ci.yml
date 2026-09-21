@@ -28,8 +28,10 @@ jobs:
           components: rustfmt, clippy
       - name: Check format
         run: cargo fmt -- --check
+      # `--pedantic` is a clippy flag and belongs after the `--` separator;
+      # before it, cargo rejects the argument and the step never ran.
       - name: Check clippy
-        run: cargo clippy --all-targets --pedantic -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings -W clippy::pedantic
       - name: Test all targets
         run: cargo test --all-targets
       - name: Test dioxus feature

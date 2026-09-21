@@ -4,9 +4,12 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+
 use dioxus_auth::prelude::{
     Argon2Hasher, AuthError, CookieConfig, InMemoryRateLimiter, MemoryTokenStorage,
-    OriginValidation, PasswordHasher, RateLimiter, SameSite, TokenStorage,
+    OriginValidation, PasswordHasher, RateLimiter, RateLimiterClock, SameSite, TokenStorage,
 };
 
 #[test]
@@ -94,4 +97,29 @@ fn rate_limiter_default_tracks_ten_attempts_per_15_minutes() {
     }
     assert_eq!(limiter.check("bob"), Err(AuthError::RateLimited));
     assert!(limiter.check("carol").is_ok());
+}
+
+/// Window expiry must be driven by the injected clock, deterministically and
+/// without sleeping: attempts inside the window count, attempts older than the
+/// window are pruned on the next check.
+#[test]
+fn rate_limiter_window_expiry_follows_the_injected_clock() {
+    let now = Arc::new(parking_lot::Mutex::new(
+        SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000),
+    ));
+    let clock: RateLimiterClock = {
+        let now = Arc::clone(&now);
+        Arc::new(move || return *now.lock())
+    };
+    let limiter = InMemoryRateLimiter::with_clock(2, Duration::from_secs(60), clock);
+
+    limiter.record_attempt("dana");
+    limiter.record_attempt("dana");
+    assert_eq!(limiter.check("dana"), Err(AuthError::RateLimited));
+
+    // Advance past the window: the old attempts prune and the budget resets.
+    *now.lock() = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000 + 120);
+    assert!(limiter.check("dana").is_ok());
+    limiter.record_attempt("dana");
+    assert!(limiter.check("dana").is_ok());
 }

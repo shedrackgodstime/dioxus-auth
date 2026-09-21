@@ -18,19 +18,26 @@ homepage = "https://github.com/shedrackgodstime/dioxus-auth"
 documentation = "https://docs.rs/dioxus-auth"
 keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
+# Packaging whitelist — every pattern is ROOT-ANCHORED on purpose. Unanchored
+# gitignore-style patterns match at ANY depth: `README.md` and `LICENSE*`
+# matched those filenames inside the per-clone `scratch/` and `.agent-rules/`
+# symlinks, which cargo's package walk follows even though git ignores them
+# (v1 shipped ~80 private KB files this way; found via scripts/check-packaging.sh
+# on 2026-09-21). Guarded by that script in the CI "Packaging" job — keep the
+# script whitelist in sync when editing this list.
 include = [
-    ".github/workflows/ci.yml",
-    ".gitignore",
-    "Cargo.toml",
-    "LICENSE",
-    "LICENSE-MIT",
-    "LICENSE-APACHE",
-    "README.md",
-    "clippy.toml",
-    "rustfmt.toml",
-    "scripts/check-packaging.sh",
-    "docs/README.md",
-    "src/**",
+    "/.github/workflows/ci.yml",
+    "/.gitignore",
+    "/Cargo.toml",
+    "/LICENSE",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+    "/README.md",
+    "/clippy.toml",
+    "/rustfmt.toml",
+    "/scripts/check-packaging.sh",
+    "/docs/README.md",
+    "/src/**",
 ]
 
 [features]
@@ -59,6 +66,12 @@ serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10"
 thiserror = "2.0"
 tower = { version = "0.5", optional = true }
+
+# getrandom 0.2 (pulled by rand_core 0.6) needs its `js` feature to compile on
+# wasm32-unknown-unknown; without it `SessionId::generate` (OsRng) fails the
+# wasm build with a compile_error! inside getrandom itself.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 dioxus-fullstack = { version = "0.7", features = ["server"] }
