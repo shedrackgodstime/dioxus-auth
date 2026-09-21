@@ -17,6 +17,7 @@ use tower::Layer;
 use tower::Service;
 
 use crate::dioxus::server::ServerAuthConfig;
+use crate::dioxus::server::blocking::run_blocking;
 use crate::dioxus::server::server_fn::authenticate_headers;
 use crate::user::AuthUser;
 
@@ -155,7 +156,15 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
         return Box::pin(async move {
             let mut request = request;
             request.extensions_mut().insert(Arc::clone(&config));
-            let authenticated = match authenticate_headers(&config, request.headers()) {
+            // Validation (store lookups under locks) runs on the blocking
+            // pool so the worker executing this request stays responsive.
+            let headers = request.headers().clone();
+            let validation = run_blocking({
+                let config = Arc::clone(&config);
+                move || return authenticate_headers(&config, &headers)
+            })
+            .await;
+            let authenticated = match validation {
                 Ok((_, user)) => user.is_some(),
                 Err(_) => false,
             };

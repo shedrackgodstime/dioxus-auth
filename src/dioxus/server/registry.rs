@@ -21,13 +21,15 @@ pub fn server_init<U: AuthUser>(config: ServerAuthConfig<U>) -> Result<(), Serve
 /// Resolves the current request's user, or `None` for a guest request.
 ///
 /// Mirrors [`ServerAuthContext::from_request`] with a convenient return type.
+/// The engine's validation runs off the async worker via the blocking
+/// boundary; see the `blocking` module.
 ///
 /// # Errors
 /// Returns `ServerError::MissingContext` when no engine is configured for the
 /// request, or the engine's validation error verbatim.
 #[must_use = "the session user must be used"]
-pub fn current_user<U: AuthUser + Clone>() -> Result<Option<U>, ServerError> {
-    let context = match ServerAuthContext::<U>::from_request() {
+pub async fn current_user<U: AuthUser + Clone>() -> Result<Option<U>, ServerError> {
+    let context = match ServerAuthContext::<U>::from_request().await {
         Ok(context) => context,
         Err(error) => return Err(error),
     };
@@ -37,14 +39,16 @@ pub fn current_user<U: AuthUser + Clone>() -> Result<Option<U>, ServerError> {
 /// Requires an authenticated session, rejecting guests.
 ///
 /// The one-step guard for server functions: validates the session cookie and
-/// returns the authenticated user, or `ServerError::MissingSession`.
+/// returns the authenticated user, or `ServerError::MissingSession`. The
+/// engine's validation runs off the async worker via the blocking boundary;
+/// see the `blocking` module.
 ///
 /// # Errors
 /// Returns `ServerError::MissingSession` for a guest request, or
 /// `ServerError::MissingContext` when no engine is configured.
 #[must_use = "the required user must be used"]
-pub fn require_user<U: AuthUser + Clone>() -> Result<U, ServerError> {
-    let context = match ServerAuthContext::<U>::from_request() {
+pub async fn require_user<U: AuthUser + Clone>() -> Result<U, ServerError> {
+    let context = match ServerAuthContext::<U>::from_request().await {
         Ok(context) => context,
         Err(error) => return Err(error),
     };

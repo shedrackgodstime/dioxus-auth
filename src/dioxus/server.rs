@@ -13,11 +13,12 @@
 //!   and server functions alike).
 //!
 //! The core [`AuthEngine`](crate::engine::AuthEngine) stays synchronous; the
-//! server slice calls it directly inside async handlers. Long-running work
-//! (Argon2 hashing) therefore occupies a runtime worker briefly — an async
-//! store adapter remains a documented follow-up.
+//! server slice dispatches engine calls to `tokio::task::spawn_blocking`
+//! when a tokio runtime hosts the request (see the `blocking` module),
+//! falling back to an inline call under other executors.
 
 pub mod axum;
+mod blocking;
 mod cookies;
 pub mod fullstack;
 pub mod registry;

@@ -74,13 +74,9 @@ macro_rules! fullstack_server_fns {
         pub async fn dioxus_auth_login(
             args: $crate::prelude::LoginRequest,
         ) -> $crate::prelude::ServerFnResult<$user> {
-            let context = $crate::prelude::ServerAuthContext::<$user>::from_request()?;
-            let config = context.config().clone();
-            let (user, token) = context
-                .engine()
-                .engine()
-                .login(&args.identifier, &args.password)?;
-            $crate::prelude::write_session_cookie(config.cookie(), Some(token.as_str()))?;
+            let context = $crate::prelude::ServerAuthContext::<$user>::from_request().await?;
+            let (user, token) = context.login(&args.identifier, &args.password).await?;
+            $crate::prelude::write_session_cookie(context.config().cookie(), Some(token.as_str()))?;
             return Ok(user);
         }
 
@@ -95,9 +91,9 @@ macro_rules! fullstack_server_fns {
         )]
         #[must_use = "sign-out must be acknowledged"]
         pub async fn dioxus_auth_logout() -> $crate::prelude::ServerFnResult<()> {
-            let context = $crate::prelude::ServerAuthContext::<$user>::from_request()?;
-            if let Some(token) = context.token() {
-                context.engine().engine().logout(token)?;
+            let context = $crate::prelude::ServerAuthContext::<$user>::from_request().await?;
+            if let Some(token) = context.token().cloned() {
+                context.logout(&token).await?;
             }
             $crate::prelude::write_session_cookie(context.config().cookie(), None)?;
             return Ok(());
@@ -114,7 +110,7 @@ macro_rules! fullstack_server_fns {
         )]
         #[must_use = "the resolved user must be used"]
         pub async fn dioxus_auth_session() -> $crate::prelude::ServerFnResult<$user> {
-            let user = $crate::prelude::require_user::<$user>()?;
+            let user = $crate::prelude::require_user::<$user>().await?;
             return Ok(user);
         }
     };

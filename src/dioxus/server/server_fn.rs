@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
 use crate::dioxus::operations::AuthEngineHandle;
+use crate::dioxus::server::blocking::run_blocking;
 use crate::dioxus::server::cookies::request_cookie_token;
 use crate::error::AuthError;
 use crate::security::CookieConfig;
@@ -115,24 +116,35 @@ pub struct ServerAuthContext<U: AuthUser> {
 impl<U: AuthUser + Clone> ServerAuthContext<U> {
     /// Resolves the request's session: cookie token, then engine validation.
     ///
+    /// The engine's validation (store lookups, and user hydration through
+    /// app-supplied stores) runs off the async worker via the blocking
+    /// boundary; see the `blocking` module.
+    ///
     /// # Errors
     /// Returns `ServerError::MissingContext` when no engine is configured for
     /// this request, or the engine's validation error verbatim.
     #[must_use = "the resolved context must be used"]
-    pub fn from_request() -> Result<Self, ServerError> {
+    pub async fn from_request() -> Result<Self, ServerError> {
         let config = match current_config::<U>() {
             Ok(config) => config,
             Err(error) => return Err(error),
         };
         let session = match FullstackContext::current() {
             Some(ctx) => {
-                let parts = ctx.parts_mut();
-                let session = match authenticate_headers(&config, &parts.headers) {
+                // The parts guard must be dropped before the await below.
+                let headers = {
+                    let parts = ctx.parts_mut();
+                    parts.headers.clone()
+                };
+                match run_blocking({
+                    let config = config.clone();
+                    move || return authenticate_headers(&config, &headers)
+                })
+                .await
+                {
                     Ok(session) => session,
                     Err(error) => return Err(error),
-                };
-                drop(parts);
-                session
+                }
             }
             None => (None, None),
         };
@@ -174,12 +186,64 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
     pub const fn is_authenticated(&self) -> bool {
         return self.user.is_some() && self.token.is_some();
     }
+
+    /// Authenticates the credentials and returns the user with the fresh wire
+    /// session token.
+    ///
+    /// The engine call (Argon2 verification, credential lookups) runs off the
+    /// async worker via the blocking boundary; see
+    /// the `blocking` module.
+    ///
+    /// # Errors
+    /// Returns the engine's login error verbatim.
+    #[must_use = "the authenticated user and session must be used"]
+    pub async fn login(
+        &self,
+        identifier: &str,
+        password: &str,
+    ) -> Result<(U, SessionId), ServerError> {
+        let engine = Arc::clone(self.engine().engine());
+        let identifier = String::from(identifier);
+        let password = String::from(password);
+        let outcome = run_blocking(move || {
+            return engine.login(&identifier, &password);
+        })
+        .await;
+        let (user, token) = match outcome {
+            Ok(pair) => pair,
+            Err(error) => return Err(ServerError::from(error)),
+        };
+        return Ok((user, token));
+    }
+
+    /// Revokes the given session on the engine.
+    ///
+    /// The engine call (a store scan under the session lock) runs off the
+    /// async worker via the blocking boundary; see
+    /// the `blocking` module.
+    ///
+    /// # Errors
+    /// Returns the engine's logout error verbatim.
+    #[must_use = "session revocation errors must be handled"]
+    pub async fn logout(&self, token: &SessionId) -> Result<(), ServerError> {
+        let engine = Arc::clone(self.engine().engine());
+        let token = token.clone();
+        let outcome = run_blocking(move || return engine.logout(&token)).await;
+        return match outcome {
+            Ok(()) => Ok(()),
+            Err(error) => Err(ServerError::from(error)),
+        };
+    }
 }
 
 /// Validates the session cookie carried by request headers.
 ///
 /// Returns the well-formed wire token and validated user. A missing or
 /// malformed token yields `(None, None)`; engine failures are returned.
+///
+/// Blocking: runs the engine's validation synchronously. Async callers reach
+/// it through [`ServerAuthContext::from_request`] or the axum layers, which
+/// dispatch it via the blocking boundary.
 #[must_use = "the validated session must be used"]
 pub fn authenticate_headers<U: AuthUser>(
     config: &ServerAuthConfig<U>,
