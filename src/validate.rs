@@ -2,6 +2,7 @@
 
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
+use crate::session::Session;
 use crate::status::SessionId;
 use crate::store::{SessionStore, UserStore};
 use crate::user::AuthUser;
@@ -57,26 +58,11 @@ where
             Err(e) => return Err(e),
         };
 
-        if let (Some(current_hash), Some(session_hash)) =
-            (user.session_auth_hash(), session.auth_hash())
-        {
-            if current_hash != session_hash {
-                if let Err(e) = self.drop_session(&storage_id) {
-                    return Err(e);
-                }
-                return Ok(None);
+        if self.session_is_invalidated(&session, &user, now) {
+            if let Err(e) = self.drop_session(&storage_id) {
+                return Err(e);
             }
-        }
-
-        if let Some(idle) = self.idle_timeout_secs {
-            if let Some(last_active) = session.last_active_at_unix() {
-                if now.saturating_sub(last_active) >= idle {
-                    if let Err(e) = self.drop_session(&storage_id) {
-                        return Err(e);
-                    }
-                    return Ok(None);
-                }
-            }
+            return Ok(None);
         }
 
         // reason: the storage record already carries `created + ttl` as its
@@ -95,6 +81,30 @@ where
 
         self.fire_on_session_validated(&user);
         return Ok(Some(user));
+    }
+
+    /// Whether a loaded, unexpired session must be dropped instead of accepted.
+    ///
+    /// Covers credential-version mismatch (e.g. after a password change) and
+    /// idle-timeout breach. Expiry is checked inline so a missing user is
+    /// never looked up for an already-dead session.
+    fn session_is_invalidated(&self, session: &Session<U::Id>, user: &U::User, now: u64) -> bool {
+        if let (Some(current_hash), Some(session_hash)) =
+            (user.session_auth_hash(), session.auth_hash())
+        {
+            if current_hash != session_hash {
+                return true;
+            }
+        }
+
+        if let Some(idle) = self.idle_timeout_secs {
+            if let Some(last_active) = session.last_active_at_unix() {
+                if now.saturating_sub(last_active) >= idle {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /// Deletes an invalid session, propagating store errors.

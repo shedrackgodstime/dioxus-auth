@@ -1,5 +1,6 @@
 //! Reactive authentication context shared through the component tree.
 
+use std::fmt;
 use std::sync::Arc;
 
 use ::dioxus::prelude::Signal;
@@ -27,64 +28,33 @@ pub struct AuthContext<T: AuthUser + Clone> {
     token_persisted: Signal<bool>,
 }
 
+/// Reactive signals owned by an [`AuthContext`].
+///
+/// Bundles the three signals so [`AuthContext::new`] stays within the
+/// parameter limit.
+pub struct AuthSignals<T: AuthUser + Clone> {
+    pub status: Signal<AuthStatus<T>>,
+    pub token: Signal<Option<SessionId>>,
+    pub token_persisted: Signal<bool>,
+}
+
+impl<T: AuthUser + Clone> fmt::Debug for AuthContext<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f.write_str("AuthContext(..)");
+    }
+}
+
 impl<T: AuthUser + Clone> AuthContext<T> {
-    /// Constructs a context. Only the provider builds one.
-    pub(crate) fn new(
-        engine: AuthEngineHandle<T>,
-        storage: TokenStorageHandle,
-        status: Signal<AuthStatus<T>>,
-        token: Signal<Option<SessionId>>,
-        token_persisted: Signal<bool>,
-    ) -> Self {
-        return Self {
-            engine: engine.0,
-            storage,
-            status,
-            token,
-            token_persisted,
-        };
-    }
-
-    /// Current authentication status.
+    /// Whether an authenticated user is present.
     #[must_use]
-    pub fn status(&self) -> AuthStatus<T> {
-        return self.status.read().clone();
-    }
-
-    /// The authenticated user, when authentication is settled.
-    #[must_use]
-    pub fn user(&self) -> Option<T> {
-        return match &*self.status.read() {
-            AuthStatus::Authenticated(user) => Some(user.clone()),
-            _ => None,
-        };
-    }
-
-    /// The current raw wire session token, when authenticated.
-    #[must_use]
-    pub fn token(&self) -> Option<SessionId> {
-        return self.token.read().clone();
-    }
-
-    /// Whether the current token was written to storage.
-    ///
-    /// A login whose persistence failed still holds an in-memory session, but
-    /// that session is lost on reload.
-    #[must_use]
-    pub fn token_persisted(&self) -> bool {
-        return *self.token_persisted.read();
+    pub fn is_authenticated(&self) -> bool {
+        return matches!(&*self.status.read(), AuthStatus::Authenticated(_));
     }
 
     /// Whether the auth state is still being restored from storage.
     #[must_use]
     pub fn is_loading(&self) -> bool {
         return matches!(&*self.status.read(), AuthStatus::Loading);
-    }
-
-    /// Whether an authenticated user is present.
-    #[must_use]
-    pub fn is_authenticated(&self) -> bool {
-        return matches!(&*self.status.read(), AuthStatus::Authenticated(_));
     }
 
     /// Authenticates, records the token and signals the identity reactively.
@@ -137,30 +107,18 @@ impl<T: AuthUser + Clone> AuthContext<T> {
         };
     }
 
-    /// Re-validates the current session token against the engine.
-    ///
-    /// On success the status is refreshed to the resolved identity. A session
-    /// the engine no longer accepts moves the context to guest state.
-    ///
-    /// # Errors
-    /// Returns the engine error; the current state is left untouched.
-    #[must_use = "the validation result must be handled"]
-    pub fn validate(&self) -> Result<Option<T>, AuthError> {
-        let wire = match self.token.read().clone() {
-            Some(wire) => wire,
-            None => return Ok(None),
-        };
-        return match self.engine.validate(&wire) {
-            Ok(Some(user)) => {
-                let mut status = self.status;
-                *status.write() = AuthStatus::Authenticated(user.clone());
-                Ok(Some(user))
-            }
-            Ok(None) => {
-                self.set_guest();
-                Ok(None)
-            }
-            Err(e) => Err(e),
+    /// Constructs a context. Only the provider builds one.
+    pub(crate) fn new(
+        engine: AuthEngineHandle<T>,
+        storage: TokenStorageHandle,
+        signals: &AuthSignals<T>,
+    ) -> Self {
+        return Self {
+            engine: engine.0,
+            storage,
+            status: signals.status,
+            token: signals.token,
+            token_persisted: signals.token_persisted,
         };
     }
 
@@ -218,5 +176,62 @@ impl<T: AuthUser + Clone> AuthContext<T> {
         *token.write() = None;
         *status.write() = AuthStatus::Guest;
         *persisted.write() = false;
+    }
+
+    /// Current authentication status.
+    #[must_use]
+    pub fn status(&self) -> AuthStatus<T> {
+        return self.status.read().clone();
+    }
+
+    /// The current raw wire session token, when authenticated.
+    #[must_use]
+    pub fn token(&self) -> Option<SessionId> {
+        return self.token.read().clone();
+    }
+
+    /// Whether the current token was written to storage.
+    ///
+    /// A login whose persistence failed still holds an in-memory session, but
+    /// that session is lost on reload.
+    #[must_use]
+    pub fn token_persisted(&self) -> bool {
+        return *self.token_persisted.read();
+    }
+
+    /// The authenticated user, when authentication is settled.
+    #[must_use]
+    pub fn user(&self) -> Option<T> {
+        return match &*self.status.read() {
+            AuthStatus::Authenticated(user) => Some(user.clone()),
+            _ => None,
+        };
+    }
+
+    /// Re-validates the current session token against the engine.
+    ///
+    /// On success the status is refreshed to the resolved identity. A session
+    /// the engine no longer accepts moves the context to guest state.
+    ///
+    /// # Errors
+    /// Returns the engine error; the current state is left untouched.
+    #[must_use = "the validation result must be handled"]
+    pub fn validate(&self) -> Result<Option<T>, AuthError> {
+        let wire = match self.token.read().clone() {
+            Some(wire) => wire,
+            None => return Ok(None),
+        };
+        return match self.engine.validate(&wire) {
+            Ok(Some(user)) => {
+                let mut status = self.status;
+                *status.write() = AuthStatus::Authenticated(user.clone());
+                Ok(Some(user))
+            }
+            Ok(None) => {
+                self.set_guest();
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        };
     }
 }

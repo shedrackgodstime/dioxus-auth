@@ -2,6 +2,7 @@
 
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
+use crate::session::Session;
 use crate::status::SessionId;
 use crate::store::{SessionStore, UserStore};
 
@@ -19,11 +20,7 @@ where
     /// Returns a store error if the lookup or deletion fails.
     #[must_use = "sign-out must be acknowledged"]
     pub fn logout(&self, session_id: &SessionId) -> Result<(), AuthError> {
-        if !SessionId::is_valid_wire_format(session_id.as_str()) {
-            return Ok(());
-        }
-        let storage_id = session_id.hash_for_storage();
-        let session = match self.sessions.find_session(&storage_id) {
+        let session = match self.find_wire_session(session_id) {
             Ok(Some(session)) => session,
             Ok(None) => return Ok(()),
             Err(e) => return Err(e),
@@ -33,7 +30,7 @@ where
             Ok(None) => return Ok(()),
             Err(e) => return Err(e),
         };
-        match self.sessions.delete_session(&storage_id) {
+        match self.sessions.delete_session(session.id()) {
             Ok(()) => {}
             Err(e) => return Err(e),
         }
@@ -51,22 +48,31 @@ where
     /// Returns a store error if the lookup or deletion fails.
     #[must_use = "session revocation should not be silently ignored"]
     pub fn revoke_session(&self, session_id: &SessionId) -> Result<bool, AuthError> {
-        if !SessionId::is_valid_wire_format(session_id.as_str()) {
-            return Ok(false);
-        }
-        let storage_id = session_id.hash_for_storage();
-        let existed = match self.sessions.find_session(&storage_id) {
-            Ok(Some(_)) => true,
-            Ok(None) => false,
+        let session = match self.find_wire_session(session_id) {
+            Ok(session) => session,
             Err(e) => return Err(e),
         };
-        if existed {
-            match self.sessions.delete_session(&storage_id) {
-                Ok(()) => {}
-                Err(e) => return Err(e),
-            }
+        let Some(session) = session else {
+            return Ok(false);
+        };
+        match self.sessions.delete_session(session.id()) {
+            Ok(()) => return Ok(true),
+            Err(e) => return Err(e),
+        };
+    }
+
+    /// Loads the stored session for a raw wire token.
+    ///
+    /// Malformed wire tokens yield `Ok(None)` without touching the store.
+    fn find_wire_session(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<Session<U::Id>>, AuthError> {
+        if !SessionId::is_valid_wire_format(session_id.as_str()) {
+            return Ok(None);
         }
-        return Ok(existed);
+        let storage_id = session_id.hash_for_storage();
+        return self.sessions.find_session(&storage_id);
     }
 
     /// Revokes all sessions belonging to a user.

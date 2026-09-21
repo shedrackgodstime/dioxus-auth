@@ -52,6 +52,18 @@ fn cloned_or_empty<T: Clone>(lock: &RwLock<Vec<T>>) -> Vec<T> {
         .map_or_else(Vec::new, |guard| return guard.clone());
 }
 
+/// Replaces the first entry matching the incoming value, or pushes it.
+fn replace_or_push<T>(items: &mut Vec<T>, value: T, matches: impl Fn(&T, &T) -> bool) {
+    if let Some(existing) = items
+        .iter_mut()
+        .find(|current| return matches(current, &value))
+    {
+        *existing = value;
+    } else {
+        items.push(value);
+    }
+}
+
 impl<User: AuthUser> MemoryStore<User> {
     /// Creates a new empty in-memory store.
     #[must_use]
@@ -62,11 +74,9 @@ impl<User: AuthUser> MemoryStore<User> {
     /// Inserts or updates a user without credentials.
     pub fn insert_user(&self, user: User) {
         let mut users = self.users.write();
-        if let Some(existing) = users.iter_mut().find(|u| return u.id() == user.id()) {
-            *existing = user;
-        } else {
-            users.push(user);
-        }
+        replace_or_push(&mut users, user, |current, incoming| {
+            return current.id() == incoming.id();
+        });
     }
 
     /// Inserts or updates a user with login identifier and hashed password.
@@ -82,15 +92,11 @@ impl<User: AuthUser> MemoryStore<User> {
         let hash = password_hash.into();
         {
             let mut credentials = self.credentials.write();
-            if let Some(entry) = credentials
-                .iter_mut()
-                .find(|(ident, _, _)| return *ident == identifier)
-            {
-                entry.1 = id;
-                entry.2 = hash;
-            } else {
-                credentials.push((identifier, id, hash));
-            }
+            replace_or_push(
+                &mut credentials,
+                (identifier, id, hash),
+                |current, incoming| return current.0 == incoming.0,
+            );
         }
     }
 }
@@ -155,11 +161,9 @@ impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
     fn save_session(&self, session: Session<Self::Id>) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            if let Some(existing) = sessions.iter_mut().find(|s| return s.id() == session.id()) {
-                *existing = session;
-            } else {
-                sessions.push(session);
-            }
+            replace_or_push(&mut sessions, session, |current, incoming| {
+                return current.id() == incoming.id();
+            });
         }
         return Ok(());
     }

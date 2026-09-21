@@ -29,9 +29,13 @@ jobs:
       - name: Check format
         run: cargo fmt -- --check
       - name: Check clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --pedantic -- -D warnings
       - name: Test all targets
         run: cargo test --all-targets
+      - name: Test dioxus feature
+        run: cargo test --all-targets --features dioxus
+      - name: Test fullstack server features
+        run: cargo test --all-targets --features dioxus-fullstack,server
       - name: Test doc
         run: cargo test --doc
 
@@ -66,6 +70,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check packaging
         run: bash scripts/check-packaging.sh
+
+  wasm:
+    name: Wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Check wasm target
+        run: cargo check --target wasm32-unknown-unknown
 
   coverage:
     name: Coverage

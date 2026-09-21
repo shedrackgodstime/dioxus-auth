@@ -4,6 +4,10 @@
 //! concrete user/session store generics are hidden behind the erased
 //! [`AuthOperations`] interface so hooks and components never leak them.
 //!
+//! Component conventions: Dioxus `Props` structs declare `pub` fields as the
+//! `Props` derive requires, and components are declarative constructors
+//! consumed by `rsx!` rather than `#[must_use]`-checked call sites.
+//!
 //! All public items here are re-exported through the crate's
 //! [`prelude`](crate::prelude).
 

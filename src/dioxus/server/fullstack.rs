@@ -70,6 +70,7 @@ macro_rules! fullstack_server_fns {
             clippy::question_mark_used,
             clippy::unused_async
         )]
+        #[must_use = "the authenticated user must be used"]
         pub async fn dioxus_auth_login(
             args: $crate::prelude::LoginRequest,
         ) -> $crate::prelude::ServerFnResult<$user> {
@@ -92,6 +93,7 @@ macro_rules! fullstack_server_fns {
             clippy::question_mark_used,
             clippy::unused_async
         )]
+        #[must_use = "sign-out must be acknowledged"]
         pub async fn dioxus_auth_logout() -> $crate::prelude::ServerFnResult<()> {
             let context = $crate::prelude::ServerAuthContext::<$user>::from_request()?;
             if let Some(token) = context.token() {
@@ -110,6 +112,7 @@ macro_rules! fullstack_server_fns {
             clippy::question_mark_used,
             clippy::unused_async
         )]
+        #[must_use = "the resolved user must be used"]
         pub async fn dioxus_auth_session() -> $crate::prelude::ServerFnResult<$user> {
             let user = $crate::prelude::require_user::<$user>()?;
             return Ok(user);

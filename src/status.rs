@@ -5,8 +5,11 @@ use std::fmt::{self, Display};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 
+/// Redaction placeholder for session secrets in debug output.
+pub const REDACTED: &str = "***";
+
 /// The authentication status of a user.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum AuthStatus<U> {
     /// The user is authenticated.
     Authenticated(U),
@@ -15,6 +18,18 @@ pub enum AuthStatus<U> {
     /// The user is loading their authentication state.
     Loading,
 }
+
+impl<U: PartialEq> PartialEq for AuthStatus<U> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Authenticated(left), Self::Authenticated(right)) => return left == right,
+            (Self::Guest, Self::Guest) | (Self::Loading, Self::Loading) => return true,
+            _ => return false,
+        }
+    }
+}
+
+impl<U: Eq> Eq for AuthStatus<U> {}
 
 /// Opaque session identifier.
 ///
@@ -49,6 +64,15 @@ impl SessionId {
 
     /// Generates a new cryptographically secure random session ID
     /// (256-bit CSPRNG hex string).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::prelude::SessionId;
+    /// let id = SessionId::generate();
+    /// assert!(SessionId::is_valid_wire_format(id.as_str()));
+    /// assert_ne!(id.hash_for_storage().as_str(), id.as_str());
+    /// ```
     #[must_use]
     pub fn generate() -> Self {
         let mut bytes = [0u8; 32];
@@ -78,7 +102,7 @@ impl SessionId {
 
 impl Display for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return f.write_str("***");
+        return f.write_str(REDACTED);
     }
 }
 

@@ -27,6 +27,9 @@ pub trait RateLimiter: std::fmt::Debug + Send + Sync {
     fn record_success(&self, identifier: &str);
 }
 
+/// Default rate-limit window: 15 minutes, in seconds.
+const DEFAULT_WINDOW_SECS: u64 = 15 * 60;
+
 /// In-memory sliding-window rate limiter.
 ///
 /// Tracks failed login attempts per identifier within a rolling time window.
@@ -45,7 +48,7 @@ pub struct InMemoryRateLimiter {
 impl Default for InMemoryRateLimiter {
     /// 10 failed attempts per 15-minute window.
     fn default() -> Self {
-        return Self::new(10, Duration::from_secs(15 * 60));
+        return Self::new(10, Duration::from_secs(DEFAULT_WINDOW_SECS));
     }
 }
 

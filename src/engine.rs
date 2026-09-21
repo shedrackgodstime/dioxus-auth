@@ -12,7 +12,7 @@ use crate::store::{SessionStore, UserStore};
 /// Options for [`AuthEngine::login_with_options`].
 ///
 /// Fields are private; read them through the accessors.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LoginOptions<'a> {
     ip_address: Option<&'a str>,
     user_agent: Option<&'a str>,
@@ -55,14 +55,24 @@ impl<'a> LoginOptions<'a> {
     }
 }
 
-impl Default for LoginOptions<'_> {
-    fn default() -> Self {
-        return Self::new();
-    }
-}
-
 /// Arc-wrapped user callback set by the builder.
 pub type UserCallback<U> = Arc<dyn Fn(&U) + Send + Sync>;
+
+/// Renders the six store/hasher/config fields shared by [`AuthEngine`] and
+/// [`AuthEngineBuilder`](crate::builder::AuthEngineBuilder) debug output.
+macro_rules! shared_auth_debug_fields {
+    ($debug:expr, $target:expr) => {
+        $debug
+            .field("users", &$target.users)
+            .field("sessions", &$target.sessions)
+            .field("hasher", &$target.hasher)
+            .field("session_ttl_secs", &$target.session_ttl_secs)
+            .field("idle_timeout_secs", &$target.idle_timeout_secs)
+            .field("single_active_session", &$target.single_active_session)
+    };
+}
+
+pub(crate) use shared_auth_debug_fields;
 
 /// Central authentication flow orchestrator.
 ///
@@ -110,14 +120,8 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // reason: the dummy hash is a constant and the clock is a closure; both
         // are irrelevant for debugging and are elided.
-        return f
-            .debug_struct("AuthEngine")
-            .field("users", &self.users)
-            .field("sessions", &self.sessions)
-            .field("hasher", &self.hasher)
-            .field("session_ttl_secs", &self.session_ttl_secs)
-            .field("idle_timeout_secs", &self.idle_timeout_secs)
-            .field("single_active_session", &self.single_active_session)
+        let mut debug = f.debug_struct("AuthEngine");
+        return shared_auth_debug_fields!(&mut debug, self)
             .field("on_sign_in", &self.on_sign_in.is_some())
             .field("on_sign_out", &self.on_sign_out.is_some())
             .field("on_session_validated", &self.on_session_validated.is_some())
@@ -135,6 +139,27 @@ where
 {
     /// Creates a new [`AuthEngine`] with the default Argon2id hasher and
     /// 7-day session TTL.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::prelude::{AuthEngine, AuthUser, MemoryStore};
+    /// # use std::sync::Arc;
+    /// # #[derive(Debug, Clone)]
+    /// # struct User;
+    /// # impl AuthUser for User {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> u64 { return 1; }
+    /// #     fn display_name(&self) -> Option<String> { return None; }
+    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(Self); }
+    /// # }
+    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// let store = Arc::new(MemoryStore::<User>::new());
+    /// let engine = AuthEngine::new(Arc::clone(&store), store)?;
+    /// assert_eq!(engine.session_ttl_secs(), 60 * 60 * 24 * 7);
+    /// # return Ok(());
+    /// # }
+    /// ```
     ///
     /// # Errors
     /// Returns `AuthError` if the default hasher cannot pre-compute the

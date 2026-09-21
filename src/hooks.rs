@@ -25,6 +25,10 @@ where
 ///
 /// Per RULES §8.5 a panicking hook indicates a programming error: it is
 /// intentionally not caught. The panic stops the program.
+///
+/// # Panics
+/// Propagates any panic raised by `hook`; panics in hooks are programming
+/// errors and must stop the program rather than be caught.
 pub fn fire_hook<U>(hook: Option<&UserCallback<U>>, user: &U) {
     if let Some(hook) = hook {
         hook(user);

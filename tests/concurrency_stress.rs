@@ -21,7 +21,7 @@ use dioxus_auth::prelude::{AuthEngine, AuthError, MemoryStore, Session, SessionI
 use identity_hasher::IdentityHasher;
 use parking_lot::Mutex;
 
-const FIVE_SECONDS: Duration = Duration::from_secs(60);
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A `SessionStore` decorator that lets a test park in the middle of the engine's
 /// read→touch window and deterministically finish the logout/rotate delete first.
@@ -51,7 +51,7 @@ impl ChoreographedStore {
 
     /// Waits until a session lookup observed the target session.
     pub fn await_found(&self) -> Result<(), ()> {
-        let received = self.found_rx.lock().recv_timeout(FIVE_SECONDS);
+        let received = self.found_rx.lock().recv_timeout(HANDSHAKE_TIMEOUT);
         return match received {
             Ok(()) => Ok(()),
             Err(_) => Err(()),
@@ -98,7 +98,10 @@ impl SessionStore for ChoreographedStore {
         new_expiry: u64,
         last_active: u64,
     ) -> Result<(), AuthError> {
-        self.deleted_rx.lock().recv_timeout(FIVE_SECONDS).unwrap();
+        self.deleted_rx
+            .lock()
+            .recv_timeout(HANDSHAKE_TIMEOUT)
+            .unwrap();
         return self
             .inner
             .touch_session_if_present(id, new_expiry, last_active);
@@ -154,6 +157,30 @@ fn clocked_engine(
         .expect("engine construction must succeed");
 }
 
+/// Runs `disrupt` while a validation parks in the read→touch window, then
+/// returns the parked validation's outcome.
+fn parked_validation_outcome(
+    engine: &Arc<AuthEngine<MemoryStore<TestUser>, ChoreographedStore>>,
+    session_id: &SessionId,
+    disrupt: impl FnOnce(),
+) -> Option<TestUser> {
+    let validate_engine = Arc::clone(engine);
+    let validate_id = session_id.clone();
+    let handle = std::thread::spawn(move || {
+        return validate_engine.validate_session(&validate_id);
+    });
+
+    let store = engine.session_store();
+    store
+        .await_found()
+        .expect("validate must park in the read window");
+    disrupt();
+    store.signal_deleted();
+
+    let validated = handle.join().expect("validate thread must not panic");
+    return validated.expect("parked validation must not error");
+}
+
 #[test]
 fn logout_concurrent_with_validate_does_not_resurrect() {
     let clock = Arc::new(AtomicU64::new(1_000));
@@ -161,25 +188,12 @@ fn logout_concurrent_with_validate_does_not_resurrect() {
     let (_, session) = engine.login("alice", "pw").unwrap();
     let storage_id = session.id().hash_for_storage();
 
-    let validate_engine = Arc::clone(&engine);
-    let validate_id = session.id().clone();
-    let handle = std::thread::spawn(move || {
-        return validate_engine.validate_session(&validate_id);
+    let store = engine.session_store();
+    let validated = parked_validation_outcome(&engine, session.id(), || {
+        return engine.logout(session.id()).unwrap();
     });
-
-    engine.session_store().await_found().unwrap();
-    engine.logout(session.id()).unwrap();
-    engine.session_store().signal_deleted();
-
-    let validated = handle.join().expect("validate thread must not panic");
-    assert!(validated.unwrap().is_some());
-    assert!(
-        engine
-            .session_store()
-            .find_session(&storage_id)
-            .unwrap()
-            .is_none()
-    );
+    assert!(validated.is_some());
+    assert!(store.find_session(&storage_id).unwrap().is_none());
     assert!(engine.validate_session(session.id()).unwrap().is_none());
 }
 
@@ -190,39 +204,23 @@ fn rotate_concurrent_with_validate_keeps_old_session_dead() {
     let (_, old_session) = engine.login("alice", "pw").unwrap();
     let old_storage_id = old_session.id().hash_for_storage();
 
-    let validate_engine = Arc::clone(&engine);
-    let old_id = old_session.id().clone();
-    let handle = std::thread::spawn(move || {
-        return validate_engine.validate_session(&old_id);
+    let validated = parked_validation_outcome(&engine, old_session.id(), || {
+        let (user, _new_session) = engine.login("alice", "pw").unwrap();
+        assert_eq!(user.id, 1);
     });
-
-    engine.session_store().await_found().unwrap();
-    let (user, new_session) = engine.login("alice", "pw").unwrap();
-    assert_eq!(user.id, 1);
-    engine.session_store().signal_deleted();
-
-    let validated = handle.join().expect("validate thread must not panic");
-    assert!(validated.unwrap().is_some());
-    assert!(
-        engine
-            .session_store()
-            .find_session(&old_storage_id)
-            .unwrap()
-            .is_none()
-    );
+    assert!(validated.is_some());
+    let store = engine.session_store();
+    assert!(store.find_session(&old_storage_id).unwrap().is_none());
     assert!(engine.validate_session(old_session.id()).unwrap().is_none());
-    let new_storage_id = new_session.id().hash_for_storage();
-    assert!(
-        engine
-            .session_store()
-            .find_session(&new_storage_id)
-            .unwrap()
-            .is_some()
-    );
-    assert_eq!(
-        engine.session_store().list_user_sessions(&1).unwrap().len(),
-        1
-    );
+    let new_storage_id = store
+        .list_user_sessions(&1)
+        .unwrap()
+        .first()
+        .expect("the rotated session must exist")
+        .id()
+        .clone();
+    assert!(store.find_session(&new_storage_id).unwrap().is_some());
+    assert_eq!(store.list_user_sessions(&1).unwrap().len(), 1);
 }
 
 #[test]

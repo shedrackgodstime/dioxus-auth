@@ -62,6 +62,56 @@ where
             }
         }
 
+        let user = match self.authenticate_user(identifier, password, &limiter_key) {
+            Ok(user) => user,
+            Err(e) => return Err(e),
+        };
+
+        let now = (self.now)();
+        let expires_at = now + self.session_ttl_secs;
+        let user_id = user.id();
+        let auth_hash = user.session_auth_hash().map(str::to_string);
+
+        match self.rotate_stale_sessions(&user_id, auth_hash.as_deref()) {
+            Ok(()) => {}
+            Err(e) => return Err(e),
+        }
+
+        let raw_id = SessionId::generate();
+        let storage_id = raw_id.hash_for_storage();
+        let storage_session = Self::apply_session_options(
+            Session::new(storage_id, user_id.clone(), now, expires_at).with_last_active(now),
+            auth_hash.as_deref(),
+            &options,
+        );
+        match self.sessions.save_session(storage_session) {
+            Ok(()) => {}
+            Err(e) => return Err(e),
+        }
+
+        let wire_session = Self::apply_session_options(
+            Session::new(raw_id, user_id, now, expires_at).with_last_active(now),
+            auth_hash.as_deref(),
+            &options,
+        );
+
+        self.fire_on_sign_in(&user);
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.record_success(&limiter_key);
+        }
+        return Ok((user, wire_session));
+    }
+
+    /// Resolves and verifies the user for an identifier/password pair.
+    ///
+    /// Constant-time defense: unknown-user login runs one Argon2 verification
+    /// against the dummy hash, so miss and hit take indistinguishable time.
+    fn authenticate_user(
+        &self,
+        identifier: &str,
+        password: &str,
+        limiter_key: &str,
+    ) -> Result<U::User, AuthError> {
         let user_entry = match self.users.find_by_identifier(identifier) {
             Ok(entry) => entry,
             Err(e) => return Err(e),
@@ -71,9 +121,12 @@ where
             entry
         } else {
             if let Some(limiter) = &self.rate_limiter {
-                limiter.record_attempt(&limiter_key);
+                limiter.record_attempt(limiter_key);
             }
-            drop(self.hasher.verify(password, &self.dummy_hash));
+            // reason: the dummy verification exists only to burn verifier time
+            // on unknown identifiers; its outcome is irrelevant, so both arms
+            // fall through to `InvalidCredentials` without branching on it.
+            let _burned = self.hasher.verify(password, &self.dummy_hash).is_ok();
             return Err(AuthError::InvalidCredentials);
         };
 
@@ -83,76 +136,66 @@ where
         };
         if !is_valid {
             if let Some(limiter) = &self.rate_limiter {
-                limiter.record_attempt(&limiter_key);
+                limiter.record_attempt(limiter_key);
             }
             return Err(AuthError::InvalidCredentials);
         }
+        return Ok(user);
+    }
 
-        let now = (self.now)();
-        let expires_at = now + self.session_ttl_secs;
-        let user_id = user.id();
-
+    /// Deletes sessions superseded by the current credential state.
+    ///
+    /// With single-active-session enforcement every existing session goes;
+    /// otherwise only sessions minted under a rotated credential version are
+    /// removed, so a password change revokes them at the next login rather
+    /// than only on first use (`validate_session` also drops them lazily).
+    fn rotate_stale_sessions(
+        &self,
+        user_id: &U::Id,
+        current_hash: Option<&str>,
+    ) -> Result<(), AuthError> {
         if self.single_active_session {
-            match self.sessions.delete_user_sessions(&user_id) {
-                Ok(()) => {}
-                Err(e) => return Err(e),
-            }
-        } else if let Some(current_hash) = user.session_auth_hash() {
-            // reason: rotate sessions minted under a previous credential
-            // version so a password change revokes them at the next login
-            // rather than only on first use (validate_session also drops
-            // them lazily on use).
-            let sessions = match self.sessions.list_user_sessions(&user_id) {
-                Ok(list) => list,
-                Err(e) => return Err(e),
+            return match self.sessions.delete_user_sessions(user_id) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(e),
             };
-            for session in sessions {
-                if let Some(session_hash) = session.auth_hash() {
-                    if session_hash != current_hash {
-                        if let Err(e) = self.sessions.delete_session(session.id()) {
-                            return Err(e);
-                        }
+        }
+        let Some(current_hash) = current_hash else {
+            return Ok(());
+        };
+        let sessions = match self.sessions.list_user_sessions(user_id) {
+            Ok(sessions) => sessions,
+            Err(e) => return Err(e),
+        };
+        for session in sessions {
+            if let Some(session_hash) = session.auth_hash() {
+                if session_hash != current_hash {
+                    if let Err(e) = self.sessions.delete_session(session.id()) {
+                        return Err(e);
                     }
                 }
             }
         }
+        return Ok(());
+    }
 
-        let raw_id = SessionId::generate();
-        let storage_id = raw_id.hash_for_storage();
-        let auth_hash = user.session_auth_hash().map(str::to_string);
-
-        let mut storage_session =
-            Session::new(storage_id, user_id.clone(), now, expires_at).with_last_active(now);
-        if let Some(auth) = &auth_hash {
-            storage_session = storage_session.with_auth_hash(auth.clone());
+    /// Attaches the credential version and request metadata to a session.
+    fn apply_session_options(
+        session: Session<U::Id>,
+        auth_hash: Option<&str>,
+        options: &LoginOptions<'_>,
+    ) -> Session<U::Id> {
+        let mut session = session;
+        if let Some(auth) = auth_hash {
+            session = session.with_auth_hash(auth);
         }
         if let Some(ip) = options.ip_address() {
-            storage_session = storage_session.with_ip_address(ip);
+            session = session.with_ip_address(ip);
         }
-        if let Some(ua) = options.user_agent() {
-            storage_session = storage_session.with_user_agent(ua);
+        if let Some(user_agent) = options.user_agent() {
+            session = session.with_user_agent(user_agent);
         }
-        match self.sessions.save_session(storage_session) {
-            Ok(()) => {}
-            Err(e) => return Err(e),
-        }
-
-        let mut wire_session = Session::new(raw_id, user_id, now, expires_at).with_last_active(now);
-        if let Some(auth) = &auth_hash {
-            wire_session = wire_session.with_auth_hash(auth.clone());
-        }
-        if let Some(ip) = options.ip_address() {
-            wire_session = wire_session.with_ip_address(ip);
-        }
-        if let Some(ua) = options.user_agent() {
-            wire_session = wire_session.with_user_agent(ua);
-        }
-
-        self.fire_on_sign_in(&user);
-        if let Some(limiter) = &self.rate_limiter {
-            limiter.record_success(&limiter_key);
-        }
-        return Ok((user, wire_session));
+        return session;
     }
 
     /// Whether an identifier (e.g. email or username) exists in the store.

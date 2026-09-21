@@ -24,6 +24,22 @@ impl CookieConfig {
     ///
     /// Defaults: `name = "session"`, `http_only = true`, `secure = true`,
     /// `same_site = SameSite::Lax`, `path = "/"`, no `domain`, no `max_age`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::prelude::{CookieConfig, SameSite};
+    /// let config = CookieConfig::new()
+    ///     .with_secure(false)
+    ///     .with_name(String::from("sid"));
+    /// assert_eq!(config.name(), "sid");
+    /// assert!(!config.secure());
+    /// assert!(config.http_only());
+    /// assert_eq!(config.same_site(), SameSite::Lax);
+    /// let fresh = CookieConfig::new();
+    /// assert_eq!(CookieConfig::default().name(), fresh.name());
+    /// assert_eq!(CookieConfig::default().secure(), fresh.secure());
+    /// ```
     #[must_use = "the cookie configuration must be used"]
     pub fn new() -> Self {
         return Self {

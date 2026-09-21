@@ -4,15 +4,17 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 whitelist=(
+    # reason: the next four entries are cargo-generated artifacts, not
+    # `include` entries; whitelisting keeps the check green for them.
     '^\.cargo/.*$'
     '^\.cargo_vcs_info\.json$'
-    '^\.github/workflows/ci\.yml$'
-    '^\.gitignore$'
     '^Cargo\.lock$'
     '^Cargo\.toml$'
     # reason: cargo always ships its normalized original manifest in the crate;
     # whitelisting keeps the check green for this cargo artifact.
     '^Cargo\.toml\.orig$'
+    '^\.github/workflows/ci\.yml$'
+    '^\.gitignore$'
     '^clippy\.toml$'
     '^rustfmt\.toml$'
     '^README\.md$'

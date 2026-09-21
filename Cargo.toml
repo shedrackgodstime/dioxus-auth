@@ -82,13 +82,28 @@ name = "conformance_session_store"
 path = "tests/conformance/session_store.rs"
 
 [[test]]
+name = "concurrency_stress"
+path = "tests/concurrency_stress.rs"
+required-features = []
+
+[[test]]
+name = "core_engine"
+path = "tests/core_engine/main.rs"
+required-features = []
+
+[[test]]
+name = "public_api"
+path = "tests/public_api/main.rs"
+required-features = []
+
+[[test]]
 name = "dioxus_runtime"
-path = "tests/dioxus_runtime.rs"
+path = "tests/dioxus_runtime/main.rs"
 required-features = ["dioxus"]
 
 [[test]]
 name = "fullstack_tests"
-path = "tests/fullstack_tests.rs"
+path = "tests/fullstack_tests/main.rs"
 required-features = ["dioxus-fullstack", "server"]
 
 [[test]]

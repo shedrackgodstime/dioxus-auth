@@ -1,15 +1,21 @@
 //! Root auth provider component.
 
+use std::fmt;
+
 use ::dioxus::prelude::{Element, Props, rsx, use_context_provider, use_signal};
 
 use crate::status::{AuthStatus, SessionId};
 use crate::user::AuthUser;
 
-use super::context::AuthContext;
+use super::context::{AuthContext, AuthSignals};
+use super::guards::children_agree;
 use super::operations::AuthEngineHandle;
 use super::storage::TokenStorageHandle;
 
 /// Props for [`AuthProvider`].
+///
+/// Fields are public because the Dioxus `Props` derive requires it. `Debug`
+/// is redacted: rendering children would dump the subtree on every diff log.
 #[derive(Clone, Props)]
 pub struct AuthProviderProps<T: AuthUser + Clone> {
     /// Type-erased authentication engine supplied by the application.
@@ -20,12 +26,18 @@ pub struct AuthProviderProps<T: AuthUser + Clone> {
     pub children: Element,
 }
 
+impl<T: AuthUser + Clone> fmt::Debug for AuthProviderProps<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f.write_str("AuthProviderProps(..)");
+    }
+}
+
 impl<T: AuthUser + Clone> PartialEq for AuthProviderProps<T> {
     fn eq(&self, other: &Self) -> bool {
         let engine_agrees = self.engine == other.engine;
         let storage_agrees = self.token_storage == other.token_storage;
-        let children_agree = self.children == other.children;
-        return engine_agrees && storage_agrees && children_agree;
+        let kids_agree = children_agree(&self.children, &other.children);
+        return engine_agrees && storage_agrees && kids_agree;
     }
 }
 
@@ -62,12 +74,21 @@ where
         return false;
     });
     let context = use_context_provider(|| {
-        return AuthContext::new(engine, token_storage, status, token, token_persisted);
+        return AuthContext::new(
+            engine,
+            token_storage,
+            &AuthSignals {
+                status,
+                token,
+                token_persisted,
+            },
+        );
     });
 
     if context.is_loading() {
-        // First render: settle the identity from storage. A storage failure is
-        // demoted to guest so the rest of the tree always sees a defined state.
+        // reason: the first render settles the identity from storage; a
+        // storage failure is demoted to guest so the tree always sees a
+        // defined state.
         match context.restore() {
             Ok(()) => {}
             Err(_) => context.set_guest(),

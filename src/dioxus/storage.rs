@@ -11,6 +11,9 @@ use crate::transport::TokenStorage;
 /// Cloneable token storage handle exposing `&mut self` operations through a
 /// shared lock, so components and the auth context can share one storage.
 ///
+/// The `Box<dyn TokenStorage>` erasure is load-bearing: component props must
+/// name a concrete type.
+///
 /// `PartialEq` compares the shared `Arc` identity; the stored token contents
 /// are deliberately not part of prop diffing.
 #[derive(Clone)]

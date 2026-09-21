@@ -1,0 +1,120 @@
+//! Engine policy tests: single sessions, rate limiting, TTL, getters.
+
+// reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
+// conflicting style lint `needless_return` is allowed with this justification.
+#![allow(clippy::needless_return)]
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use super::common::TestUser;
+use super::password::hash_password;
+use dioxus_auth::prelude::{
+    AuthEngine, AuthError, InMemoryRateLimiter, MemoryStore, SessionId, SessionStore, UserStore,
+};
+
+use super::seeded_engine;
+
+#[test]
+fn revoke_all_user_sessions_invalidates_every_active_session() {
+    let engine = seeded_engine();
+
+    let (_, first) = engine.login("alice", "s3cret").unwrap();
+    let (_, second) = engine.login("alice", "s3cret").unwrap();
+    assert!(engine.validate_session(first.id()).unwrap().is_some());
+    assert!(engine.validate_session(second.id()).unwrap().is_some());
+
+    engine.revoke_all_user_sessions(&1).unwrap();
+
+    assert!(engine.validate_session(first.id()).unwrap().is_none());
+    assert!(engine.validate_session(second.id()).unwrap().is_none());
+}
+
+#[test]
+fn single_active_session_invalidates_the_previous_session() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .single_active_session(true)
+        .build()
+        .expect("engine construction must succeed");
+
+    let (_, first) = engine.login("alice", "pw").unwrap();
+    let (_, second) = engine.login("alice", "pw").unwrap();
+
+    assert!(engine.validate_session(first.id()).unwrap().is_none());
+    assert!(engine.validate_session(second.id()).unwrap().is_some());
+}
+
+#[test]
+fn failed_attempts_are_rate_limited() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let limiter = InMemoryRateLimiter::new(2, std::time::Duration::from_secs(60));
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .rate_limiter(limiter)
+        .build()
+        .expect("engine construction must succeed");
+
+    assert!(engine.login("alice", "wrong-1").is_err());
+    assert!(engine.login("alice", "wrong-2").is_err());
+
+    let result = engine.login("alice", "wrong-3");
+    assert_eq!(result.unwrap_err(), AuthError::RateLimited);
+}
+
+#[test]
+fn engine_getters_expose_configured_defaults() {
+    let engine = seeded_engine();
+
+    assert_eq!(engine.session_ttl_secs(), 7 * 24 * 60 * 60);
+    assert_eq!(engine.idle_timeout_secs(), None);
+    assert!(!engine.single_active_session());
+    assert!(engine.user_store().find_by_id(&1).unwrap().is_some());
+    assert!(
+        engine
+            .session_store()
+            .find_session(&SessionId::new("0".repeat(64)))
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        engine
+            .hasher()
+            .verify("s3cret", &hash_password("s3cret"))
+            .unwrap()
+    );
+}
+
+#[test]
+fn builder_ttl_and_idle_timeout_flow_through_to_getters() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), store)
+        .session_ttl(Duration::from_secs(30))
+        .idle_timeout(Duration::from_secs(10))
+        .build()
+        .expect("engine construction must succeed");
+
+    assert_eq!(engine.session_ttl_secs(), 30);
+    assert_eq!(engine.idle_timeout_secs(), Some(10));
+}
+
+#[test]
+fn identifier_exists_returns_true_for_registered_account() {
+    let engine = seeded_engine();
+    let exists = engine.identifier_exists("alice").unwrap();
+
+    assert!(exists);
+}
+
+#[test]
+fn identifier_exists_returns_false_for_unknown_identifier() {
+    let engine = seeded_engine();
+    let exists = engine.identifier_exists("ghost").unwrap();
+
+    assert!(!exists);
+}

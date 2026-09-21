@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::status::SessionId;
+use crate::status::{REDACTED, SessionId};
 
 /// Server-side session record.
 ///
@@ -26,12 +26,15 @@ impl<Id: fmt::Debug> fmt::Debug for Session<Id> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f
             .debug_struct("Session")
-            .field("id", &"***")
+            .field("id", &REDACTED)
             .field("user_id", &self.user_id)
             .field("created_at_unix", &self.created_at_unix)
             .field("expires_at_unix", &self.expires_at_unix)
             .field("last_active_at_unix", &self.last_active_at_unix)
-            .field("auth_hash", &self.auth_hash.as_ref().map(|_| return "***"))
+            .field(
+                "auth_hash",
+                &self.auth_hash.as_ref().map(|_| return REDACTED),
+            )
             .field("ip_address", &self.ip_address)
             .field("user_agent", &self.user_agent)
             .finish();
@@ -40,6 +43,16 @@ impl<Id: fmt::Debug> fmt::Debug for Session<Id> {
 
 impl<Id> Session<Id> {
     /// Creates a new session record.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::prelude::{Session, SessionId};
+    /// let session = Session::new(SessionId::generate(), 7u64, 1000, 2000);
+    /// assert_eq!(session.user_id(), &7);
+    /// assert!(!session.is_expired_at(1999));
+    /// assert!(session.is_expired_at(2000));
+    /// ```
     #[must_use]
     pub const fn new(
         id: SessionId,

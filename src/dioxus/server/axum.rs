@@ -3,6 +3,7 @@
 //! The middleware inserts the configuration into each request's extensions,
 //! so it resolves in both SSR renders and server functions.
 
+use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -19,10 +20,9 @@ use crate::dioxus::server::ServerAuthConfig;
 use crate::dioxus::server::server_fn::authenticate_headers;
 use crate::user::AuthUser;
 
-type BoxFuture =
-    Pin<Box<dyn Future<Output = Result<Response, std::convert::Infallible>> + Send + 'static>>;
+type BoxFuture = Pin<Box<dyn Future<Output = Result<Response, Infallible>> + Send + 'static>>;
 
-const fn service_ready() -> std::task::Poll<Result<(), std::convert::Infallible>> {
+const fn service_ready() -> std::task::Poll<Result<(), Infallible>> {
     return std::task::Poll::Ready(Ok(()));
 }
 
@@ -78,7 +78,7 @@ pub struct AuthService<U: AuthUser> {
 
 impl<U: AuthUser> Service<Request> for AuthService<U> {
     type Response = Response;
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
     type Future = BoxFuture;
 
     fn poll_ready(
@@ -139,7 +139,7 @@ pub struct RequireAuthService<U: AuthUser> {
 
 impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
     type Response = Response;
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
     type Future = BoxFuture;
 
     fn poll_ready(
@@ -171,12 +171,14 @@ fn unauthorized() -> Response {
     return (StatusCode::UNAUTHORIZED, String::from("unauthorized")).into_response();
 }
 
+/// Redacted debug: the inner route carries handler state not worth rendering.
 impl<U: AuthUser> fmt::Debug for AuthService<U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f.write_str("AuthService(..)");
     }
 }
 
+/// Redacted debug: the inner route carries handler state not worth rendering.
 impl<U: AuthUser> fmt::Debug for RequireAuthService<U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f.write_str("RequireAuthService(..)");

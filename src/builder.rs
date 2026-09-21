@@ -18,6 +18,9 @@ use crate::store::{SessionStore, UserStore};
 /// not found, closing the user-enumeration timing side-channel.
 const DUMMY_PASSWORD: &str = "dioxus-auth-timing-defense-dummy-password-do-not-use";
 
+/// Default session time-to-live: 7 days, in seconds.
+const DEFAULT_SESSION_TTL_SECS: u64 = 60 * 60 * 24 * 7;
+
 /// Fluent builder for constructing an [`AuthEngine`].
 ///
 /// `Clone` clones the shared `Arc` handles and copies the plain scalar fields;
@@ -50,14 +53,8 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // reason: the clock is a closure; it is irrelevant for debugging and is
         // elided, and callbacks are reported as (un)set instead of rendered.
-        return f
-            .debug_struct("AuthEngineBuilder")
-            .field("users", &self.users)
-            .field("sessions", &self.sessions)
-            .field("hasher", &self.hasher)
-            .field("session_ttl_secs", &self.session_ttl_secs)
-            .field("idle_timeout_secs", &self.idle_timeout_secs)
-            .field("single_active_session", &self.single_active_session)
+        let mut debug = f.debug_struct("AuthEngineBuilder");
+        return crate::engine::shared_auth_debug_fields!(&mut debug, self)
             .field("on_sign_in", &self.on_sign_in.is_some())
             .field("on_sign_out", &self.on_sign_out.is_some())
             .field("on_session_validated", &self.on_session_validated.is_some())
@@ -79,7 +76,7 @@ where
             users,
             sessions,
             hasher: None,
-            session_ttl_secs: 60 * 60 * 24 * 7,
+            session_ttl_secs: DEFAULT_SESSION_TTL_SECS,
             idle_timeout_secs: None,
             single_active_session: false,
             on_sign_in: None,
