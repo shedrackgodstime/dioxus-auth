@@ -1,4 +1,4 @@
-//! Tests for the `Auth` entry facade (slice 1a: shell only, no verbs yet).
+//! Tests for the `Auth` entry facade (slices 1a–1b: shell plus M1 verbs).
 
 // reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
 // conflicting style lint `needless_return` is allowed with this justification.
@@ -10,9 +10,12 @@ mod common;
 mod password;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use common::TestUser;
-use dioxus_auth::prelude::{Auth, AuthError, AuthUser, ErrorCode, MemoryStore};
+use dioxus_auth::prelude::{
+    Auth, AuthEngine, AuthError, AuthUser, ErrorCode, InMemoryRateLimiter, MemoryStore,
+};
 use password::hash_password;
 
 #[test]
@@ -98,6 +101,42 @@ fn sign_up_taken_matches_unknown_sign_in() {
         .expect_err("unknown identifier must fail");
     assert_eq!(taken, AuthError::InvalidCredentials);
     assert_eq!(taken, unknown);
+    return;
+}
+
+#[test]
+fn sign_up_taken_counts_toward_the_shared_rate_gate() {
+    let db = MemoryStore::<TestUser>::new();
+    db.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let db = Arc::new(db);
+    let limiter = InMemoryRateLimiter::new(2, Duration::from_secs(60));
+    let engine = AuthEngine::builder(Arc::clone(&db), db)
+        .rate_limiter(limiter)
+        .build()
+        .expect("engine construction must succeed");
+    let auth = Auth::from_engine(engine);
+
+    let first = auth
+        .sign_up("alice", "pw", TestUser::new(2, "mallory"))
+        .expect_err("taken identifier must fail");
+    let second = auth
+        .sign_up("alice", "pw", TestUser::new(2, "mallory"))
+        .expect_err("taken identifier must fail again");
+    assert_eq!(first, AuthError::InvalidCredentials);
+    assert_eq!(second, AuthError::InvalidCredentials);
+
+    // reason: the taken probes were recorded as attempts, so the next
+    // credential operation on the same identifier is throttled — the sign-up
+    // gate and the login gate are one window, not two.
+    let throttled = auth
+        .sign_in("alice", "pw")
+        .expect_err("throttled sign-in must fail");
+    assert_eq!(throttled, AuthError::RateLimited);
+
+    let blocked = auth
+        .sign_up("alice", "pw", TestUser::new(2, "mallory"))
+        .expect_err("throttled sign-up must fail");
+    assert_eq!(blocked, AuthError::RateLimited);
     return;
 }
 

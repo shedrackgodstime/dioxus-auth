@@ -2,7 +2,9 @@
 //!
 //! Beginners meet [`Auth`]; the engine underneath stays unchanged. One store
 //! serves both the user and session roles here — deployments that split the
-//! roles keep using [`AuthEngine`](crate::engine::AuthEngine) directly.
+//! roles or need custom hashers, limits, or clocks build an engine with the
+//! [`AuthEngineBuilder`](crate::builder::AuthEngineBuilder) and wrap it with
+//! [`Auth::from_engine`].
 
 use std::fmt;
 use std::sync::Arc;
@@ -94,6 +96,41 @@ where
         return Ok(Self {
             engine: Arc::new(engine),
         });
+    }
+
+    /// Wraps an already-configured engine (the door-3 escape).
+    ///
+    /// The engine is configured through
+    /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder) — custom
+    /// hashers, rate limiters, hooks, clocks, split stores — and then handed
+    /// here so method verbs work on it unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::prelude::{Auth, AuthEngine, AuthUser, MemoryStore};
+    /// # use std::sync::Arc;
+    /// # #[derive(Debug, Clone)]
+    /// # struct User;
+    /// # impl AuthUser for User {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> u64 { return 1; }
+    /// #     fn display_name(&self) -> Option<String> { return None; }
+    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(Self); }
+    /// # }
+    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # let db = Arc::new(MemoryStore::<User>::new());
+    /// let engine = AuthEngine::builder(Arc::clone(&db), db).build()?;
+    /// let auth = Auth::from_engine(engine);
+    /// assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
+    /// # return Ok(());
+    /// # }
+    /// ```
+    #[must_use = "the constructed facade must be used"]
+    pub fn from_engine(engine: AuthEngine<D, D>) -> Self {
+        return Self {
+            engine: Arc::new(engine),
+        };
     }
 }
 

@@ -156,10 +156,12 @@ where
 {
     /// Signs up by provisioning credentials, then signing in.
     ///
-    /// The caller builds the user (door-2 shape); Gate 3 adds the
-    /// email-constructed convenience for `DefaultUser`. Taken identifiers
-    /// return `InvalidCredentials` after burning one hash — taken and free
-    /// are indistinguishable by design.
+    /// The caller builds the user; the store provisions the credential row.
+    /// Taken identifiers and unknown identifiers in [`Auth::sign_in`] return
+    /// the identical `InvalidCredentials` after the same throttle-and-burn
+    /// sequence — no existence oracle, and probing any identifier counts
+    /// toward the same rate gate as login. MemoryStore-only until the 1e
+    /// sweep adds the general provision seam.
     ///
     /// # Examples
     ///
@@ -182,8 +184,9 @@ where
     /// ```
     ///
     /// # Errors
-    /// Returns `InvalidCredentials` if the identifier is taken, or a store
-    /// or hasher error.
+    /// Returns `RateLimited` when the identifier is throttled,
+    /// `InvalidCredentials` if the identifier is taken, or a store or hasher
+    /// error.
     #[must_use = "the provisioned user and session must be used"]
     pub fn sign_up(
         &self,
@@ -191,14 +194,21 @@ where
         password: &str,
         user: User,
     ) -> Result<(User, SessionId), AuthError> {
+        let limiter_key = identifier.trim().to_lowercase();
+        match self.engine.check_rate_limit(&limiter_key) {
+            Ok(()) => {}
+            Err(error) => return Err(error),
+        }
         let entry = match self.engine.user_store().find_by_identifier(identifier) {
             Ok(entry) => entry,
             Err(error) => return Err(error),
         };
         if entry.is_some() {
-            // reason: burning one hash keeps the taken path near the provision
-            // path in cost without an existence oracle; the outcome is always
-            // `InvalidCredentials` either way.
+            // reason: the taken path mirrors login's miss path exactly — one
+            // recorded attempt plus one burned verifier run — so taken and
+            // free identifiers are indistinguishable in cost, outcome, and
+            // throttle accounting.
+            self.engine.record_rate_limit_failure(&limiter_key);
             let _burned = self.engine.hasher().hash(password).is_ok();
             return Err(AuthError::InvalidCredentials);
         }

@@ -47,6 +47,24 @@ where
         return self.do_login(identifier, password, options);
     }
 
+    /// Applies the credential rate gate for one normalized identifier.
+    ///
+    /// Every credential verb passes through here so probing shares one
+    /// throttle window regardless of which verb carries the attack.
+    pub(crate) fn check_rate_limit(&self, limiter_key: &str) -> Result<(), AuthError> {
+        if let Some(limiter) = &self.rate_limiter {
+            return limiter.check(limiter_key);
+        }
+        return Ok(());
+    }
+
+    /// Records a failed credential attempt for one normalized identifier.
+    pub(crate) fn record_rate_limit_failure(&self, limiter_key: &str) {
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.record_attempt(limiter_key);
+        }
+    }
+
     /// Verifies an identifier/password pair without minting a session.
     ///
     /// Same gate check and oracle semantics as [`AuthEngine::login`], minus
@@ -61,11 +79,9 @@ where
         password: &str,
     ) -> Result<U::User, AuthError> {
         let limiter_key = identifier.trim().to_lowercase();
-        if let Some(limiter) = &self.rate_limiter {
-            match limiter.check(&limiter_key) {
-                Ok(()) => {}
-                Err(e) => return Err(e),
-            }
+        match self.check_rate_limit(&limiter_key) {
+            Ok(()) => {}
+            Err(e) => return Err(e),
         }
         return self.authenticate_user(identifier, password, &limiter_key);
     }
@@ -136,9 +152,7 @@ where
         let (user, password_hash) = if let Some(entry) = user_entry {
             entry
         } else {
-            if let Some(limiter) = &self.rate_limiter {
-                limiter.record_attempt(limiter_key);
-            }
+            self.record_rate_limit_failure(limiter_key);
             // reason: the dummy verification exists only to burn verifier time
             // on unknown identifiers; its outcome is irrelevant, so both arms
             // fall through to `InvalidCredentials` without branching on it.
@@ -158,9 +172,7 @@ where
             .verify(password, &password_hash)
             .unwrap_or(false);
         if !is_valid {
-            if let Some(limiter) = &self.rate_limiter {
-                limiter.record_attempt(limiter_key);
-            }
+            self.record_rate_limit_failure(limiter_key);
             return Err(AuthError::InvalidCredentials);
         }
         return Ok(user);
