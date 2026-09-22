@@ -4,6 +4,7 @@ use std::fmt;
 
 use ::dioxus::prelude::{Element, Props, rsx, use_context_provider, use_signal};
 
+use crate::error::ErrorCode;
 use crate::status::{AuthStatus, SessionId};
 use crate::user::AuthUser;
 
@@ -73,6 +74,9 @@ where
     let token_persisted = use_signal(|| {
         return false;
     });
+    let restore_unavailable = use_signal(|| {
+        return None::<ErrorCode>;
+    });
     let context = use_context_provider(|| {
         return AuthContext::new(
             engine,
@@ -81,6 +85,7 @@ where
                 status,
                 token,
                 token_persisted,
+                restore_unavailable,
             },
         );
     });
@@ -89,7 +94,8 @@ where
         // reason: the first render settles the identity from storage; a
         // definitive rejection demotes to guest, while an unknown outcome
         // (storage failure, rate limit, transport error) leaves the tree in
-        // Loading so a network blip never silently signs the user out.
+        // Loading with the failure recorded, so `session_state()` reports
+        // `Unavailable` and `refetch()` can be used to ask again.
         let _verdict = context.restore();
     }
 

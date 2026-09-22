@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use dioxus_auth::prelude::{
-    AuthEngineHandle, AuthError, AuthOperations, AuthStatus, MemoryTokenStorage, RestoreVerdict,
-    SessionId, TokenStorage, TokenStorageHandle,
+    AuthEngineHandle, AuthError, AuthOperations, AuthStatus, ErrorCode, MemoryTokenStorage,
+    RestoreVerdict, SessionId, SessionState, TokenStorage, TokenStorageHandle,
 };
 
 use super::common::TestUser;
@@ -155,4 +155,53 @@ fn restore_reports_the_restored_verdict_on_success() {
     // A repeat restore re-validates the live session and says so.
     assert_eq!(auth.restore(), RestoreVerdict::Restored);
     assert!(auth.is_authenticated());
+}
+
+#[test]
+fn session_state_maps_unanswered_restores_to_unavailable() {
+    let engine = AuthEngineHandle::from_erased(Arc::new(UnknownEngine));
+    let storage = TokenStorageHandle::new(FailingTokenStorage::new());
+    let mut vdom = erased_state_dom(engine, storage);
+    mount(&mut vdom);
+
+    let auth = context();
+    // Nothing answered the session question, so the read is Unavailable with
+    // the stable internal code — not Guest, and not a bare Pending.
+    assert_eq!(
+        auth.session_state(),
+        SessionState::Unavailable(ErrorCode::Internal)
+    );
+
+    // The retry half: refetch re-asks, still unknown, still unavailable.
+    assert_eq!(auth.refetch(), RestoreVerdict::Unknown);
+    assert_eq!(
+        auth.session_state(),
+        SessionState::Unavailable(ErrorCode::Internal)
+    );
+}
+
+#[test]
+fn session_state_maps_definitive_answers_and_pending() {
+    // Definitive rejection settles the read to Guest.
+    let rejected = AuthEngineHandle::from_erased(Arc::new(RejectedEngine));
+    let rejected_storage = TokenStorageHandle::new(MemoryTokenStorage::new());
+    rejected_storage
+        .store(&format!("ab{}", "c".repeat(62)))
+        .expect("storing a well-formed token must succeed");
+    let mut rejected_dom = erased_state_dom(rejected, rejected_storage);
+    mount(&mut rejected_dom);
+    let rejected_context = context();
+    assert_eq!(rejected_context.session_state(), SessionState::Guest);
+
+    // A settled success reads SignedIn with the identity.
+    let engine = seeded_engine();
+    let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
+    let _wire = seed_valid_token(&storage, &engine);
+    let mut vdom = state_dom(engine, storage);
+    mount(&mut vdom);
+    let auth = context();
+    assert_eq!(
+        auth.session_state(),
+        SessionState::SignedIn(TestUser::new(1, "alice"))
+    );
 }

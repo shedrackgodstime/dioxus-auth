@@ -6,12 +6,13 @@ use std::sync::Arc;
 use ::dioxus::prelude::Signal;
 use ::dioxus_signals::{ReadableExt, WritableExt};
 
-use crate::error::AuthError;
+use crate::error::{AuthError, ErrorCode};
 use crate::status::{AuthStatus, SessionId};
 use crate::user::AuthUser;
 
 use super::operations::{AuthEngineHandle, AuthOperations};
 use super::restore::{RestoreClassify, RestoreVerdict};
+use super::state::SessionState;
 use super::storage::TokenStorageHandle;
 
 /// Reactive authentication state for the subtree under an
@@ -27,16 +28,18 @@ pub struct AuthContext<T: AuthUser + Clone> {
     status: Signal<AuthStatus<T>>,
     token: Signal<Option<SessionId>>,
     token_persisted: Signal<bool>,
+    restore_unavailable: Signal<Option<ErrorCode>>,
 }
 
 /// Reactive signals owned by an [`AuthContext`].
 ///
-/// Bundles the three signals so [`AuthContext::new`] stays within the
+/// Bundles the four signals so [`AuthContext::new`] stays within the
 /// parameter limit.
 pub struct AuthSignals<T: AuthUser + Clone> {
     pub status: Signal<AuthStatus<T>>,
     pub token: Signal<Option<SessionId>>,
     pub token_persisted: Signal<bool>,
+    pub restore_unavailable: Signal<Option<ErrorCode>>,
 }
 
 impl<T: AuthUser + Clone> fmt::Debug for AuthContext<T> {
@@ -120,6 +123,7 @@ impl<T: AuthUser + Clone> AuthContext<T> {
             status: signals.status,
             token: signals.token,
             token_persisted: signals.token_persisted,
+            restore_unavailable: signals.restore_unavailable,
         };
     }
 
@@ -145,9 +149,11 @@ impl<T: AuthUser + Clone> AuthContext<T> {
             Err(e) => {
                 // Storage failures do not answer the session question; leave
                 // the context in Loading for a retry.
+                self.record_unavailable(&e);
                 return e.restore_verdict();
             }
         };
+
         return match stored {
             Some(raw) if SessionId::is_valid_wire_format(&raw) => {
                 let wire = SessionId::new(raw);
@@ -156,9 +162,11 @@ impl<T: AuthUser + Clone> AuthContext<T> {
                         let mut token = self.token;
                         let mut status = self.status;
                         let mut persisted = self.token_persisted;
+                        let mut unavailable = self.restore_unavailable;
                         *token.write() = Some(wire);
                         *status.write() = AuthStatus::Authenticated(user);
                         *persisted.write() = true;
+                        *unavailable.write() = None;
                         RestoreVerdict::Restored
                     }
                     Ok(None) => {
@@ -171,6 +179,8 @@ impl<T: AuthUser + Clone> AuthContext<T> {
                             // A definitive rejection must also settle the
                             // context; unknown outcomes stay in Loading.
                             self.set_guest();
+                        } else {
+                            self.record_unavailable(&e);
                         }
                         verdict
                     }
@@ -183,21 +193,56 @@ impl<T: AuthUser + Clone> AuthContext<T> {
         };
     }
 
+    /// Re-runs the restore attempt after an
+    /// [`SessionState::Unavailable`](crate::prelude::SessionState::Unavailable)
+    /// read.
+    ///
+    /// This is the retry half of the N4 semantics: an unknown outcome left
+    /// the tree rendering and the session question open, so a component (or
+    /// a timer) may ask again. A definitive rejection settles to guest here
+    /// exactly as in [`AuthContext::restore`].
+    #[must_use = "the retry verdict must be handled"]
+    pub fn refetch(&self) -> RestoreVerdict {
+        return self.restore();
+    }
+
     /// Demotes the context to guest state, used by the provider on restore
     /// failure so the tree always settles into a defined status.
     pub(crate) fn set_guest(&self) {
         let mut token = self.token;
         let mut status = self.status;
         let mut persisted = self.token_persisted;
+        let mut unavailable = self.restore_unavailable;
         *token.write() = None;
         *status.write() = AuthStatus::Guest;
         *persisted.write() = false;
+        *unavailable.write() = None;
+    }
+
+    /// Records an unknown-class failure so the reactive read reports
+    /// `Unavailable` instead of a bare `Pending` until the next settle.
+    fn record_unavailable(&self, error: &AuthError) {
+        let mut unavailable = self.restore_unavailable;
+        *unavailable.write() = Some(error.code());
     }
 
     /// Current authentication status.
     #[must_use]
     pub fn status(&self) -> AuthStatus<T> {
         return self.status.read().clone();
+    }
+
+    /// The reactive session read: an exhaustive
+    /// [`SessionState`](crate::prelude::SessionState) instead of a struct of
+    /// optional fields.
+    ///
+    /// Branch on the variant; `Unavailable` carries the stable
+    /// [`ErrorCode`](crate::prelude::ErrorCode) for logging and interop.
+    /// Subscribes to the underlying signals, so components re-render when
+    /// the state changes.
+    #[must_use = "the session read must be used"]
+    pub fn session_state(&self) -> SessionState<T> {
+        return SessionState::from_parts(&self.status.read(), *self.restore_unavailable.read());
     }
 
     /// The current raw wire session token, when authenticated.

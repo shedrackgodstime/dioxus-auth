@@ -17,6 +17,7 @@ mod hooks;
 mod operations;
 mod provider;
 mod restore;
+mod state;
 mod storage;
 
 #[cfg(feature = "dioxus-fullstack")]
@@ -24,10 +25,11 @@ pub mod server;
 
 pub use context::AuthContext;
 pub use guards::{RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAuthProps};
-pub use hooks::use_auth;
+pub use hooks::{use_auth, use_session};
 pub use operations::{AuthEngineHandle, AuthOperations};
 pub use provider::{AuthProvider, AuthProviderProps};
 pub use restore::{RestoreClassify, RestoreVerdict};
+pub use state::SessionState;
 pub use storage::TokenStorageHandle;
 
 #[cfg(feature = "dioxus-fullstack")]
