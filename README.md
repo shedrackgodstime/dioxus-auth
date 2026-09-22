@@ -4,15 +4,39 @@ Authentication and session management for [Dioxus](https://dioxuslabs.com).
 
 You own the database, users, and data. **dioxus-auth** provides the authentication and session layer around them.
 
+> ## DX contract — pinned, do not regress
+>
+> This README describes the **future target API** the crate is converging on.
+> The implementation is not there yet (see Status). Until it is, do not rewrite
+> this file back to the old engine-first quickstart — that shape is frozen
+> reference only, not the direction.
+>
+> Three doors, no CLI needed to start:
+>
+> 1. **Quick start** — `Auth::memory().with_email_password()`, built-in
+>    `DefaultUser`, guarded route in <10 min, ≤3 concepts, 0 traits.
+> 2. **Own DB** — `Auth::new(my_db)` with the same verbs; documented schema you
+>    apply yourself; hardening without rewriting.
+> 3. **Full control** — explicit stores, hashers, limits, audit hooks, `__Host-`,
+>    per-request authority, conformance proofs.
+>
+> Laws: methods are additive (absence = disabled — never a `without_*` flag);
+> verbs are mirrored server = client = HTTP path and return `{ data, error }`
+> with stable `error.code`; sessions/guards stay method-agnostic; no hosted
+> backend, no billing, no black-box sign-in UI (the form is always yours).
+
 ## Features
 
-- Session management (rotation, idle timeout, optional single active session)
-- Password authentication (Argon2id, timing-attack mitigated)
-- Custom user and session stores
-- Secure defaults
+- Session management (TTL, idle timeout, single active session, scoped sign-out)
+- Email+password authentication (Argon2id, timing-attack mitigated, no-enumeration errors)
+- Magic link / passwordless email (planned, same session model)
+- `use_session()` reactive state (`{ data, pending, error, refetch }`) + route guards
+- Custom user and session stores (you own the schema; guides ship copy-paste SQL)
+- Secure defaults: `HttpOnly` + `Secure` cookies, `SameSite=Lax`, origin enforcement
 - Origin/CSRF enforcement and `__Host-` cookie support for fullstack apps
+- Opt-in rate limiting with per-verb rules
 
-## Usage
+## Usage (future target DX — converging, see Status)
 
 Add `dioxus-auth`:
 
@@ -20,168 +44,81 @@ Add `dioxus-auth`:
 cargo add dioxus-auth
 ```
 
-Every plain (`rust`) snippet below is mirrored verbatim in
-[`tests/readme_snippets.rs`](tests/readme_snippets.rs) and compile-checked by
-CI against the real API. Snippets that need a Dioxus component tree or a
-fullstack server are marked `rust,ignore` and are exercised end-to-end by the
-crate's test-suite instead.
+> Snippets below marked `FUTURE` show the pinned future shape (`rust,ignore`,
+> not yet compile-checked). The crate is being rebuilt toward them.
 
-### Define your user
+### Door 1 — quick start (FUTURE)
 
-You own the user type; the crate is generic over it:
+Zero modeling. A built-in `DefaultUser`; hashing, stores, and tokens pre-wired:
 
-```rust
-use dioxus_auth::prelude::AuthUser;
+```rust,ignore
+// FUTURE target shape
+let auth = Auth::memory().with_email_password();
+auth.sign_up_email(SignUpEmail { email: "alice@example.com", password: "password", name: "alice" })?;
 
-#[derive(Debug, Clone)]
-struct AppUser {
-    id: u64,
-    name: String,
-}
-
-impl AuthUser for AppUser {
-    type Id = u64;
-
-    fn id(&self) -> Self::Id {
-        return self.id;
-    }
-
-    fn display_name(&self) -> Option<String> {
-        return Some(self.name.clone());
-    }
-
-    fn clone_box(&self) -> Box<dyn AuthUser<Id = Self::Id>> {
-        return Box::new(self.clone());
+rsx! {
+    AuthProvider { auth,
+        RequireAuth { redirect_to: "/login", Dashboard {} }
     }
 }
 ```
 
-### Build the engine
+### Door 2 — own DB, same verbs (FUTURE)
 
-Connect your stores (any `UserStore` / `SessionStore` implementation — the
-bundled `MemoryStore` is shown here) and build the engine. Registration is
-yours: create users in your store however your application does.
+Your user type, your database, the same verbs. No scaffolding — apply the
+documented schema yourself:
 
-```rust
-use std::sync::Arc;
+```rust,ignore
+// FUTURE target shape
+struct AppUser { id: Uuid, email: String, name: String }
 
-use dioxus_auth::prelude::{Argon2Hasher, AuthEngine, MemoryStore, PasswordHasher};
-
-let store = Arc::new(MemoryStore::<AppUser>::new());
-
-let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-    .session_ttl_secs(60 * 60 * 24 * 7)
-    .build()
-    .expect("engine construction succeeds");
-
-// You own user registration: hash the password yourself (the store must
-// never see plaintext) and provision your store however your app does.
-// MemoryStore offers a convenience helper that takes an already-hashed
-// password.
-let hasher = Argon2Hasher::new();
-let hash = hasher.hash("password").expect("hashing succeeds");
-store.insert_user_with_password(
-    AppUser {
-        id: 1,
-        name: String::from("alice"),
-    },
-    "alice",
-    hash,
-);
+let auth = Auth::new(my_db).with_email_password();
+auth.sign_in_email(SignInEmail { email: "alice@example.com", password: "password" })?;
 ```
 
-### Log in and validate sessions
-
-The engine is synchronous. `login` returns the authenticated user plus the
-raw wire session (the store only ever sees its hash):
-
-```rust
-let (user, session) = auth.login("alice", "password").expect("valid credentials");
-assert_eq!(user.id(), 1);
-
-let current = auth.validate_session(session.id()).expect("validation must not error");
-assert!(current.is_some());
-
-auth.logout(session.id()).expect("revocation must not error");
+```rust,ignore
+// FUTURE target shape — read state anywhere, reactive
+let s = use_session();
+match &s.data {
+    Some(user) => rsx! { "Hello, {user.name}" },
+    None if s.is_pending => rsx! { "Loading..." },
+    None => rsx! { LoginForm {} },
+}
 ```
 
-### Wire the Dioxus runtime (`dioxus` feature)
-
-Mount the provider above your tree with an engine handle and a token storage;
-read the state in any descendant through `use_auth`:
+Route guards stay plain components, usable anywhere:
 
 ```rust,ignore
 rsx! {
-    AuthProvider {
-        engine,
-        token_storage,
-        LoginPage { }
-    }
+    RequireAuth { redirect_to: "/login", Dashboard {} }
 }
 ```
 
-```rust,ignore
-let auth = use_auth::<AppUser>();
+### Door 3 — full control (explicit everything)
 
-let user = auth.user();
-if auth.is_authenticated() {
-    // render the signed-in UI
-}
-```
-
-Route guards are components:
+Custom stores, hashers, rate limiters, audit hooks, and cookie policy — the
+current engine surface survives here, under new names. Server remains the
+security authority: resolve the caller per call:
 
 ```rust,ignore
-rsx! {
-    RequireAuth::<AppUser> {
-        redirect_to: "/login",
-        Dashboard { }
-    }
-}
+let user = require_user().await?;
 ```
 
-Restore is network-aware: a stored token the server definitively rejects
-demotes to guest, but a failure that never answered the session question
-(storage failure, rate limit, transport error) leaves the context in
-`Loading` so a network blip never silently signs the user out. See
-`RestoreVerdict` and the `dioxus` feature docs.
-
-### Fullstack server functions (`dioxus-fullstack` feature)
-
-The macro generates the login/logout/session server functions and their
-client callers:
+Rate limiting is opt-in; turn it on for any credential endpoint facing the
+network (prod defaults: 60 s window / 100 max, tighter per-verb rules):
 
 ```rust,ignore
-dioxus_auth::fullstack_server_fns!(AppUser);
-```
-
-Inside your own server functions or middleware, resolve the caller:
-
-```rust,ignore
-let user = require_user::<AppUser>().await?;
-```
-
-### Hardening
-
-Rate limiting is opt-in; turn it on for any password endpoint facing the
-network:
-
-```rust
-use std::time::Duration;
-
-use dioxus_auth::prelude::InMemoryRateLimiter;
-
-let limiter = InMemoryRateLimiter::new(5, Duration::from_secs(60));
-
-let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-    .rate_limiter(limiter)
-    .build()
-    .expect("engine construction succeeds");
+// FUTURE target shape — limits live on the method, not a god object
+let auth = Auth::new(my_db)
+    .with_email_password()
+    .with_rate_limit(RateLimit::prod());
 ```
 
 Your application owns the database, users, and data.
 
-For advanced configuration, custom stores, sessions, and authentication providers, see the [API documentation](https://docs.rs/dioxus-auth) (docs.rs), or check out the full [guides](./docs/README.md).
+For the full method list (password → magic link → OTP → OAuth → passkeys/TOTP)
+and budgets, see the Features list above — the future direction is additive
+methods on one entry point, never a second auth system.
 
 ## Secure configuration
 
@@ -194,7 +131,7 @@ Cookie and origin defaults, and when to tighten them:
 | Cookie lifetime | session cookie (dies with the browser) | persistent login: `with_max_age` sized to the engine TTL (7 days by default) |
 | `expected_origins` | none (no origin enforcement) | always for `SameSite=None`; recommended even with `Lax` |
 | `host_only` | off | multi-app hosts, to bind the cookie with the `__Host-` prefix |
-| Rate limiting | opt-in via the builder | any password endpoint facing the network |
+| Rate limiting | opt-in | any credential endpoint facing the network |
 
 `SameSite=Lax` alone does not stop login CSRF: an attacker can POST their own
 credentials to your origin and bind the victim's browser to the attacker's
@@ -208,9 +145,15 @@ Host-only mode emits `__Host-<name>` with a forced `Path=/`, no `Domain`, and
 `Secure`, and accepts only that exact name back — a sibling-app cookie shadow
 cannot displace the session.
 
+Two reads, never confused: `session()` is the local render read; `authenticate()`
+is the verified network truth. Server code must never trust the local read.
+
 ## Status
 
-Early development. Expect breaking changes.
+Rebuilding toward the future DX contract above: the `Auth::new` / `Auth::memory`
+facade, mirrored verbs, `use_session`, mailer seam, and documented schema, in
+that order. The current code still exposes the old engine-first API as frozen
+reference. Expect breaking changes — nothing is published yet.
 
 ## License
 
