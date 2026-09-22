@@ -3,13 +3,16 @@
 //! This is the only public import path: `use dioxus_auth::prelude::*`.
 
 #[doc(inline)]
+pub use crate::auth::Auth;
+
+#[doc(inline)]
 pub use crate::builder::AuthEngineBuilder;
 
 #[doc(inline)]
 pub use crate::engine::{AuthEngine, LoginOptions};
 
 #[doc(inline)]
-pub use crate::error::AuthError;
+pub use crate::error::{AuthError, ErrorCode};
 
 #[doc(inline)]
 pub use crate::hash::Argon2Hasher;

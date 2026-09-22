@@ -47,6 +47,29 @@ where
         return self.do_login(identifier, password, options);
     }
 
+    /// Verifies an identifier/password pair without minting a session.
+    ///
+    /// Same gate check and oracle semantics as [`AuthEngine::login`], minus
+    /// the session, rotation, hooks, and success accounting. Callers record
+    /// success through the limiter after their own work completes, so a
+    /// failed store write never resets the counter early. Used by
+    /// credential-management verbs that must prove knowledge without
+    /// signing in.
+    pub(crate) fn verify_password(
+        &self,
+        identifier: &str,
+        password: &str,
+    ) -> Result<U::User, AuthError> {
+        let limiter_key = identifier.trim().to_lowercase();
+        if let Some(limiter) = &self.rate_limiter {
+            match limiter.check(&limiter_key) {
+                Ok(()) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        return self.authenticate_user(identifier, password, &limiter_key);
+    }
+
     pub(crate) fn do_login(
         &self,
         identifier: &str,
@@ -55,14 +78,7 @@ where
     ) -> Result<(U::User, Session<U::Id>), AuthError> {
         let limiter_key = identifier.trim().to_lowercase();
 
-        if let Some(limiter) = &self.rate_limiter {
-            match limiter.check(&limiter_key) {
-                Ok(()) => {}
-                Err(e) => return Err(e),
-            }
-        }
-
-        let user = match self.authenticate_user(identifier, password, &limiter_key) {
+        let user = match self.verify_password(identifier, password) {
             Ok(user) => user,
             Err(e) => return Err(e),
         };

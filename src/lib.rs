@@ -27,6 +27,7 @@
 // which the style-group lint `needless_return` then flags. The explicit-return
 // rule is stricter, so the conflicting style lint is disabled crate-wide.
 
+pub(crate) mod auth;
 pub(crate) mod builder;
 #[cfg(feature = "dioxus")]
 mod dioxus;
@@ -36,6 +37,7 @@ pub(crate) mod hash;
 pub(crate) mod hooks;
 pub(crate) mod login;
 pub(crate) mod logout;
+pub(crate) mod methods;
 pub mod prelude;
 pub(crate) mod rate_limit;
 pub(crate) mod security;
