@@ -53,12 +53,16 @@ pub fn mount(vdom: &mut VirtualDom) {
     pump(vdom);
 }
 
-/// Runs render passes until the virtual DOM settles (no more mutations).
+/// Runs render passes until the virtual DOM settles.
+///
+/// Effects are the scheduler's lowest-priority work: `render_immediate`
+/// skips task polling whenever dirty scopes exist at entry, and a rerun can
+/// produce zero edits while effects are still pending. The pump therefore
+/// runs a fixed number of passes instead of breaking on the first
+/// edit-free pass, so queued effects always drain.
 pub fn pump(vdom: &mut VirtualDom) {
-    for _ in 0..32 {
-        if vdom.render_immediate_to_vec().edits.is_empty() {
-            return;
-        }
+    for _ in 0..8 {
+        let _ = vdom.render_immediate_to_vec();
     }
 }
 

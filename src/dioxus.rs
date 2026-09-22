@@ -25,7 +25,7 @@ pub mod server;
 
 pub use context::AuthContext;
 pub use guards::{RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAuthProps};
-pub use hooks::{use_auth, use_session};
+pub use hooks::{AuthStateEvent, on_auth_state_change, use_auth, use_session};
 pub use operations::{AuthEngineHandle, AuthOperations};
 pub use provider::{AuthProvider, AuthProviderProps};
 pub use restore::{RestoreClassify, RestoreVerdict};

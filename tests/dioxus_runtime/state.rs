@@ -4,10 +4,17 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::{AuthStatus, MemoryTokenStorage, SessionId, TokenStorageHandle};
+use std::sync::Arc;
+
+use dioxus_auth::prelude::{
+    AuthEngineHandle, AuthError, AuthOperations, AuthStatus, MemoryTokenStorage, SessionId,
+    TokenStorageHandle,
+};
 
 use super::common::TestUser;
-use super::harness::{context, mount, seed_valid_token, seeded_engine, state_dom};
+use super::harness::{
+    context, erased_state_dom, mount, seed_valid_token, seeded_engine, state_dom,
+};
 
 #[test]
 fn provider_restores_guest_from_empty_storage() {
@@ -175,4 +182,64 @@ fn restore_demotes_malformed_tokens_to_guest() {
     let auth = context();
     assert!(!auth.is_loading());
     assert_eq!(auth.status(), AuthStatus::Guest);
+}
+
+#[test]
+fn login_and_logout_route_through_the_single_engine_spelling() {
+    /// Counts engine login/logout invocations so the test can prove the
+    /// context delegates (one spelling), rather than re-implementing the
+    /// credential work next to `sign_in` / `AuthOperations::login`.
+    #[derive(Debug, Default)]
+    struct CountingEngine {
+        logins: std::sync::atomic::AtomicUsize,
+        logouts: std::sync::atomic::AtomicUsize,
+    }
+
+    impl AuthOperations<TestUser> for CountingEngine {
+        fn login(
+            &self,
+            _identifier: &str,
+            _password: &str,
+        ) -> Result<(TestUser, SessionId), AuthError> {
+            let _ = self
+                .logins
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            return Ok((TestUser::new(1, "alice"), SessionId::generate()));
+        }
+
+        fn logout(&self, _session_id: &SessionId) -> Result<(), AuthError> {
+            let _ = self
+                .logouts
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            return Ok(());
+        }
+
+        fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
+            return Ok(None);
+        }
+    }
+
+    let counts = Arc::new(CountingEngine::default());
+    let erased: Arc<dyn AuthOperations<TestUser>> = counts.clone();
+    let handle = AuthEngineHandle::from_erased(erased);
+    let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
+    let mut vdom = erased_state_dom(handle, storage);
+    mount(&mut vdom);
+    let auth = context();
+
+    let login_result = auth.login("alice", "pw");
+    assert!(login_result.is_ok());
+    let logout_result = auth.logout();
+    assert!(logout_result.is_ok());
+
+    assert_eq!(
+        counts.logins.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "one context login must be exactly one engine login"
+    );
+    assert_eq!(
+        counts.logouts.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "one context logout must be exactly one engine logout"
+    );
 }

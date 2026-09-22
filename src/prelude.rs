@@ -44,9 +44,9 @@ pub use crate::user::AuthUser;
 #[cfg(feature = "dioxus")]
 #[doc(inline)]
 pub use crate::dioxus::{
-    AuthContext, AuthEngineHandle, AuthOperations, AuthProvider, AuthProviderProps,
+    AuthContext, AuthEngineHandle, AuthOperations, AuthProvider, AuthProviderProps, AuthStateEvent,
     RedirectIfAuthed, RedirectIfAuthedProps, RequireAuth, RequireAuthProps, RestoreClassify,
-    RestoreVerdict, SessionState, TokenStorageHandle, use_auth, use_session,
+    RestoreVerdict, SessionState, TokenStorageHandle, on_auth_state_change, use_auth, use_session,
 };
 
 #[cfg(feature = "dioxus-fullstack")]
