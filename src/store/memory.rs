@@ -175,7 +175,6 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             for (_, user_id, hash) in credentials.iter_mut() {
                 if user_id == id {
                     *hash = new_hash.to_string();
-                    return Ok(());
                 }
             }
         }

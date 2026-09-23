@@ -251,13 +251,19 @@ fn auth_errors_map_to_status_codes() {
         (AuthError::Internal(String::from("boom")), 500),
     ];
     for (error, expected) in cases {
-        let message = error.to_string();
         let converted: ServerFnError = error.into();
-        let (code, text) = match converted {
-            ServerFnError::ServerError { code, message, .. } => (code, message),
-            _ => panic!("expected a server error for {message}"),
+        let code = match converted {
+            ServerFnError::ServerError { code, .. } => code,
+            _ => panic!("expected a server error"),
         };
         assert_eq!(code, expected);
-        assert_eq!(text, message);
     }
+    // Internal details never reach the wire: the code carries the signal.
+    let converted: ServerFnError = AuthError::Internal(String::from("boom")).into();
+    let text = match converted {
+        ServerFnError::ServerError { message, .. } => message,
+        _ => panic!("expected a server error"),
+    };
+    assert_eq!(text, "internal error");
+    assert!(!text.contains("boom"));
 }

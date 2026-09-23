@@ -127,3 +127,24 @@ fn provision_rejects_a_duplicate_user_id_without_state_change() {
     assert_eq!(survivor.0.id, 3, "the winner's user row must survive");
     assert_eq!(survivor.1, hash, "the winner's credential must survive");
 }
+
+/// Updating a password rewrites every credential row for the user id, so a
+/// user with several identifiers keeps no stale hash behind (parity with the
+/// reference SQL store, which updates by `user_id`).
+#[test]
+fn update_password_rewrites_all_rows_for_the_user() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(3, "bob"), "bob@example.com", "old");
+    store.insert_user_with_password(TestUser::new(3, "bob"), "bobby@example.com", "old");
+    store
+        .update_password(&3, "new")
+        .expect("password update must succeed");
+
+    for identifier in ["bob@example.com", "bobby@example.com"] {
+        let found = store
+            .find_by_identifier(identifier)
+            .expect("lookup must succeed")
+            .expect("row must exist");
+        assert_eq!(found.1, "new", "no stale hash may survive on any row");
+    }
+}

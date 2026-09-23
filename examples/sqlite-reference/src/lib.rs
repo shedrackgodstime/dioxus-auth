@@ -67,6 +67,11 @@ CREATE TABLE verifications (
 );
 ";
 
+/// Session column list shared by the by-id lookup and the per-user listing,
+/// so the two reads cannot disagree on column order.
+const SESSION_COLUMNS: &str =
+    "id, user_id, created_at, expires_at, last_active_at, auth_hash, ip, user_agent";
+
 /// Application user for the reference deployment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppUser {
@@ -158,10 +163,9 @@ impl SqliteStore {
     /// Loads one session row by storage-form id.
     fn load_session(conn: &Connection, id: &str) -> Result<Option<Session<i64>>, AuthError> {
         let mut statement = conn
-            .prepare(
-                "SELECT id, user_id, created_at, expires_at, last_active_at, auth_hash, ip, user_agent
-             FROM sessions WHERE id = ?1",
-            )
+            .prepare(&format!(
+                "SELECT {SESSION_COLUMNS} FROM sessions WHERE id = ?1"
+            ))
             .map_err(internal)?;
         statement
             .query_row([id], row_to_session)
@@ -382,10 +386,9 @@ impl SessionStore for SqliteStore {
     fn list_user_sessions(&self, user_id: &Self::Id) -> Result<Vec<Session<Self::Id>>, AuthError> {
         let conn = self.conn.lock();
         let mut statement = conn
-            .prepare(
-                "SELECT id, user_id, created_at, expires_at, last_active_at, auth_hash, ip, user_agent
-             FROM sessions WHERE user_id = ?1",
-            )
+            .prepare(&format!(
+                "SELECT {SESSION_COLUMNS} FROM sessions WHERE user_id = ?1 ORDER BY rowid"
+            ))
             .map_err(internal)?;
         let rows = statement
             .query_map([user_id], row_to_session)

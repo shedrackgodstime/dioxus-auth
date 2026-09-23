@@ -135,8 +135,15 @@ macro_rules! fullstack_server_fns {
 impl From<AuthError> for ServerFnError {
     fn from(error: AuthError) -> Self {
         let code = auth_error_status(&error);
+        // reason: store and hasher internals (statement text, file paths) must
+        // never reach clients; the stable code carries the whole signal, so
+        // internal failures render a static message.
+        let message = match &error {
+            AuthError::Internal(_) => String::from("internal error"),
+            _ => error.to_string(),
+        };
         return Self::ServerError {
-            message: error.to_string(),
+            message,
             code,
             details: None,
         };
