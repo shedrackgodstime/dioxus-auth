@@ -25,6 +25,13 @@ jobs:
       # before it, cargo rejects the argument and the step never ran.
       - name: Check clippy
         run: cargo clippy --all-targets -- -D warnings -W clippy::pedantic
+      # The dioxus/fullstack layers are cfg-gated out of the default build,
+      # so a default-only clippy never sees them. Gate each layer explicitly
+      # or doc-link/type regressions in those layers slip through.
+      - name: Check clippy (dioxus)
+        run: cargo clippy --all-targets --features dioxus -- -D warnings -W clippy::pedantic
+      - name: Check clippy (fullstack)
+        run: cargo clippy --all-targets --features dioxus-fullstack,server -- -D warnings -W clippy::pedantic
       - name: Test all targets
         run: cargo test --all-targets
       - name: Test dioxus feature
@@ -85,6 +92,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
         run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps
+      # The dioxus/fullstack modules are cfg-gated: default-only docs never
+      # resolve their intra-doc links (e.g. AuthProvider, erased_engine).
+      # The fullstack build subsumes the dioxus layer.
+      - name: Generate docs (fullstack)
+        run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus-fullstack
 
   packaging:
     name: Packaging

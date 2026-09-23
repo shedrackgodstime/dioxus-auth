@@ -164,7 +164,7 @@ impl<D> Auth<D>
 where
     D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
 {
-    /// Attaches a pre-seeded token storage so [`AuthProvider`] restores from
+    /// Attaches a pre-seeded token storage so [`AuthProvider`](crate::dioxus::AuthProvider) restores from
     /// it instead of a fresh empty one. Tests use this to seed a valid token;
     /// production door-1 code never calls it (the provider defaults to an
     /// empty in-memory storage).
@@ -180,8 +180,8 @@ where
     /// store type.
     ///
     /// Requires `D: Default` only to build the throwaway concrete placeholder
-    /// the struct's field type demands; [`AuthProvider`] reads
-    /// [`Auth::erased_engine`] first and never touches the placeholder.
+    /// the struct's field type demands; [`AuthProvider`](crate::dioxus::AuthProvider) reads
+    /// the `erased_engine` handle first and never touches the placeholder.
     #[must_use = "the constructed facade must be used"]
     pub fn from_erased(handle: crate::dioxus::AuthEngineHandle<D::User>) -> Self
     where
@@ -196,7 +196,7 @@ where
     }
 
     /// Builds a throwaway concrete engine for type-checking only; never
-    /// dereferenced when [`Auth::erased_engine`] is `Some`.
+    /// dereferenced when the `erased_engine` handle is `Some`.
     fn placeholder_engine() -> Arc<AuthEngine<D, D>>
     where
         D: Default,

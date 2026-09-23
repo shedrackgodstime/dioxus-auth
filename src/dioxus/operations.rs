@@ -111,7 +111,7 @@ where
     }
 }
 
-/// Bridges the `Auth` facade to the engine handle that [`AuthProvider`] consumes.
+/// Bridges the `Auth` facade to the engine handle that [`AuthProvider`](super::provider::AuthProvider) consumes.
 ///
 /// Before this impl, a Door-1 caller had to write
 /// `AuthEngineHandle::from(Arc::clone(auth.engine()))` — three concepts
