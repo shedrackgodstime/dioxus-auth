@@ -158,7 +158,7 @@ impl<Id> Session<Id> {
     ///
     /// Used by [`SessionStore`](crate::store::SessionStore) `touch_session_if_present`
     /// implementations to conditionally refresh a session without a separate
-    /// read-modify-write that could resurrect a revoked session (Spec 16).
+    /// read-modify-write that could resurrect a revoked session.
     #[must_use]
     pub const fn set_expiry_and_last_active(mut self, new_expiry: u64, last_active: u64) -> Self {
         self.expires_at_unix = new_expiry;

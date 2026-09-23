@@ -3,7 +3,7 @@
 //! Each function body is copied verbatim from a ```` ```rust ```` block in
 //! `README.md`. When the README changes, this file changes with it; when the
 //! API changes, CI fails here instead of letting the README drift into
-//! teaching an API that does not exist (review finding N9).
+//! teaching an API that does not exist.
 //!
 //! Snippets marked ```` ```rust,ignore ```` in the README (component trees,
 //! fullstack server wiring) are excluded per their own annotation; their

@@ -162,7 +162,9 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
         return Ok(());
     }
 
-    #[allow(clippy::significant_drop_tightening)]
+    // reason: the guard must stay held across the identifier check, id check,
+    // and both pushes; releasing it earlier would split the claim.
+    #[expect(clippy::significant_drop_tightening)]
     fn provision_user_with_password(
         &self,
         user: Self::User,

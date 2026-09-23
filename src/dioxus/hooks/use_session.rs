@@ -18,6 +18,30 @@ use crate::dioxus::state::SessionState;
 /// For the verb half (login, logout, validate) use
 /// [`use_auth`](crate::prelude::use_auth).
 ///
+/// # Examples
+///
+/// ```no_run
+/// use dioxus::prelude::*;
+/// use dioxus_auth::prelude::{SessionState, use_session};
+///
+/// # #[derive(Debug, Clone, PartialEq)]
+/// # struct User { id: u64, name: String }
+/// # impl dioxus_auth::prelude::AuthUser for User {
+/// #     type Id = u64;
+/// #     fn id(&self) -> u64 { return self.id; }
+/// #     fn email(&self) -> &str { return &self.name; }
+/// # }
+/// # fn Greeting() -> Element {
+/// let state = use_session::<User>();
+/// match state {
+///     SessionState::SignedIn(user) => rsx! { "Hello, {user.name}" },
+///     SessionState::Guest => rsx! { "Sign in" },
+///     SessionState::Pending => rsx! { "Loading..." },
+///     SessionState::Unavailable(_code) => rsx! { "Retry" },
+/// }
+/// # }
+/// ```
+///
 /// # Panics
 /// Panics when no enclosing [`AuthProvider`](crate::dioxus::AuthProvider) has
 /// been mounted above the calling component.

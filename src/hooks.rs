@@ -23,8 +23,8 @@ where
 
 /// Fires a hook.
 ///
-/// Per RULES §8.5 a panicking hook indicates a programming error: it is
-/// intentionally not caught. The panic stops the program.
+/// A panicking hook indicates a programming error: it is intentionally not
+/// caught. The panic stops the program.
 ///
 /// # Panics
 /// Propagates any panic raised by `hook`; panics in hooks are programming

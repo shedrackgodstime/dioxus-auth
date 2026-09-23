@@ -1,4 +1,4 @@
-//! Spec-16 concurrency and expiry tests.
+//! Concurrency and expiry tests.
 //!
 //! The race tests use a `SessionStore` wrapper that lets the test deterministically
 //! force the logout/rotate window to interleave with a concurrent `validate_session`,

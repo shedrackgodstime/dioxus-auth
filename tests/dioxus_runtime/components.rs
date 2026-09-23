@@ -26,7 +26,7 @@ struct ProbeProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn Probe(_: ProbeProps) -> Element {
     let auth = use_auth::<TestUser>();
     CONTEXT_SLOT.with(|slot| *slot.borrow_mut() = Some(auth));
@@ -47,7 +47,7 @@ struct ContextCaptureProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn ContextCapture(_: ContextCaptureProps) -> Element {
     let auth = use_auth::<TestUser>();
     CONTEXT_SLOT.with(|slot| *slot.borrow_mut() = Some(auth));
@@ -72,7 +72,7 @@ struct HomeProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn Home(_: HomeProps) -> Element {
     return rsx! {
         RequireAuth::<TestUser> {
@@ -89,7 +89,7 @@ struct LoginProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn Login(_: LoginProps) -> Element {
     return rsx! {
         RedirectIfAuthed::<TestUser> {
@@ -106,7 +106,7 @@ pub struct StateRootProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub fn StateRoot(props: StateRootProps) -> Element {
     return rsx! {
         AuthProvider::<SeededStore> {
@@ -125,7 +125,7 @@ pub struct RouterRootProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub fn RouterRoot(props: RouterRootProps) -> Element {
     let history = props.history;
     let history_callback = Callback::new(move |()| {

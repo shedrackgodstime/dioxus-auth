@@ -5,7 +5,7 @@
 //! "no session for this token", or the attempt may have failed before any
 //! answer was learnable (storage read failure, rate limiting, transport
 //! errors). Treating both as "signed out" silently demotes live sessions to
-//! guest on a mere network blip — the hazard recorded as review finding N4.
+//! guest on a mere network blip.
 //!
 //! [`RestoreVerdict`] and [`RestoreClassify`] carry that distinction so
 //! callers (the provider, or an application retry loop) can keep the context

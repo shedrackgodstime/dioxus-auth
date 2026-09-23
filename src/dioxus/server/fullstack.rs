@@ -65,7 +65,7 @@ macro_rules! fullstack_server_fns {
         #[::dioxus_fullstack::post($login)]
         // reason: generated fns keep the crate's explicit-return style, use `?`
         // for the fallible wire calls, and are async per the server-fn contract.
-        #[allow(
+        #[expect(
             clippy::needless_return,
             clippy::question_mark_used,
             clippy::unused_async
@@ -84,7 +84,7 @@ macro_rules! fullstack_server_fns {
         #[::dioxus_fullstack::post($logout)]
         // reason: generated fns keep the crate's explicit-return style, use `?`
         // for the fallible wire calls, and are async per the server-fn contract.
-        #[allow(
+        #[expect(
             clippy::needless_return,
             clippy::question_mark_used,
             clippy::unused_async
@@ -103,7 +103,7 @@ macro_rules! fullstack_server_fns {
         #[::dioxus_fullstack::post($session)]
         // reason: generated fns keep the crate's explicit-return style, use `?`
         // for the fallible wire calls, and are async per the server-fn contract.
-        #[allow(
+        #[expect(
             clippy::needless_return,
             clippy::question_mark_used,
             clippy::unused_async

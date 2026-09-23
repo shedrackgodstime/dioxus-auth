@@ -10,7 +10,7 @@ use std::hash::Hash;
 /// (roles, subscriptions, profile fields) stays entirely on the user type.
 ///
 /// Two methods only: [`AuthUser::id`] is the stable unique identifier
-/// (e.g. `u64`, `Uuid`, `String`) and [`AuthUser::email`] is the M1 login
+/// (e.g. `u64`, `Uuid`, `String`) and [`AuthUser::email`] is the login
 /// identifier. The email is the credential key: `sign_up_email`/
 /// `sign_in_email` look the user up by it, and the engine normalizes it once
 /// (trim + lowercase) before any store call — stores compare byte-for-byte
@@ -25,7 +25,7 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
     #[must_use]
     fn id(&self) -> Self::Id;
 
-    /// Returns the user's login identifier (the email address on the M1 path).
+    /// Returns the user's login identifier (the email address).
     #[must_use]
     fn email(&self) -> &str;
 

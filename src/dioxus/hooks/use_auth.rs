@@ -9,6 +9,26 @@ use crate::dioxus::context::AuthContext;
 /// Reads the [`AuthContext`] provided by an ancestor
 /// [`AuthProvider`](crate::dioxus::AuthProvider).
 ///
+/// # Examples
+///
+/// ```no_run
+/// use dioxus::prelude::*;
+/// use dioxus_auth::prelude::use_auth;
+///
+/// # #[derive(Debug, Clone, PartialEq)]
+/// # struct User { id: u64, name: String }
+/// # impl dioxus_auth::prelude::AuthUser for User {
+/// #     type Id = u64;
+/// #     fn id(&self) -> u64 { return self.id; }
+/// #     fn email(&self) -> &str { return &self.name; }
+/// # }
+/// # fn Profile() -> Element {
+/// let auth = use_auth::<User>();
+/// let greeting = if auth.is_authenticated() { "welcome back" } else { "please sign in" };
+/// rsx! { "{greeting}" }
+/// # }
+/// ```
+///
 /// # Panics
 /// Panics when no enclosing [`AuthProvider`](crate::dioxus::AuthProvider) has
 /// been mounted above the calling component.

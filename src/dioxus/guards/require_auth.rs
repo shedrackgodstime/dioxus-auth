@@ -17,6 +17,29 @@ use super::{GuardRedirect, guard_body, no_redirect_issued};
 ///
 /// Requires a [`Router`](dioxus_router::Router) ancestor.
 ///
+/// # Examples
+///
+/// ```no_run
+/// use dioxus::prelude::*;
+/// use dioxus_auth::prelude::RequireAuth;
+///
+/// # fn Dashboard() -> Element { rsx! { "dashboard" } }
+/// # fn App() -> Element {
+/// rsx! {
+///     RequireAuth::<User> { redirect_to: "/login",
+///         Dashboard {}
+///     }
+/// }
+/// # }
+/// # #[derive(Debug, Clone, PartialEq)]
+/// # struct User;
+/// # impl dioxus_auth::prelude::AuthUser for User {
+/// #     type Id = u64;
+/// #     fn id(&self) -> u64 { return 1; }
+/// #     fn email(&self) -> &str { return "user@example.com"; }
+/// # }
+/// ```
+///
 /// # Panics
 /// Panics when no [`Router`](dioxus_router::Router) encloses this component or
 /// no [`AuthProvider`](crate::dioxus::AuthProvider) provides the context.

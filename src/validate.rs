@@ -68,7 +68,7 @@ where
         // reason: the storage record already carries `created + ttl` as its
         // expiry, so without an idle timeout the only per-validation write
         // (updating `last_active`) has no reader. Touching is therefore gated
-        // on a configured idle timeout (Spec 16 §2.1 "cheap write").
+        // on a configured idle timeout — the "cheap write" optimization.
         if self.idle_timeout_secs.is_some() {
             let new_expiry = session.created_at_unix() + self.session_ttl_secs;
             if let Err(e) = self

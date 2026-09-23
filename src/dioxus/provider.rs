@@ -24,6 +24,28 @@ use super::storage::TokenStorageHandle;
 /// [`Router`](dioxus_router::Router) outside (or above) it so route guards can
 /// navigate.
 ///
+/// # Examples
+///
+/// ```no_run
+/// use dioxus::prelude::*;
+/// use dioxus_auth::prelude::{AuthProvider, Auth, MemoryStore};
+///
+/// # #[derive(Debug, Clone, PartialEq)]
+/// # struct User { id: u64, name: String }
+/// # impl dioxus_auth::prelude::AuthUser for User {
+/// #     type Id = u64;
+/// #     fn id(&self) -> u64 { return self.id; }
+/// #     fn email(&self) -> &str { return &self.name; }
+/// # }
+/// # fn App() -> Element {
+/// #     let auth = Auth::<MemoryStore<User>>::memory().expect("memory facade constructs");
+/// #     let children = rsx! { "signed in" };
+/// rsx! {
+///     AuthProvider { auth: auth, children: children }
+/// }
+/// # }
+/// ```
+///
 /// # Panics
 /// Panics when the default Argon2id hasher cannot pre-compute the
 /// timing-defense dummy hash.

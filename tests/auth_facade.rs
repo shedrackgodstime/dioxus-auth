@@ -1,4 +1,4 @@
-//! Tests for the `Auth` entry facade (slices 1a–1b: shell plus M1 verbs).
+//! Tests for the `Auth` entry facade: shell plus email/password verbs.
 
 // reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
 // conflicting style lint `needless_return` is allowed with this justification.

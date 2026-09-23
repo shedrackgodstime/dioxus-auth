@@ -51,8 +51,8 @@ pub fn origin_parts(
 }
 
 /// A probe handler that only runs when the config extension is attached.
-#[allow(clippy::unused_async)]
 // reason: axum requires handlers to be async; the body performs no awaits.
+#[allow(clippy::unused_async)]
 pub async fn probe(Extension(_config): Extension<Arc<ServerAuthConfig<TestUser>>>) -> StatusCode {
     return StatusCode::OK;
 }

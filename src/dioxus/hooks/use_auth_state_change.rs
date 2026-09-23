@@ -31,6 +31,28 @@ pub struct AuthStateEvent<T: AuthUser> {
 /// the initial state with [`use_session`](crate::prelude::use_session).
 /// The subscription lives as long as the calling component stays mounted.
 ///
+/// # Examples
+///
+/// ```no_run
+/// use dioxus::prelude::*;
+/// use dioxus_auth::prelude::{SessionState, on_auth_state_change, AuthUser};
+///
+/// # #[derive(Debug, Clone, PartialEq)]
+/// # struct User { id: u64, name: String }
+/// # impl AuthUser for User {
+/// #     type Id = u64;
+/// #     fn id(&self) -> u64 { return self.id; }
+/// #     fn email(&self) -> &str { return &self.name; }
+/// # }
+/// # fn main() {
+/// on_auth_state_change::<User, _>(|event| {
+///     if let SessionState::SignedIn(user) = &event.current {
+///         println!("signed in as {}", user.email());
+///     }
+/// });
+/// # }
+/// ```
+///
 /// # Panics
 /// Panics when no enclosing [`AuthProvider`](crate::dioxus::AuthProvider) has
 /// been mounted above the calling component.

@@ -55,7 +55,7 @@ pub struct ObserverRootProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub fn ObserverRoot(props: ObserverRootProps) -> Element {
     return rsx! {
         dioxus_auth::prelude::AuthProvider::<SeededStore> {
@@ -72,7 +72,7 @@ struct ChildProps {
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn ObserverChild(_: ChildProps) -> Element {
     let auth = use_auth::<TestUser>();
     CONTEXT_SLOT.with(|slot| *slot.borrow_mut() = Some(auth.clone()));

@@ -2,9 +2,9 @@
 //!
 //! The reactive read is an exhaustive enum, not a struct of option fields:
 //! invalid combinations (a user and an error at the same time, or a guest
-//! that is also pending) are unrepresentable. This is the AM3 result-shape
-//! contract in type form; wire responses keep the `{ data, error }` field
-//! set and map into these variants at the client boundary.
+//! that is also pending) are unrepresentable. Wire responses keep the
+//! `{ data, error }` field set and map into these variants at the client
+//! boundary.
 
 use crate::error::ErrorCode;
 use crate::status::AuthStatus;
