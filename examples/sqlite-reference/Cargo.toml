@@ -1,0 +1,17 @@
+[package]
+name = "sqlite-reference"
+version = "0.1.0"
+edition = "2024"
+description = "Copy-paste SQLite reference store for dioxus-auth (1d). You own this file."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shedrackgodstime/dioxus-auth"
+homepage = "https://github.com/shedrackgodstime/dioxus-auth"
+documentation = "https://docs.rs/dioxus-auth"
+keywords = ["auth", "sqlite", "dioxus"]
+categories = ["authentication", "database"]
+
+[dependencies]
+dioxus-auth = { path = "../.." }
+parking_lot = "0.12"
+rusqlite = { version = "0.40", features = ["bundled"] }

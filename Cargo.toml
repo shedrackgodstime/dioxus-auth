@@ -1,4 +1,5 @@
 [workspace]
+members = [".", "examples/sqlite-reference"]
 
 [lints]
 rust = { warnings = "deny" }

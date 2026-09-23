@@ -15,6 +15,14 @@ use crate::user::AuthUser;
 /// The runtime is generic over the application user type only; the concrete
 /// user/session store generics are hidden behind this trait object so hooks
 /// and components never leak `MemoryStore<…>`-style types.
+///
+/// Single-spelling rule (1c resolution, recorded): credential verification
+/// lives in exactly one place — [`AuthEngine::login`](crate::engine::AuthEngine::login)
+/// and its helpers. The [`AuthContext`](super::context::AuthContext) calls these
+/// operations rather than the [`Auth`](crate::auth::Auth) facade verbs because
+/// it holds the erased handle (no concrete `Auth<D>` exists here to delegate
+/// through) and does its own signal/token shaping around the same engine calls.
+/// No third login spelling may be introduced beside these two layers.
 pub trait AuthOperations<T: AuthUser>: Send + Sync {
     /// Authenticates and returns the user with a fresh raw wire session.
     ///
