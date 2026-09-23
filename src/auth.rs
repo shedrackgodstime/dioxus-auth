@@ -120,7 +120,7 @@ where
         });
     }
 
-    /// Wraps an already-configured engine (the door-3 escape).
+    /// Wraps an already-configured engine (the custom-setup escape).
     ///
     /// The engine is configured through
     /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder) — custom
@@ -164,20 +164,23 @@ impl<D> Auth<D>
 where
     D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
 {
-    /// Attaches a pre-seeded token storage so [`AuthProvider`](crate::dioxus::AuthProvider) restores from
-    /// it instead of a fresh empty one. Tests use this to seed a valid token;
-    /// production door-1 code never calls it (the provider defaults to an
-    /// empty in-memory storage).
+    /// Attaches a pre-seeded token storage for provider restore.
+    ///
+    /// [`AuthProvider`](crate::dioxus::AuthProvider) restores from it instead
+    /// of a fresh empty one. Tests use this to seed a valid token; quickstart
+    /// code never calls it (the provider defaults to an empty in-memory
+    /// storage).
     #[must_use = "the returned facade must be used"]
     pub fn with_token_storage(mut self, storage: crate::dioxus::TokenStorageHandle) -> Self {
         self.token_storage = Some(storage);
         return self;
     }
 
-    /// Wraps an already-erased engine handle so tests and advanced call sites
-    /// can mount the provider over a type-erased `AuthOperations`
-    /// implementation (failure injection, custom engines) without a concrete
-    /// store type.
+    /// Wraps an already-erased engine handle for the provider.
+    ///
+    /// Tests and advanced call sites mount the provider over a type-erased
+    /// `AuthOperations` implementation (failure injection, custom engines)
+    /// without a concrete store type.
     ///
     /// Requires `D: Default` only to build the throwaway concrete placeholder
     /// the struct's field type demands; [`AuthProvider`](crate::dioxus::AuthProvider) reads
@@ -202,8 +205,9 @@ where
         });
     }
 
-    /// Builds a throwaway concrete engine for type-checking only; never
-    /// dereferenced when the `erased_engine` handle is `Some`.
+    /// Builds a throwaway engine for type-checking.
+    ///
+    /// Never dereferenced when the `erased_engine` handle is `Some`.
     fn placeholder_engine() -> Result<Arc<AuthEngine<D, D>>, AuthError>
     where
         D: Default,

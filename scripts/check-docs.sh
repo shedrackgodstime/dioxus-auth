@@ -37,47 +37,57 @@ while IFS= read -r file; do
 done < <(find src examples/sqlite-reference/src -name '*.rs')
 
 # First sentences: module docs and item docs stay within 15 words (§10.2).
+# Continued lines join until the first period, so multi-line summaries cannot
+# hide behind the line boundary.
 if ! python3 - <<'PYEOF'; then
 import glob
+
+
+def first_sentence(lines, start, marker):
+    parts = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if not stripped.startswith(marker):
+            break
+        text = stripped[len(marker):].strip()
+        if not text:
+            break
+        if text.startswith('#') or text.startswith('```'):
+            break
+        parts.append(text)
+        if '.' in text:
+            break
+    return ' '.join(parts).split('.')[0]
+
 
 violations = []
 for pattern in ('src/**/*.rs', 'examples/sqlite-reference/src/**/*.rs'):
     for path in glob.glob(pattern, recursive=True):
         lines = open(path).read().splitlines()
-        # Module doc: first non-empty //! line.
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('//!'):
-                text = stripped[3:].strip()
-                if text:
-                    first = text.split('.')[0]
-                    count = len(first.split())
-                    if count > 15:
-                        violations.append((path, first[:80], count))
-                    break
-        # Item docs: first /// line of each block (skipping code fences).
-        in_fence = False
-        prev_doc = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('/// ```'):
-                in_fence = not in_fence
-            is_doc = (
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+            is_mod = stripped.startswith('//!')
+            is_item = (
                 stripped.startswith('///')
                 and not stripped.startswith('/// #')
-                and not in_fence
+                and not stripped.startswith('/// ```')
             )
-            if is_doc and not prev_doc:
-                text = stripped[3:].strip()
-                if text and not text.startswith(('[', '#', '`')):
-                    first = text.split('.')[0]
-                    count = len(first.split())
-                    if count > 15:
-                        violations.append((path, first[:80], count))
-            prev_doc = is_doc
+            if is_mod or is_item:
+                marker = '//!' if is_mod else '///'
+                sentence = first_sentence(lines, i, marker)
+                words = sentence.split()
+                # Skip link-definition and attribute-like starts.
+                if words and not words[0].startswith(('[', '#', '`')):
+                    if len(words) > 15:
+                        violations.append((path, i + 1, len(words), sentence[:90]))
+                while i < len(lines) and lines[i].strip().startswith(marker):
+                    i += 1
+            else:
+                i += 1
 
-for path, text, count in sorted(violations):
-    print('FAIL: %s first sentence has %d words: %s' % (path, count, text))
+for path, line, count, text in sorted(violations):
+    print('FAIL: %s:%d first sentence has %d words: %s' % (path, line, count, text))
 raise SystemExit(1 if violations else 0)
 PYEOF
     fail=1

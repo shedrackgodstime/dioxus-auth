@@ -20,8 +20,10 @@ pub enum RestoreVerdict {
     /// A stored token was present and the engine accepted it; the context is
     /// authenticated.
     Restored,
+    /// Definitive rejection: the context is a guest.
+    ///
     /// No usable token existed, or the server definitively rejected the
-    /// stored token; the context is a guest.
+    /// stored token.
     Unauthenticated,
     /// The attempt failed before the session question could be answered. The
     /// context is deliberately left in
@@ -30,8 +32,10 @@ pub enum RestoreVerdict {
     Unknown,
 }
 
-/// Classifies a restore failure: did the server definitively say "no
-/// session", or did the attempt fail without an answer?
+/// Classifies a restore failure as rejection or unknown.
+///
+/// Did the server definitively say "no session", or did the attempt fail
+/// without an answer?
 ///
 /// Implemented for [`AuthError`] in-crate. Applications wrapping remote
 /// engines whose transport errors surface through other error types implement

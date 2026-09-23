@@ -230,8 +230,10 @@ impl<T: AuthUser + Clone> AuthContext<T> {
         return self.restore();
     }
 
-    /// Demotes the context to guest state, used by the provider on restore
-    /// failure so the tree always settles into a defined status.
+    /// Demotes the context to guest state.
+    ///
+    /// Used by the provider on restore failure so the tree always settles
+    /// into a defined status.
     pub(crate) fn set_guest(&self) {
         let mut token = self.token;
         let mut status = self.status;
@@ -243,8 +245,10 @@ impl<T: AuthUser + Clone> AuthContext<T> {
         *unavailable.write() = None;
     }
 
-    /// Records an unknown-class failure so the reactive read reports
-    /// `Unavailable` instead of a bare `Pending` until the next settle.
+    /// Records an unknown-class failure for the reactive read.
+    ///
+    /// The read reports `Unavailable` instead of a bare `Pending` until the
+    /// next settle.
     fn record_unavailable(&self, error: &AuthError) {
         let mut unavailable = self.restore_unavailable;
         *unavailable.write() = Some(error.code());

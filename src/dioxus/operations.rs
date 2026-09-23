@@ -121,9 +121,9 @@ where
 
 /// Bridges the `Auth` facade to the engine handle that [`AuthProvider`](super::provider::AuthProvider) consumes.
 ///
-/// Before this impl, a Door-1 caller had to write
+/// Before this impl, a quickstart caller had to write
 /// `AuthEngineHandle::from(Arc::clone(auth.engine()))` — three concepts
-/// (`Arc`, `AuthEngineHandle`, erasure) that the first-page budget forbids.
+/// (`Arc`, `AuthEngineHandle`, erasure) that the beginner budget forbids.
 /// `Auth::into()` keeps that bridge to a single word.
 impl<D> From<Auth<D>> for AuthEngineHandle<D::User>
 where

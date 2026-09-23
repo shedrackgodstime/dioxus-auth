@@ -8,8 +8,10 @@ use parking_lot::Mutex;
 use crate::error::AuthError;
 use crate::transport::TokenStorage;
 
-/// Cloneable token storage handle exposing `&mut self` operations through a
-/// shared lock, so components and the auth context can share one storage.
+/// Shared token-storage handle for components and context.
+///
+/// Exposes `&mut self` operations through a shared lock, so both sides share
+/// one storage.
 ///
 /// The `Box<dyn TokenStorage>` erasure is load-bearing: component props must
 /// name a concrete type.

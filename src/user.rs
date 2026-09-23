@@ -14,9 +14,8 @@ use std::hash::Hash;
 /// identifier. The email is the credential key: `sign_up_email`/
 /// `sign_in_email` look the user up by it, and the engine normalizes it once
 /// (trim + lowercase) before any store call — stores compare byte-for-byte
-/// and never fold case or whitespace themselves. `Clone` replaces the old
-/// manual `clone_box`; a display name defaults to the email at the
-/// presentation layer.
+/// and never fold case or whitespace themselves. `Clone` lets the engine hand
+/// identities to callers; show the email wherever a display name would go.
 pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
     /// Stable unique identifier for the user (e.g. `u64`, `Uuid`, `String`).
     type Id: Clone + Eq + Hash + Debug + Send + Sync + 'static;
@@ -50,7 +49,7 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
 /// are opaque and user-type-agnostic.
 ///
 /// Memory-backed deployments are non-durable by definition: everything dies
-/// with the process. Door 1 is the prototype door.
+/// with the process. Memory is for prototyping.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefaultUser {
     /// Stable unique identifier.

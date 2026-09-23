@@ -17,8 +17,8 @@ use super::storage::TokenStorageHandle;
 /// Provides authentication state to the subtree.
 ///
 /// Mount once above the router with the single [`Auth`] entry point; storage
-/// and restore wiring are the provider's responsibility, so the page-one
-/// budget never names a handle. The provider restores the identity from a
+/// and restore wiring are the provider's responsibility, so beginner code
+/// never names a handle. The provider restores the identity from a
 /// default in-memory token storage on its first render, and hands a reactive
 /// [`AuthContext`] to every descendant. Mount a
 /// [`Router`](dioxus_router::Router) outside (or above) it so route guards can

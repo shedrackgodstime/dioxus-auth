@@ -24,9 +24,7 @@ fn ip_key(ip: Option<&str>) -> Option<String> {
 /// whitespace themselves.
 ///
 /// A free function, not a method: normalization belongs to no receiver.
-/// Plain `pub` (not `pub(crate)`): the parent module is already `pub(crate)`,
-/// which carries the restriction — spelling it again trips
-/// `redundant_pub_crate`.
+/// Plain `pub` because the parent module is already `pub(crate)`.
 pub fn normalize_identifier(identifier: &str) -> String {
     return identifier.trim().to_lowercase();
 }
@@ -44,6 +42,29 @@ where
     /// Returns the authenticated user and the **raw wire session** (the id is
     /// sendable to the client; the store only ever sees its hash).
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, AuthUser, MemoryStore};
+    /// # use std::sync::Arc;
+    /// # #[derive(Debug, Clone)]
+    /// # struct User { id: u64, name: String }
+    /// # impl AuthUser for User {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> u64 { return self.id; }
+    /// #     fn email(&self) -> &str { return &self.name; }
+    /// # }
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(MemoryStore::<User>::new());
+    /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
+    /// # let hash = engine.hasher().hash("s3cret")?;
+    /// # store.insert_user_with_password(User { id: 1, name: String::from("alice") }, "alice", hash);
+    /// let (user, session) = engine.login("alice", "s3cret")?;
+    /// assert_eq!(user.id(), 1);
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
     /// # Errors
     /// Returns `AuthError::InvalidCredentials` for bad credentials,
     /// `AuthError::RateLimited` if the identifier is rate-limited, or a store
@@ -59,6 +80,33 @@ where
 
     /// Authenticates a user with optional session metadata (IP, user agent).
     ///
+    /// Metadata rides on the minted session for attribution; the IP also
+    /// feeds the per-IP rate-limit dimension.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, AuthUser, LoginOptions, MemoryStore};
+    /// # use std::sync::Arc;
+    /// # #[derive(Debug, Clone)]
+    /// # struct User { id: u64, name: String }
+    /// # impl AuthUser for User {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> u64 { return self.id; }
+    /// #     fn email(&self) -> &str { return &self.name; }
+    /// # }
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(MemoryStore::<User>::new());
+    /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
+    /// # let hash = engine.hasher().hash("s3cret")?;
+    /// # store.insert_user_with_password(User { id: 1, name: String::from("alice") }, "alice", hash);
+    /// let options = LoginOptions::new().with_ip_address(Some("10.0.0.1"));
+    /// let (user, _) = engine.login_with_options("alice", "s3cret", options)?;
+    /// assert_eq!(user.id(), 1);
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
     /// # Errors
     /// See [`AuthEngine::login`].
     #[must_use = "the authenticated user and session should be used"]
@@ -71,8 +119,7 @@ where
         return self.do_login(identifier, password, options);
     }
 
-    /// Applies the credential rate gate for one identifier, plus the caller
-    /// IP when one is known.
+    /// Applies the credential and IP rate gates.
     ///
     /// The identifier gate stops targeted guessing; the IP gate stops
     /// identifier rotation (spraying many identifiers from one source).
@@ -98,8 +145,7 @@ where
         return Ok(());
     }
 
-    /// Records a failed credential attempt for one identifier, plus the
-    /// caller IP when one is known.
+    /// Records a failed credential attempt against both budgets.
     pub(crate) fn record_rate_limit_failure(&self, identifier: &str, ip: Option<&str>) {
         if let Some(limiter) = &self.rate_limiter {
             limiter.record_attempt(&normalize_identifier(identifier));
@@ -141,6 +187,7 @@ where
         return self.authenticate_user(identifier, password, ip);
     }
 
+    /// Runs the verified login: checks, session minting, rotation, and save.
     pub(crate) fn do_login(
         &self,
         identifier: &str,

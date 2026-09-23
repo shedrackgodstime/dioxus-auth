@@ -67,8 +67,10 @@ CREATE TABLE verifications (
 );
 ";
 
-/// Session column list shared by the by-id lookup and the per-user listing,
-/// so the two reads cannot disagree on column order.
+/// Shared session column list for both reads.
+///
+/// The by-id lookup and the per-user listing derive from it, so the two reads
+/// cannot disagree on column order.
 const SESSION_COLUMNS: &str =
     "id, user_id, created_at, expires_at, last_active_at, auth_hash, ip, user_agent";
 
@@ -218,8 +220,10 @@ fn timestamp(value: i64) -> Result<u64, rusqlite::Error> {
     })
 }
 
-/// Writes a UNIX timestamp, rejecting out-of-range values before they reach
-/// the driver (`as` casts would wrap silently).
+/// Writes a UNIX timestamp, rejecting out-of-range values.
+///
+/// Rejection happens before values reach the driver (`as` casts would wrap
+/// silently).
 fn stamp(value: u64) -> Result<i64, AuthError> {
     i64::try_from(value).map_err(|_| AuthError::Internal(String::from("timestamp out of range")))
 }
@@ -229,8 +233,9 @@ fn internal(error: impl std::fmt::Display) -> AuthError {
     AuthError::Internal(error.to_string())
 }
 
-/// Whether a driver failure is a uniqueness conflict (taken identifier or id)
-/// rather than a real outage.
+/// Whether a driver failure is a uniqueness conflict.
+///
+/// Distinguishes taken identifiers and ids from real outages.
 fn is_conflict(error: &rusqlite::Error) -> bool {
     matches!(
         error,

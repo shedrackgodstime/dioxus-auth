@@ -218,6 +218,10 @@ impl CookieConfig {
     }
 
     /// Sets the cookie domain.
+    ///
+    /// `None` (the default) emits no `Domain` attribute, scoping the cookie
+    /// to the responding host. Never set a `Domain` in host-only mode: the
+    /// `__Host-` contract forbids it, so the value would be ignored.
     #[must_use = "the returned configuration must be used"]
     pub fn with_domain(mut self, domain: Option<String>) -> Self {
         self.domain = domain;

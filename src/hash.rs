@@ -20,8 +20,7 @@ use crate::security::PasswordHasher;
 /// [`Argon2Hasher::with_params`].
 ///
 /// The algorithm is locked to Argon2id and the version to v1.3; only the
-/// cost parameters are customizable, per the non-negotiable posture in the
-/// security plan.
+/// cost parameters are customizable.
 #[derive(Debug, Clone)]
 pub struct Argon2Hasher {
     params: Params,
@@ -36,10 +35,10 @@ impl Default for Argon2Hasher {
 }
 
 impl Argon2Hasher {
-    /// Creates a new Argon2id hasher with the recommended production parameters
-    /// (m = 19 MiB, t = 2, p = 1, variant Argon2id, version 1.3).
+    /// Creates a hasher with the default production parameters.
     ///
-    /// See [`Argon2Hasher::with_params`] for custom cost parameters.
+    /// Parameters: m = 19 MiB, t = 2, p = 1, Argon2id, version 1.3. See
+    /// [`Argon2Hasher::with_params`] for custom cost parameters.
     #[must_use]
     pub fn new() -> Self {
         return Self::default();

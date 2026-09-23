@@ -78,9 +78,10 @@ where
         return Ok(());
     }
 
-    /// Signs in with an identifier and password (`sign_in_email` is the
-    /// email-password verb; the bare `sign_in` name is reserved for a future
-    /// method-selection surface — use this form).
+    /// Signs in with an identifier and password.
+    ///
+    /// This is the email-password verb; the bare `sign_in` name is reserved
+    /// for a future method-selection surface — use this form.
     ///
     /// Returns the user with the raw wire session id on success. Unknown
     /// identifiers and wrong passwords share `InvalidCredentials`.

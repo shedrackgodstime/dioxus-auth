@@ -55,9 +55,9 @@ impl SessionId {
         return Self(value.into());
     }
 
-    /// Whether `token` has the exact shape [`SessionId::generate`] mints:
-    /// 64 lowercase hex characters (a 256-bit CSPRNG value).
+    /// Whether `token` has the exact minted shape.
     ///
+    /// That shape is 64 lowercase hex characters (a 256-bit CSPRNG value).
     /// Applied to wire input (bearer/cookie extraction) before any hashing or
     /// lookup, so oversized or malformed inputs are cheap rejections.
     #[must_use]

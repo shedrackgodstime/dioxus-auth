@@ -10,7 +10,7 @@
 //!
 //! The documented import path for every public item here is the crate root
 //! (`use dioxus_auth::{AuthProvider, use_session, …}`); this module stays
-//! importable for door-3 users who prefer layer paths.
+//! importable for custom setups that prefer layer paths.
 //!
 //! Dioxus-coupling note (re-audit on every Dioxus bump): this layer touches
 //! only long-lived framework surface — `#[component]` + `Props`, `rsx!` +

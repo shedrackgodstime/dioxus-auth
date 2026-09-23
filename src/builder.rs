@@ -71,7 +71,7 @@ where
 {
     /// Creates a new builder with the given user and session stores.
     ///
-    /// Door-3 code reaches this through
+    /// Custom setups reach this through
     /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder), the
     /// documented entry point — never directly.
     #[must_use = "a builder must eventually be built"]
@@ -100,7 +100,9 @@ where
 
     /// Sets the session TTL.
     ///
-    /// Must be non-zero; [`build`](Self::build) rejects a zero TTL because it
+    /// Prefer this over [`session_ttl_secs`](Self::session_ttl_secs); the
+    /// `_secs` form exists for const contexts. Must be non-zero;
+    /// [`build`](Self::build) rejects a zero TTL because it
     /// would mint instantly-dead sessions.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn session_ttl(mut self, duration: Duration) -> Self {
@@ -110,7 +112,9 @@ where
 
     /// Sets the session TTL in seconds.
     ///
-    /// Must be non-zero; [`build`](Self::build) rejects a zero TTL because it
+    /// Exists for const contexts; otherwise prefer
+    /// [`session_ttl`](Self::session_ttl). Must be non-zero;
+    /// [`build`](Self::build) rejects a zero TTL because it
     /// would mint instantly-dead sessions.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn session_ttl_secs(mut self, secs: u64) -> Self {
@@ -120,7 +124,9 @@ where
 
     /// Sets the idle timeout (max time without validated activity).
     ///
-    /// Must be non-zero when set; [`build`](Self::build) rejects a zero idle
+    /// Prefer this over [`idle_timeout_secs`](Self::idle_timeout_secs); the
+    /// `_secs` form exists for const contexts. Must be non-zero when set;
+    /// [`build`](Self::build) rejects a zero idle
     /// timeout because it would invalidate every session on next use.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn idle_timeout(mut self, duration: Duration) -> Self {
@@ -130,7 +136,9 @@ where
 
     /// Sets the idle timeout in seconds.
     ///
-    /// Must be non-zero when set; [`build`](Self::build) rejects a zero idle
+    /// Exists for const contexts; otherwise prefer
+    /// [`idle_timeout`](Self::idle_timeout). Must be non-zero when set;
+    /// [`build`](Self::build) rejects a zero idle
     /// timeout because it would invalidate every session on next use.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn idle_timeout_secs(mut self, secs: u64) -> Self {
@@ -190,6 +198,28 @@ where
     }
 
     /// Builds the authentication engine.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, AuthUser, MemoryStore};
+    /// # use std::sync::Arc;
+    /// # #[derive(Debug, Clone)]
+    /// # struct User;
+    /// # impl AuthUser for User {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> u64 { return 1; }
+    /// #     fn email(&self) -> &str { return "user@example.com"; }
+    /// # }
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(MemoryStore::<User>::new());
+    /// let engine = AuthEngine::builder(Arc::clone(&store), store)
+    ///     .session_ttl_secs(3600)
+    ///     .build()?;
+    /// assert_eq!(engine.session_ttl_secs(), 3600);
+    /// # return Ok(());
+    /// # }
+    /// ```
     ///
     /// # Errors
     /// Returns `AuthError` if the timing-defense dummy hash cannot be computed,

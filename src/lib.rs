@@ -41,7 +41,7 @@
 //! methods, client, server, shipping & operating, examples).
 //!
 //! The only documented import path is the crate root
-//! (`use dioxus_auth::{Auth, AuthProvider, RequireAuth, …}`); door-3 items
+//! (`use dioxus_auth::{Auth, AuthProvider, RequireAuth, …}`); advanced items
 //! stay reachable through their modules, and deep implementation paths are
 //! closed.
 
