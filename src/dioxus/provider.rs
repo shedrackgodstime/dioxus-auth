@@ -24,7 +24,7 @@ use super::storage::TokenStorageHandle;
 /// [`Router`](dioxus_router::Router) outside (or above) it so route guards can
 /// navigate.
 ///
-/// Restore runs synchronously inside the first render — including server-side
+/// Restore runs synchronously inside the first render, including server-side
 /// renders. The engine core is synchronous by design, so a store that blocks
 /// (network, disk) stalls the render worker while restore runs; SSR
 /// deployments with remote stores must front them with a fast local cache or

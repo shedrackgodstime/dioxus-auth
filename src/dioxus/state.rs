@@ -16,8 +16,8 @@ use crate::user::AuthUser;
 /// [`SessionState::Guest`] renders signed-out UI, [`SessionState::Pending`]
 /// means the restore question is still open (initial mount, or an async
 /// client engine in flight), and [`SessionState::Unavailable`] means the
-/// question could not be asked (rate limit, transport failure) — retryable,
-/// and it never demotes a live session to guest.
+/// question could not be asked (rate limit, transport failure). It is
+/// retryable, and it never demotes a live session to guest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionState<T: AuthUser> {
     /// An authenticated identity is present.
@@ -26,7 +26,7 @@ pub enum SessionState<T: AuthUser> {
     Guest,
     /// The restore question is still open; nothing has answered yet.
     Pending,
-    /// The restore question could not be asked — retryable, never a sign-out.
+    /// The restore question could not be asked. Retryable, never a sign-out.
     Unavailable(ErrorCode),
 }
 
@@ -36,7 +36,7 @@ impl<T: AuthUser + Clone> SessionState<T> {
     ///
     /// A `Loading` status with no recorded failure is [`SessionState::Pending`];
     /// with one, it is [`SessionState::Unavailable`]. Only the loading state
-    /// consults the failure — settled statuses already carry their answer.
+    /// consults the failure. Settled statuses already carry their answer.
     pub(crate) fn from_parts(status: &AuthStatus<T>, unavailable: Option<ErrorCode>) -> Self {
         return match status {
             AuthStatus::Authenticated(user) => Self::SignedIn(user.clone()),

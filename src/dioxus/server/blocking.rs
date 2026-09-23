@@ -4,8 +4,8 @@
 //! Its calls are cheap for in-memory stores but not always: Argon2 verification
 //! is deliberately CPU-heavy, and SQL-backed stores scan under locks. Running
 //! those directly inside async handlers occupies a tokio worker for the whole
-//! duration; with few workers this stalls unrelated requests — a starvation
-//! vector, and a latency cliff on login.
+//! duration; with few workers this stalls unrelated requests into starvation,
+//! and creates a latency cliff on login.
 //!
 //! [`run_blocking`] dispatches blocking calls to `tokio::task::spawn_blocking`
 //! when a tokio runtime context is available and falls back to an inline call

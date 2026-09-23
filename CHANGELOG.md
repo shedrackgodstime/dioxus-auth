@@ -3,7 +3,7 @@
 All notable changes to `dioxus-auth` are recorded here. Nothing is published
 yet; pre-1.0 entries may describe breaking changes without deprecation.
 
-## [0.1.0] — unreleased (v2 branch)
+## [0.1.0] (unreleased, v2 branch)
 
 Gate 1 (M1 vertical) on the 1e surface:
 

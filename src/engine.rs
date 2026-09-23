@@ -119,7 +119,7 @@ where
     /// stale-credential sweep) must land as one step: two logins racing
     /// through the window would otherwise both survive, breaking
     /// single-active enforcement exactly when it matters. The guard is held
-    /// across store calls only — never across user hooks, which may call back
+    /// across store calls only, never across user hooks, which may call back
     /// into the engine. Process-local: distributed deployments need the same
     /// atomicity from their session store transaction.
     pub(crate) login_lock: Arc<Mutex<()>>,

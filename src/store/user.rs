@@ -34,7 +34,7 @@ pub trait PasswordUserStore: UserStore {
     /// Finds a user and their stored password hash by login identifier.
     ///
     /// The identifier arrives engine-normalized (trimmed, lowercased). Match
-    /// it exactly — one canonical row per normalized key. The engine verifies
+    /// it exactly for one canonical row per normalized key. The engine verifies
     /// `password` against the returned hash; the store never receives
     /// plaintext passwords from the login path and never runs verification
     /// itself. Returning the hash lets the engine apply timing defense on
@@ -64,15 +64,15 @@ pub trait PasswordUserStore: UserStore {
     ///
     /// Atomic: when the identifier is already taken, no user or credential row
     /// is written and `Ok(false)` is returned. Implementations must run the
-    /// uniqueness check and the write as one indivisible step — a separate
+    /// uniqueness check and the write as one indivisible step. A separate
     /// lookup followed by a write leaves a window in which two registrations
     /// both pass the check, and the loser's write overwrites the winner's
     /// credential.
     ///
     /// The identifier arrives engine-normalized (trimmed, lowercased); compare
     /// it byte-for-byte, one canonical row per key. Also rejects when the
-    /// `user.id()` row already exists, returning `Ok(false)` with no writes —
-    /// two identifiers must never alias one user row.
+    /// `user.id()` row already exists, returning `Ok(false)` with no writes.
+    /// Two identifiers must never alias one user row.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.

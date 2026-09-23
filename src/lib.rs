@@ -1,4 +1,4 @@
-//! dioxus-auth — authentication and session management for Dioxus.
+//! dioxus-auth: authentication and session management for Dioxus.
 //!
 //! The crate is layered: the core engine has zero Dioxus dependency, and the
 //! Dioxus runtime ships as a feature-gated layer (`dioxus`). Application

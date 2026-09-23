@@ -13,8 +13,8 @@ use crate::security::PasswordHasher;
 /// Argon2id password hasher.
 ///
 /// The default parameters are the argon2 crate's recommended production
-/// configuration (Argon2id, m = 19 MiB, t = 2, p = 1) — RFC 9106 §4.1
-/// compliant. Deployments that need stronger or weaker parameters construct a
+/// configuration (Argon2id, m = 19 MiB, t = 2, p = 1), compliant with
+/// RFC 9106 §4.1. Deployments that need stronger or weaker parameters construct a
 /// custom [`Params`] (via
 /// [`ParamsBuilder`](argon2::ParamsBuilder)) and pass it through
 /// [`Argon2Hasher::with_params`].
@@ -46,8 +46,8 @@ impl Argon2Hasher {
 
     /// Creates a hasher with custom Argon2 parameters.
     ///
-    /// The algorithm is always Argon2id and the version is always v1.3 —
-    /// only the cost parameters (`m_cost`, `t_cost`, `p_cost`) are adjustable.
+    /// The algorithm is always Argon2id and the version is always v1.3.
+    /// Only the cost parameters (`m_cost`, `t_cost`, `p_cost`) are adjustable.
     /// Construct a [`Params`] via
     /// [`ParamsBuilder`](argon2::ParamsBuilder):
     ///

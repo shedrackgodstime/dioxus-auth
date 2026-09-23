@@ -7,7 +7,7 @@ use crate::status::{REDACTED, SessionId};
 /// Server-side session record.
 ///
 /// `Debug` is **manual and redacted**: a derived impl would render the raw
-/// session token (`id`) and the session auth hash — logging a session would
+/// session token (`id`) and the session auth hash. Logging a session would
 /// otherwise dump a hijackable credential plus the user's password hash.
 /// Field access stays available through the getters.
 #[derive(Clone, Eq, PartialEq)]

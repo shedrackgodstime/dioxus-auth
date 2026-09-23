@@ -10,7 +10,7 @@ fail=0
 # D1/D7: private-KB citations and design-journal pointers must never ship in
 # source. (N4-style domain terms like "N4 verdict" live in prose, not as
 # citations, and are out of scope for this grep. Rule justifications cite
-# content — "explicit return on every tail expression" — never rule numbers.
+# content ("explicit return on every tail expression", never rule numbers).
 # Plan/gate references (`plan/00`, `Gate 2`) are KB vocabulary, meaningless
 # to users; lowercase domain prose like "origin gate" does not match.)
 if grep -rnE 'RULES|AM[0-9]+|review finding|Spec [0-9]+|scratch/|conclusion/|archive/|plan/0[0-9]|Gate [0-9]' \
@@ -103,6 +103,18 @@ while IFS= read -r hit; do
         echo "FAIL: $file:$lineno allow/expect without // reason:" >&2
     fi
 done < <(grep -rn '#\[allow\|#\[expect' src examples/sqlite-reference/src --include='*.rs' | cut -d: -f1-2)
+
+# The em dash character (U+2013) reads machine-written: reword with commas,
+# colons, or periods. The pattern below uses an escape so this file stays
+# glyph-free and does not flag itself.
+if grep -rn $'\u2014' \
+    src/ tests/ examples/sqlite-reference/src examples/sqlite-reference/tests \
+    README.md docs/ CHANGELOG.md CONTRIBUTING.md scripts/ \
+    examples/sqlite-reference/README.md \
+    --include='*.rs' --include='*.md' --include='*.sh' 2>/dev/null; then
+    fail=1
+    echo "FAIL: em-dash found (see above)" >&2
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "docs ok: no private citations, no placeholders, module docs present, summaries in budget, allows justified"

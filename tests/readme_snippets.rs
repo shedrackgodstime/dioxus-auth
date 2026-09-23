@@ -173,7 +173,7 @@ fn readme_hardening_rate_limiter() {
 }
 
 /// The `rust,ignore` README snippets are excluded from compilation per their
-/// own annotation, but the symbols they teach must keep existing — otherwise
+/// own annotation, but the symbols they teach must keep existing. Otherwise
 /// the README would silently rot. Each pin mirrors one snippet's surface.
 /// Gated on the features that export the named items.
 #[cfg(feature = "dioxus")]

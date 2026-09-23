@@ -132,7 +132,8 @@ fn logout_deletes_sessions_whose_user_row_is_gone() {
 }
 
 /// Multi-session management on the engine: list both logins, revoke all,
-/// list empty. Compare by id, never by position — order is store-defined.
+/// list empty. Compare by id, never by position, because order is
+/// store-defined.
 #[test]
 fn list_and_revoke_all_cover_every_session() {
     let engine = seeded_engine();

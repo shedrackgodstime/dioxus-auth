@@ -13,7 +13,7 @@
 //! importable for custom setups that prefer layer paths.
 //!
 //! Dioxus-coupling note (re-audit on every Dioxus bump): this layer touches
-//! only long-lived framework surface — `#[component]` + `Props`, `rsx!` +
+//! only long-lived framework surface: `#[component]` + `Props`, `rsx!` +
 //! `Element`, `use_context` / `use_context_provider`, `use_signal` +
 //! `Readable` / `Writable` signal access, `use_effect` / `use_hook`, and on
 //! the router side `Router`, `Navigator`, `use_navigator`. The engine behind

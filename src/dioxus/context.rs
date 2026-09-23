@@ -157,12 +157,12 @@ impl<T: AuthUser + Clone> AuthContext<T> {
     /// - [`RestoreVerdict::Restored`]: a stored token was accepted and the
     ///   context is authenticated.
     /// - [`RestoreVerdict::Unauthenticated`]: no usable token existed, or the
-    ///   server definitively rejected the stored token — the context is a
+    ///   server definitively rejected the stored token. The context is a
     ///   guest. The rejected token is left in storage so third-party backends
     ///   keep their own retry semantics.
     /// - [`RestoreVerdict::Unknown`]: the attempt failed before the session
     ///   question could be answered (storage read failure, rate limiting,
-    ///   transport errors surfacing as [`AuthError::Internal`]) — the context
+    ///   transport errors surfacing as [`AuthError::Internal`]). The context
     ///   is deliberately left in Loading so a network blip never silently
     ///   demotes a live session to guest. Callers may retry.
     #[must_use = "the restore verdict must be handled"]

@@ -36,6 +36,9 @@ pub trait RateLimiter: std::fmt::Debug + Send + Sync {
 /// Default rate-limit window: 15 minutes, in seconds.
 const DEFAULT_WINDOW_SECS: u64 = 15 * 60;
 
+/// Default ceiling on failed attempts per window.
+const DEFAULT_MAX_ATTEMPTS: usize = 10;
+
 /// Default ceiling on simultaneously tracked identifiers.
 const DEFAULT_MAX_TRACKED_IDENTIFIERS: usize = 10_000;
 
@@ -83,7 +86,10 @@ impl std::fmt::Debug for InMemoryRateLimiter {
 impl Default for InMemoryRateLimiter {
     /// 10 failed attempts per 15-minute window.
     fn default() -> Self {
-        return Self::new(10, Duration::from_secs(DEFAULT_WINDOW_SECS));
+        return Self::new(
+            DEFAULT_MAX_ATTEMPTS,
+            Duration::from_secs(DEFAULT_WINDOW_SECS),
+        );
     }
 }
 
@@ -96,9 +102,9 @@ const PROD_WINDOW_SECS: u64 = 60;
 impl InMemoryRateLimiter {
     /// Creates a new in-memory rate limiter on the system clock.
     ///
-    /// * `max_attempts` — maximum failed attempts allowed within `window`.
+    /// * `max_attempts`: maximum failed attempts allowed within `window`.
     ///   Zero denies every attempt (fail-closed kill switch).
-    /// * `window` — rolling time window for counting attempts. Zero prunes
+    /// * `window`: rolling time window for counting attempts. Zero prunes
     ///   every attempt immediately, so nothing is ever limited.
     #[must_use]
     pub fn new(max_attempts: usize, window: Duration) -> Self {
@@ -122,9 +128,9 @@ impl InMemoryRateLimiter {
     /// Tests inject a deterministic clock to exercise window expiry without
     /// sleeping.
     ///
-    /// * `max_attempts` — maximum failed attempts allowed within `window`
-    /// * `window` — rolling time window for counting attempts
-    /// * `now` — clock producing the current instant
+    /// * `max_attempts`: maximum failed attempts allowed within `window`
+    /// * `window`: rolling time window for counting attempts
+    /// * `now`: clock producing the current instant
     #[must_use]
     pub fn with_clock(max_attempts: usize, window: Duration, now: RateLimiterClock) -> Self {
         return Self {

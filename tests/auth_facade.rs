@@ -128,7 +128,7 @@ fn sign_up_taken_counts_toward_the_shared_rate_gate() {
     assert_eq!(second, AuthError::InvalidCredentials);
 
     // reason: the taken probes were recorded as attempts, so the next
-    // credential operation on the same identifier is throttled — the sign-up
+    // credential operation on the same identifier is throttled. The sign-up
     // gate and the login gate are one window, not two.
     let throttled = auth
         .sign_in_email("alice", "pw")

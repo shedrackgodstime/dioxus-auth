@@ -9,7 +9,7 @@ use crate::transport::TokenStorage;
 /// In-memory token storage for native/dev clients.
 ///
 /// `Debug` is **manual and redacted**: a derived impl would render the raw
-/// wire token — logging the storage would otherwise dump a hijackable
+/// wire token. Logging the storage would otherwise dump a hijackable
 /// credential.
 #[derive(Default)]
 pub struct MemoryTokenStorage {

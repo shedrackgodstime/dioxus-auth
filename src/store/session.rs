@@ -8,7 +8,7 @@ use crate::status::SessionId;
 
 /// Storage interface for session persistence and lifecycle.
 ///
-/// Sessions are keyed by the **storage form** — `sha256(raw wire token)`.
+/// Sessions are keyed by the **storage form**: `sha256(raw wire token)`.
 /// The engine hashes wire tokens before calling this trait, so the store
 /// only ever sees hashed ids and a leaked store yields no session-hijackable
 /// secrets.

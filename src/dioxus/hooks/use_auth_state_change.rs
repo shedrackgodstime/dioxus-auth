@@ -24,8 +24,9 @@ pub struct AuthStateEvent<T: AuthUser> {
 
 /// Runs `handler` whenever the session state changes.
 ///
-/// The read half of the runtime is reactive; this hook is the observe half —
-/// analytics, logging, cross-tab sync through an application-owned channel.
+/// The read half of the runtime is reactive; this hook is the observe half
+/// for analytics, logging, and cross-tab sync through an application-owned
+/// channel.
 /// The first settled state is recorded without firing, so a handler sees
 /// changes between two observed states only (login, logout, refresh); read
 /// the initial state with [`use_session`](crate::use_session).

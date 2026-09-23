@@ -4,8 +4,8 @@
 //!
 //! Behavioral parity with `tests/conformance/` (which pins `MemoryStore`):
 //! the suites are not code-shared because seeding (`insert_user…`) is not
-//! part of the capability traits — only engine-reachable behavior is. If the
-//! engine gains a store-visible behavior, it gets a test here too.
+//! part of the capability traits. Only engine-reachable behavior is shared.
+//! If the engine gains a store-visible behavior, it gets a test here too.
 //!
 //! Style note: like `src/lib.rs`, these tests use idiomatic tail expressions
 //! so the file stays clean under default lints when copied.
@@ -202,9 +202,9 @@ fn touch_missing_sessions_is_a_noop_and_single_active_rotates() {
 }
 
 /// Graduation across the real boundary: the memory quickstart (`DefaultUser`)
-/// and the own-DB store (`AppUser`) answer identically — same verbs, same
-/// error codes. Written out on both sides: the facades have different store
-/// types, so the parity is literal.
+/// and the own-DB store (`AppUser`) answer identically, with the same verbs
+/// and the same error codes. Written out on both sides: the facades have
+/// different store types, so the parity is literal.
 #[test]
 fn graduation_from_memory_quickstart_preserves_behavior() {
     let quick = Auth::memory().expect("quickstart must construct");

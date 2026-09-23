@@ -38,15 +38,15 @@ fn main() -> Result<(), dioxus_auth::AuthError> {
 }
 ```
 
-Memory dies with the process — this is the prototype door. Unknown
+Memory dies with the process. This is the prototype door. Unknown
 identifiers and wrong passwords share one `InvalidCredentials` error:
 identifier state is never observable.
 
 ## Graduating (memory → your database)
 
 1. Rename `DefaultUser` to your own `AppUser` and add your fields.
-2. Swap `Auth::memory()` for `Auth::new(your_store)` — for example
-   `examples/sqlite-reference` — and implement `AuthUser` (two methods:
+2. Swap `Auth::memory()` for `Auth::new(your_store)` (for example
+   `examples/sqlite-reference`) and implement `AuthUser` (two methods:
    `id` and `email`).
 3. Nothing else changes: same verbs, same sessions, same error codes.
    Sessions are opaque and user-type-agnostic, so zero migration.
@@ -108,8 +108,8 @@ match s {
 
 ## Server (fullstack)
 
-Generate the cookie-driven endpoints once, resolve the caller per call —
-the server re-validates every time, guards are UX only:
+Generate the cookie-driven endpoints once, and resolve the caller per call.
+The server re-validates every time; guards are UX only:
 
 ```rust,ignore
 dioxus_auth::fullstack_server_fns!(AppUser);
@@ -121,7 +121,7 @@ let user = dioxus_auth::require_user::<AppUser>().await?;
 
 ## Hardening
 
-Rate limiting is opt-in — turn it on for any credential endpoint facing the
+Rate limiting is opt-in. Turn it on for any credential endpoint facing the
 network:
 
 ```rust
@@ -156,13 +156,13 @@ Cookie and origin defaults, and when to tighten them:
 `SameSite=Lax` alone does not stop login CSRF: an attacker can POST their own
 credentials to your origin and bind the victim's browser to the attacker's
 account. Set `expected_origins` so state-changing operations (login, logout)
-require a present, matching `Origin` — mismatches fail with 403. `SameSite=None`
+require a present, matching `Origin`. Mismatches fail with 403. `SameSite=None`
 deployments must set it: `None` sends cookies on cross-site requests, leaving
 the origin gate as the CSRF backstop. Session reads never require an origin,
 and the axum middleware skips the gate for safe methods (`GET`/`HEAD`/`OPTIONS`).
 
 Host-only mode emits `__Host-<name>` with a forced `Path=/`, no `Domain`, and
-`Secure`, and accepts only that exact name back — a sibling-app cookie shadow
+`Secure`, and accepts only that exact name back. A sibling-app cookie shadow
 cannot displace the session.
 
 Two reads, never confused: `use_session()` is the local render read;
@@ -174,8 +174,8 @@ the local read.
 v0.1.0 is the email+password vertical: `Auth::new` over your store, mirrored
 verbs, single-prop provider, `use_session`, documented schema with a
 copy-paste SQLite reference (`examples/sqlite-reference`). Additive methods
-(magic link, OAuth, passkeys) arrive as new verbs on the same entry point —
-never a second auth system. Expect breaking changes before release; nothing
+(magic link, OAuth, passkeys) arrive as new verbs on the same entry point.
+Never a second auth system. Expect breaking changes before release; nothing
 is published yet.
 
 ## License

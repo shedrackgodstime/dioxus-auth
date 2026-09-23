@@ -2,18 +2,18 @@
 //!
 //! You own this file: copy it into your app, rename the tables, add columns,
 //! swap the user type. The crate never scaffolds, migrates, or touches your
-//! database — the schema in `README.md` is documentation you apply yourself,
+//! database. The schema in `README.md` is documentation you apply yourself,
 //! and this module is one honest implementation of it.
 //!
 //! [`SqliteStore`] implements [`UserStore`], [`PasswordUserStore`], and
 //! [`SessionStore`] over a single `rusqlite` connection behind a lock. The
 //! driver is synchronous on purpose: the engine's store traits are sync, so
 //! an async driver would need `block_on` plumbing that panics inside the
-//! server's blocking pool. `rusqlite` keeps every engine path — including
-//! server functions — panic-free.
+//! server's blocking pool. `rusqlite` keeps every engine path panic-free,
+//! including server functions.
 //!
 //! Style note: this file uses idiomatic tail expressions and `?`, not the
-//! root crate's explicit-return idiom — it is written to be copied into apps
+//! root crate's explicit-return idiom. It is written to be copied into apps
 //! with default lints, where `needless_return` would fire.
 
 use std::fmt;

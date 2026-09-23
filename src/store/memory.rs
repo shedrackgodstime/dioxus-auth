@@ -16,7 +16,7 @@ use crate::user::AuthUser;
 /// Sessions are keyed by their storage-form id (`sha256(raw wire token)`).
 /// The engine is responsible for passing the storage form.
 ///
-/// Lookups are linear scans over `Vec`s — appropriate for the default
+/// Lookups are linear scans over `Vec`s, appropriate for the default
 /// single-process development store. Expired sessions are dropped lazily on
 /// use, never by a background task, so this store is unsuitable for
 /// long-lived deployments without external cleanup.
@@ -24,7 +24,7 @@ use crate::user::AuthUser;
 /// poisoned lock: it falls back to an empty store (see `cloned_or_empty`).
 ///
 /// `Debug` is **manual and redacted**: a derived impl would render credential
-/// hashes, login identifiers, and full user rows — counts preserve
+/// hashes, login identifiers, and full user rows. Counts preserve
 /// debuggability without leaking store secrets.
 pub struct MemoryStore<User: AuthUser> {
     users: RwLock<Vec<User>>,
@@ -194,7 +194,7 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
         // across the identifier check, the id check, and both pushes, so the
         // claim is one indivisible step. A racing provisioner blocks on the
         // guard, then observes the identifier or the id row as taken. The
-        // guards must span the returns — that span is the indivisibility this
+        // guards must span the returns. That span is the indivisibility this
         // method exists to provide.
         let mut credentials = self.credentials.write();
         if credentials

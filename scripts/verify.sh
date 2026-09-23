@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Full local gate: fmt, lints, checks, tests, doctests, docs build,
-# packaging, and the invariant scripts — everything mergeable except the
+# packaging, and the invariant scripts. Everything mergeable except the
 # toolchain-gated jobs (MSRV, audit installs, coverage, wasm stay in CI).
 # Single home for the check matrix (CI calls this script; see
 # .github/workflows/ci.yml) so local runs and CI runs cannot diverge.

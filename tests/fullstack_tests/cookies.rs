@@ -192,7 +192,7 @@ async fn duplicate_cookie_names_resolve_last_wins() {
     run_session(valid_last).await.expect("last cookie must win");
 }
 
-/// Hostile cookie values — empty, missing `=`, oversized, `=`-laden — are
+/// Hostile cookie values (empty, missing `=`, oversized, `=`-laden) are
 /// cheap rejections, never panics.
 #[tokio::test]
 async fn hostile_cookie_values_are_rejected() {

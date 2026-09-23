@@ -2,8 +2,8 @@
 
 Copy-paste SQLite persistence for `dioxus-auth`. **You own this file:**
 copy `src/lib.rs` into your app, rename the tables, add columns, swap the
-user type. The crate never scaffolds, migrates, or touches your database —
-the schema below is documentation you apply yourself, and `src/lib.rs` is
+user type. The crate never scaffolds, migrates, or touches your database.
+The schema below is documentation you apply yourself, and `src/lib.rs` is
 one honest implementation of it.
 
 ```rust
@@ -14,7 +14,7 @@ let auth = Auth::new(store)?; // same verbs as the memory quickstart
 auth.sign_up_email("alice@example.com", "password", AppUser { ... })?;
 ```
 
-## Schema — apply this yourself
+## Schema: apply this yourself
 
 `users` (identity) · `accounts` (credentials, one row per login method) ·
 `sessions` (opaque server-side sessions, keyed by `sha256(raw token)`) ·
@@ -55,7 +55,7 @@ CREATE TABLE verifications (
 ```
 
 A test (`schema_doc_matches_const`) asserts this block is byte-identical to
-the `SCHEMA_SQL` constant the store executes — the copy-paste SQL cannot rot
+the `SCHEMA_SQL` constant the store executes. The copy-paste SQL cannot rot
 away from the DDL. One documented deviation: the guide's 4-table shape omits
 `sessions.created_at`, but the engine needs it persisted for absolute-TTL
 math, so the column stays.
@@ -64,8 +64,8 @@ math, so the column stays.
 
 - **Sync driver on purpose.** The engine's store traits are synchronous; an
   async driver would need `block_on` plumbing that panics inside the server's
-  blocking pool. `rusqlite` keeps every path — including server functions —
-  panic-free.
+  blocking pool. `rusqlite` keeps every path panic-free, including server
+  functions.
 - **One connection behind a lock.** `rusqlite` connections are `Send` but not
   `Sync`; the mutex is what makes the store shareable. Provisioning runs in
   an immediate transaction, so the identifier claim is atomic even under

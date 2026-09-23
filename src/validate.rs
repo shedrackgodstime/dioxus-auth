@@ -27,7 +27,7 @@ where
     /// Expiry is wall-clock: a clock that moves backwards can re-validate a
     /// session whose expiry passed unobserved. Expired sessions are deleted
     /// eagerly on use, so resurrection needs zero validations across the whole
-    /// expired window — deployments with hard revocation deadlines want a
+    /// expired window. Deployments with hard revocation deadlines want a
     /// store with background sweeping, not lazy expiry alone.
     ///
     /// # Errors
@@ -74,7 +74,7 @@ where
         // reason: the storage record already carries `created + ttl` as its
         // expiry, so without an idle timeout the only per-validation write
         // (updating `last_active`) has no reader. Touching is therefore gated
-        // on a configured idle timeout — the "cheap write" optimization.
+        // on a configured idle timeout: the "cheap write" optimization.
         if self.idle_timeout_secs.is_some() {
             let new_expiry = session.created_at_unix() + self.session_ttl_secs;
             if let Err(e) = self

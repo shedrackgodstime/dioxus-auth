@@ -122,7 +122,7 @@ fn session_state_maps_unanswered_restores_to_unavailable() {
 
     let auth = context();
     // Nothing answered the session question, so the read is Unavailable with
-    // the stable internal code — not Guest, and not a bare Pending.
+    // the stable internal code. Not Guest, and not a bare Pending.
     assert_eq!(
         auth.session_state(),
         SessionState::Unavailable(ErrorCode::Internal)

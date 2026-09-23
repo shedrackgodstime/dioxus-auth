@@ -103,8 +103,8 @@ impl CookieConfig {
     /// Whether the wire cookie must carry `Secure`.
     ///
     /// Host-only mode forces `Secure` (part of the `__Host-` contract) even
-    /// when the configured flag is off — and so does `SameSite::None`:
-    /// browsers reject `None` without `Secure`, which would otherwise fail
+    /// when the configured flag is off, and so does `SameSite::None`.
+    /// Browsers reject `None` without `Secure`, which would otherwise fail
     /// sessions silently instead of loudly.
     #[must_use]
     pub fn forces_secure(&self) -> bool {
@@ -151,7 +151,7 @@ impl CookieConfig {
     ///
     /// When true, the session cookie is emitted as `__Host-<name>` with a
     /// forced `Path=/` and no `Domain`, and only that prefixed name is
-    /// accepted back — a sibling-app cookie shadow cannot displace it.
+    /// accepted back. A sibling-app cookie shadow cannot displace it.
     #[must_use]
     pub const fn host_only(&self) -> bool {
         return self.host_only;

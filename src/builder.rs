@@ -73,7 +73,7 @@ where
     ///
     /// Custom setups reach this through
     /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder), the
-    /// documented entry point — never directly.
+    /// documented entry point. Never call it directly.
     #[must_use = "a builder must eventually be built"]
     pub(super) fn new(users: Arc<U>, sessions: Arc<S>) -> Self {
         return Self {
@@ -151,7 +151,7 @@ where
     /// Process-local exactness: concurrent logins serialize through the
     /// engine's login lock, so exactly one session survives per login race.
     /// Distributed deployments need the same atomicity from their session
-    /// store transaction — concurrent logins across processes can otherwise
+    /// store transaction. Without it, concurrent logins across processes can
     /// both survive.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn single_active_session(mut self, enabled: bool) -> Self {
@@ -222,8 +222,8 @@ where
     /// ```
     ///
     /// # Errors
-    /// Returns `AuthError` if the timing-defense dummy hash cannot be computed,
-    /// or `AuthError::Internal` if the session TTL or idle timeout is zero —
+    /// Returns `AuthError` if the timing-defense dummy hash cannot be computed.
+    /// A zero session TTL or idle timeout also fails with `AuthError::Internal`:
     /// a zero lifetime mints instantly-dead sessions, which is never intended.
     #[must_use = "the constructed engine must be used"]
     pub fn build(self) -> Result<AuthEngine<U, S>, AuthError> {

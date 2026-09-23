@@ -51,11 +51,11 @@ impl RestoreClassify for AuthError {
     fn restore_verdict(&self) -> RestoreVerdict {
         return match self {
             // The engine compared the stored token against session state and
-            // answered "no such session" — a definitive rejection.
+            // answered "no such session". That is a definitive rejection.
             Self::InvalidCredentials | Self::PasswordHashError => RestoreVerdict::Unauthenticated,
             // Rate limiting, CSRF rejection and internal errors (the channel
             // transport failures surface through) all mean the token was
-            // never judged — the session question is still open.
+            // never judged. The session question is still open.
             Self::RateLimited | Self::Csrf | Self::Internal(_) => RestoreVerdict::Unknown,
         };
     }

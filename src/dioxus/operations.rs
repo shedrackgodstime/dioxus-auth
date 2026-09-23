@@ -16,8 +16,8 @@ use crate::user::AuthUser;
 /// user/session store generics are hidden behind this trait object so hooks
 /// and components never leak `MemoryStore<…>`-style types.
 ///
-/// Single-spelling rule: credential verification lives in exactly one place —
-/// lives in exactly one place — [`AuthEngine::login`](crate::engine::AuthEngine::login)
+/// Single-spelling rule: credential verification lives in exactly one place,
+/// [`AuthEngine::login`](crate::engine::AuthEngine::login) and its helpers.
 /// and its helpers. The [`AuthContext`](super::context::AuthContext) calls these
 /// operations rather than the [`Auth`](crate::auth::Auth) facade verbs because
 /// it holds the erased handle (no concrete `Auth<D>` exists here to delegate
@@ -122,7 +122,7 @@ where
 /// Bridges the `Auth` facade to the engine handle that [`AuthProvider`](super::provider::AuthProvider) consumes.
 ///
 /// Before this impl, a quickstart caller had to write
-/// `AuthEngineHandle::from(Arc::clone(auth.engine()))` — three concepts
+/// `AuthEngineHandle::from(Arc::clone(auth.engine()))`, naming three concepts
 /// (`Arc`, `AuthEngineHandle`, erasure) that the beginner budget forbids.
 /// `Auth::into()` keeps that bridge to a single word.
 impl<D> From<Auth<D>> for AuthEngineHandle<D::User>

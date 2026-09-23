@@ -1,7 +1,7 @@
 //! Server-function generation for cookie-driven auth endpoints.
 //!
-//! [`fullstack_server_fns!`] expands three Dioxus server functions — login,
-//! logout, and current session — that the application registers with its
+//! [`fullstack_server_fns!`] expands three Dioxus server functions (login,
+//! logout, and current session) that the application registers with its
 //! router. All three are _cookie-only_: the session token travels in an
 //! `HttpOnly` cookie, never in the request body.
 //!
@@ -40,7 +40,7 @@ use crate::status::REDACTED;
 /// The wire input for the generated login server function.
 ///
 /// `Debug` is **manual and redacted**: the wire input carries the plaintext
-/// password — a derived impl would render it into logs.
+/// password, so a derived impl would render it into logs.
 #[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LoginRequest {
     /// The user identifier.

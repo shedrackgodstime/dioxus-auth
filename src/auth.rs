@@ -1,7 +1,7 @@
 //! Entry facade over the authentication engine.
 //!
 //! Beginners meet [`Auth`]; the engine underneath stays unchanged. One store
-//! serves both the user and session roles here — deployments that split the
+//! serves both the user and session roles here. Deployments that split the
 //! roles or need custom hashers, limits, or clocks build an engine with the
 //! [`AuthEngineBuilder`](crate::builder::AuthEngineBuilder) and wrap it with
 //! [`Auth::from_engine`].
@@ -78,7 +78,7 @@ where
     /// Creates authentication over the given store.
     ///
     /// The store serves both the user and session roles, and is shared
-    /// internally — callers pass it by value, never behind an `Arc`. Uses the
+    /// internally. Callers pass it by value, never behind an `Arc`. Uses the
     /// default Argon2id hasher and 7-day session TTL; deployments that need
     /// custom hashers, TTLs, or split roles keep using
     /// [`AuthEngine`] directly.
@@ -123,8 +123,8 @@ where
     /// Wraps an already-configured engine (the custom-setup escape).
     ///
     /// The engine is configured through
-    /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder) — custom
-    /// hashers, rate limiters, hooks, clocks, split stores — and then handed
+    /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder) with custom
+    /// hashers, rate limiters, hooks, clocks, or split stores, and then handed
     /// here so method verbs work on it unchanged.
     ///
     /// # Examples
@@ -225,9 +225,9 @@ impl Auth<MemoryStore<DefaultUser>> {
     ///
     /// The quickstart: no user type, no traits, no turbofish. Uses
     /// [`MemoryStore`] over [`DefaultUser`] with the default Argon2id hasher
-    /// and 7-day session TTL. Memory dies with the process — this is the
-    /// prototype door; graduate to [`Auth::new`] with your own store before
-    /// anything matters.
+    /// and 7-day session TTL. Memory dies with the process: prototype with it,
+    /// then graduate to [`Auth::new`] with your own store before anything
+    /// matters.
     ///
     /// # Examples
     ///

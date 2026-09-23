@@ -13,7 +13,7 @@ use crate::dioxus::state::SessionState;
 /// The read half of the runtime: [`SessionState::SignedIn`] renders the
 /// identity, [`SessionState::Guest`] renders signed-out UI,
 /// [`SessionState::Pending`] means the restore question is still open, and
-/// [`SessionState::Unavailable`] means it could not be asked — call
+/// [`SessionState::Unavailable`] means it could not be asked. Call
 /// [`AuthContext::restart`](crate::dioxus::AuthContext::restart) to retry.
 /// For the verb half (login, logout, validate) use
 /// [`use_auth`](crate::use_auth).

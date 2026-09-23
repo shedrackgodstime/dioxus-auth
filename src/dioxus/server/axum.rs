@@ -35,7 +35,7 @@ fn forward(mut inner: Route, request: Request) -> BoxFuture {
 ///
 /// [`ServerAuthConfig`] is inserted into the request extensions so that
 /// [`ServerAuthContext::from_request`](super::server_fn::ServerAuthContext::from_request)
-/// resolves everywhere — initial SSR renders and server functions alike.
+/// resolves everywhere: initial SSR renders and server functions alike.
 ///
 /// Guests are served normally; combine with [`RequireAuthLayer`] to
 /// reject them.

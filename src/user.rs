@@ -13,7 +13,7 @@ use std::hash::Hash;
 /// (e.g. `u64`, `Uuid`, `String`) and [`AuthUser::email`] is the login
 /// identifier. The email is the credential key: `sign_up_email`/
 /// `sign_in_email` look the user up by it, and the engine normalizes it once
-/// (trim + lowercase) before any store call — stores compare byte-for-byte
+/// (trim plus lowercase) before any store call. Stores compare byte-for-byte
 /// and never fold case or whitespace themselves. `Clone` lets the engine hand
 /// identities to callers; show the email wherever a display name would go.
 pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
@@ -45,7 +45,7 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
 ///
 /// `DefaultUser` is deliberately the minimal app-user shape (`id`, `email`,
 /// `name`): graduating to your own user type is a rename (plus added fields)
-/// and a one-line constructor swap, with zero session migration — sessions
+/// and a one-line constructor swap, with zero session migration. Sessions
 /// are opaque and user-type-agnostic.
 ///
 /// Memory-backed deployments are non-durable by definition: everything dies

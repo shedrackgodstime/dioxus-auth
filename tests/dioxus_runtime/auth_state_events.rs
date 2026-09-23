@@ -151,7 +151,7 @@ fn stable_states_fire_nothing_but_logout_fires_once() {
     let auth = context();
 
     // A stable authenticated identity across extra render passes and a
-    // re-login of the same identity must not fire — no state changed.
+    // re-login of the same identity must not fire: no state changed.
     pump(&mut vdom);
     let _ = auth.login("alice", "pw");
     pump(&mut vdom);

@@ -31,7 +31,7 @@ pub enum AuthError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ErrorCode {
-    /// Credentials rejected — unknown identifiers and wrong secrets share it.
+    /// Credentials rejected. Unknown identifiers and wrong secrets share it.
     InvalidCredentials,
     /// Stored hash malformed (surfaced outside the login oracle path only).
     PasswordHash,

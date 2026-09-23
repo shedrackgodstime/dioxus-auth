@@ -223,7 +223,7 @@ where
             // untouched and the login reports the store error with nothing
             // lost. Rotation spares the just-saved session, so a rotation
             // failure leaves a valid-but-unreturned session that the next
-            // login's rotation sweeps — failures self-heal on retry instead
+            // login's rotation sweeps. Failures self-heal on retry instead
             // of destroying live sessions.
             match self.sessions.save_session(storage_session) {
                 Ok(()) => {}
@@ -280,7 +280,7 @@ where
         };
 
         // reason: a malformed stored hash must not be distinguishable from a
-        // wrong password through this error channel — a distinct, fast
+        // wrong password through this error channel. A distinct, fast
         // `PasswordHashError` would confirm "identifier exists and its stored
         // hash is garbage" to an attacker probing login. `unwrap_or(false)`
         // collapses it to a miss here; the hasher's `Err` channel stays

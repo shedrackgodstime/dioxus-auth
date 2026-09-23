@@ -22,7 +22,7 @@ where
     /// user and updates the hash. Revocation runs first: if it fails, the
     /// credential is untouched and the change reports the store error with
     /// nothing mutated. Unknown identifiers and wrong passwords share
-    /// `InvalidCredentials` — no existence oracle.
+    /// `InvalidCredentials` with no existence oracle.
     ///
     /// # Examples
     ///
@@ -80,8 +80,8 @@ where
 
     /// Signs in with an identifier and password.
     ///
-    /// This is the email-password verb; the bare `sign_in` name is reserved
-    /// for a future method-selection surface — use this form.
+    /// This is the email-password verb. The bare `sign_in` name is reserved
+    /// for a future method-selection surface, so use this form.
     ///
     /// Returns the user with the raw wire session id on success. Unknown
     /// identifiers and wrong passwords share `InvalidCredentials`.
@@ -124,7 +124,7 @@ where
 
     /// Signs out by revoking one raw wire session.
     ///
-    /// Unknown sessions succeed silently — sign-out is idempotent.
+    /// Unknown sessions succeed silently, keeping sign-out idempotent.
     ///
     /// # Examples
     ///

@@ -17,8 +17,8 @@ not cover. Read this before deploying, auditing, or extending the crate.
   / `current_user` / `validate_session`.
 - **The store is trusted with hashes, never plaintext.** The engine hashes
   before any store call; stores compare byte-for-byte. A leaked store yields
-  Argon2 hashes (expensive to crack) and `sha256` session ids (unusable as
-  tokens — the raw wire value never reaches storage).
+  Argon2 hashes (expensive to crack) and `sha256` session ids. The ids are
+  unusable as tokens because the raw wire value never reaches storage.
 - **The network between app and store is trusted.** No TLS-in-store, no
   encrypted-at-rest beyond hashing. Deploy stores on trusted networks or add
   transport security yourself.

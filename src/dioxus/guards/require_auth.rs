@@ -56,7 +56,7 @@ where
     let navigator = use_navigator();
     let redirected = use_signal(initial_redirect_state);
 
-    // During Loading the identity has not settled yet — render nothing and
+    // During Loading the identity has not settled yet. Render nothing and
     // issue no navigation. The provider gates its initial restore on the same
     // condition, so this branch is only taken before the first settle; once
     // the status becomes Authenticated or Guest the guard re-evaluates and
