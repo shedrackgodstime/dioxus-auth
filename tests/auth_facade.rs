@@ -22,7 +22,7 @@ use password::hash_password;
 
 #[test]
 fn memory_constructs_with_secure_defaults() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
     return;
 }
@@ -37,7 +37,7 @@ fn new_takes_the_store_by_value() {
 
 #[test]
 fn facade_delegates_to_engine_lifecycle() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     auth.engine().user_store().insert_user_with_password(
         TestUser::new(1, "alice"),
         "alice",
@@ -61,7 +61,7 @@ fn facade_delegates_to_engine_lifecycle() {
 
 #[test]
 fn facade_clone_shares_engine() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     let again = auth.clone();
     assert!(Arc::ptr_eq(auth.engine(), again.engine()));
     return;
@@ -69,7 +69,7 @@ fn facade_clone_shares_engine() {
 
 #[test]
 fn facade_debug_names_auth() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     let rendered = format!("{auth:?}");
     assert!(rendered.starts_with("Auth("));
     return;
@@ -77,7 +77,7 @@ fn facade_debug_names_auth() {
 
 #[test]
 fn sign_up_provisions_and_signs_in() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     let (user, session) = auth
         .sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
         .expect("sign-up must succeed");
@@ -92,7 +92,7 @@ fn sign_up_provisions_and_signs_in() {
 
 #[test]
 fn sign_up_taken_matches_unknown_sign_in() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     auth.sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
         .expect("first sign-up must succeed");
     let taken = auth
@@ -173,7 +173,7 @@ fn throttle_window_is_shared_across_identifier_spellings() {
 
 #[test]
 fn sign_in_rejects_wrong_password_without_oracle() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     auth.sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
         .expect("sign-up must succeed");
     let wrong = auth
@@ -185,7 +185,7 @@ fn sign_in_rejects_wrong_password_without_oracle() {
 
 #[test]
 fn sign_out_revokes_session() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     let (_, session) = auth
         .sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
         .expect("sign-up must succeed");
@@ -200,7 +200,7 @@ fn sign_out_revokes_session() {
 
 #[test]
 fn change_password_rotates_and_revokes() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     let (_, session) = auth
         .sign_up_email("alice", "old-secret", TestUser::new(1, "alice"))
         .expect("sign-up must succeed");
@@ -224,7 +224,7 @@ fn change_password_rotates_and_revokes() {
 
 #[test]
 fn change_password_rejects_bad_current_without_oracle() {
-    let auth = Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct");
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
     auth.sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
         .expect("sign-up must succeed");
     let wrong = auth

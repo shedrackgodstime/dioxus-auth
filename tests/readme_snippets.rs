@@ -16,7 +16,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::{Auth, AuthEngine, AuthUser, InMemoryRateLimiter, MemoryStore};
+use dioxus_auth::{Auth, AuthEngine, AuthUser, DefaultUser, InMemoryRateLimiter, MemoryStore};
 
 /// A minimal user mirroring the README's `AppUser`. The serde derives exist
 /// so the fullstack drift pins below can expand the server-fn macro against
@@ -39,9 +39,34 @@ impl AuthUser for AppUser {
     }
 }
 
-/// Mirror of the README's quickstart snippet: own user type, same verbs.
+/// Mirror of the README's quickstart snippet: zero modeling, zero traits.
 #[test]
 fn readme_quickstart() {
+    let auth = Auth::memory().expect("quickstart must construct");
+
+    auth.sign_up_email(
+        "alice@example.com",
+        "password",
+        DefaultUser {
+            id: 1,
+            email: String::from("alice@example.com"),
+            name: String::from("alice"),
+        },
+    )
+    .expect("sign-up must succeed");
+
+    let (user, session) = auth
+        .sign_in_email("alice@example.com", "password")
+        .expect("sign-in must succeed");
+    assert_eq!(user.id, 1);
+
+    auth.sign_out(&session).expect("sign-out must succeed");
+    return;
+}
+
+/// Mirror of the README's graduation snippet: own user type, same verbs.
+#[test]
+fn readme_graduation() {
     let auth = Auth::new(MemoryStore::<AppUser>::new()).expect("facade must construct");
 
     auth.sign_up_email(
@@ -53,13 +78,79 @@ fn readme_quickstart() {
         },
     )
     .expect("sign-up must succeed");
+    return;
+}
 
-    let (user, session) = auth
+/// Graduation preserves verb behavior: the quickstart flow and the own-DB
+/// flow answer identically, including error codes.
+#[test]
+fn graduation_preserves_verb_behavior() {
+    use dioxus_auth::AuthError;
+
+    let quick = Auth::memory().expect("quickstart must construct");
+    quick
+        .sign_up_email(
+            "alice@example.com",
+            "password",
+            DefaultUser {
+                id: 1,
+                email: String::from("alice@example.com"),
+                name: String::from("alice"),
+            },
+        )
+        .expect("sign-up must succeed");
+
+    let owned = Auth::new(MemoryStore::<AppUser>::new()).expect("facade must construct");
+    owned
+        .sign_up_email(
+            "alice@example.com",
+            "password",
+            AppUser {
+                id: 1,
+                name: String::from("alice@example.com"),
+            },
+        )
+        .expect("sign-up must succeed");
+
+    // Same verbs, same answers on both sides of graduation (written out:
+    // the two facades have different store types, so the parity is literal).
+    assert_eq!(
+        quick
+            .sign_in_email("alice@example.com", "wrong")
+            .expect_err("wrong password must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        quick
+            .sign_in_email("nobody@example.com", "password")
+            .expect_err("unknown identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        owned
+            .sign_in_email("alice@example.com", "wrong")
+            .expect_err("wrong password must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        owned
+            .sign_in_email("nobody@example.com", "password")
+            .expect_err("unknown identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+
+    let (_, quick_session) = quick
         .sign_in_email("alice@example.com", "password")
         .expect("sign-in must succeed");
-    assert_eq!(user.id, 1);
-
-    auth.sign_out(&session).expect("sign-out must succeed");
+    let (_, owned_session) = owned
+        .sign_in_email("alice@example.com", "password")
+        .expect("sign-in must succeed");
+    quick
+        .sign_out(&quick_session)
+        .expect("sign-out must succeed");
+    owned
+        .sign_out(&owned_session)
+        .expect("sign-out must succeed");
     return;
 }
 

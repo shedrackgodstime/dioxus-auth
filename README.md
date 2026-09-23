@@ -12,7 +12,44 @@ Add `dioxus-auth`:
 cargo add dioxus-auth
 ```
 
-Define your user, pick a store, use the same verbs everywhere:
+Zero modeling. A built-in user, verbs that just work:
+
+```rust
+use dioxus_auth::{Auth, DefaultUser};
+
+fn main() -> Result<(), dioxus_auth::AuthError> {
+    let auth = Auth::memory()?;
+
+    auth.sign_up_email(
+        "alice@example.com",
+        "password",
+        DefaultUser {
+            id: 1,
+            email: String::from("alice@example.com"),
+            name: String::from("alice"),
+        },
+    )?;
+
+    let (user, session) = auth.sign_in_email("alice@example.com", "password")?;
+    assert_eq!(user.id, 1);
+
+    auth.sign_out(&session)?;
+    Ok(())
+}
+```
+
+Memory dies with the process — this is the prototype door. Unknown
+identifiers and wrong passwords share one `InvalidCredentials` error:
+identifier state is never observable.
+
+## Graduating (memory → your database)
+
+1. Rename `DefaultUser` to your own `AppUser` and add your fields.
+2. Swap `Auth::memory()` for `Auth::new(your_store)` — for example
+   `examples/sqlite-reference` — and implement `AuthUser` (two methods:
+   `id` and `email`).
+3. Nothing else changes: same verbs, same sessions, same error codes.
+   Sessions are opaque and user-type-agnostic, so zero migration.
 
 ```rust
 use dioxus_auth::{Auth, AuthUser, MemoryStore};
@@ -43,19 +80,9 @@ fn main() -> Result<(), dioxus_auth::AuthError> {
         "password",
         AppUser { id: 1, email: String::from("alice@example.com") },
     )?;
-
-    let (user, session) = auth.sign_in_email("alice@example.com", "password")?;
-    assert_eq!(user.id, 1);
-
-    auth.sign_out(&session)?;
     Ok(())
 }
 ```
-
-`MemoryStore` is for quickstarts and tests. Production passes a persistent
-store — for example `examples/sqlite-reference` — to the same `Auth::new`
-with the same verbs. Unknown identifiers and wrong passwords share one
-`InvalidCredentials` error: identifier state is never observable.
 
 ## Client (Dioxus)
 

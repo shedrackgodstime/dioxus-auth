@@ -58,7 +58,7 @@ pub struct ObserverRootProps {
 #[expect(non_snake_case)]
 pub fn ObserverRoot(props: ObserverRootProps) -> Element {
     return rsx! {
-        dioxus_auth::AuthProvider::<SeededStore> {
+        dioxus_auth::AuthProvider {
             auth: props.auth,
             ObserverChild {}
         }

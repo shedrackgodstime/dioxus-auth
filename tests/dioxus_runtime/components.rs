@@ -109,7 +109,7 @@ pub struct StateRootProps {
 #[expect(non_snake_case)]
 pub fn StateRoot(props: StateRootProps) -> Element {
     return rsx! {
-        AuthProvider::<SeededStore> {
+        AuthProvider {
             auth: props.auth,
             Probe {}
         }
@@ -134,7 +134,7 @@ pub fn RouterRoot(props: RouterRootProps) -> Element {
     return rsx! {
         HistoryProvider {
             history: history_callback,
-            AuthProvider::<SeededStore> {
+            AuthProvider {
                 auth: props.auth,
                 ContextCapture {},
                 Router::<Route> {}

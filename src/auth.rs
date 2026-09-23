@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::store::{MemoryStore, SessionStore, UserStore};
-use crate::user::AuthUser;
+use crate::user::DefaultUser;
 
 /// Entry point for authentication.
 ///
@@ -216,30 +216,27 @@ where
     }
 }
 
-impl<User> Auth<MemoryStore<User>>
-where
-    User: AuthUser + Clone,
-{
-    /// Creates in-memory authentication for the given user type.
+impl Auth<MemoryStore<DefaultUser>> {
+    /// Creates zero-modeling in-memory authentication.
     ///
-    /// Uses [`MemoryStore`] for both roles with the default Argon2id hasher
-    /// and 7-day session TTL. Suitable for quickstarts and tests; production
-    /// deployments pass a persistent store to [`Auth::new`].
+    /// The quickstart: no user type, no traits, no turbofish. Uses
+    /// [`MemoryStore`] over [`DefaultUser`] with the default Argon2id hasher
+    /// and 7-day session TTL. Memory dies with the process — this is the
+    /// prototype door; graduate to [`Auth::new`] with your own store before
+    /// anything matters.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
-    /// # #[derive(Debug, Clone)]
-    /// # struct User;
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return 1; }
-    /// #     fn email(&self) -> &str { return "user@example.com"; }
-    /// # }
+    /// # use dioxus_auth::{Auth, DefaultUser};
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let auth = Auth::<MemoryStore<User>>::memory()?;
-    /// assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
+    /// let auth = Auth::memory()?;
+    /// let (user, _) = auth.sign_up_email(
+    ///     "alice@example.com",
+    ///     "password",
+    ///     DefaultUser { id: 1, email: String::from("alice@example.com"), name: String::from("alice") },
+    /// )?;
+    /// assert_eq!(user.id, 1);
     /// # return Ok(());
     /// # }
     /// ```
@@ -249,6 +246,6 @@ where
     /// timing-defense dummy hash.
     #[must_use = "the constructed facade must be used"]
     pub fn memory() -> Result<Self, AuthError> {
-        return Self::new(MemoryStore::<User>::new());
+        return Self::new(MemoryStore::<DefaultUser>::new());
     }
 }

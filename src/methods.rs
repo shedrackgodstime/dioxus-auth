@@ -36,7 +36,7 @@ where
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let auth = Auth::<MemoryStore<User>>::memory()?;
+    /// let auth = Auth::new(MemoryStore::<User>::new())?;
     /// auth.sign_up_email("alice", "old-secret", User { id: 1, name: String::from("alice") })?;
     /// auth.change_password("alice", "old-secret", "new-secret")?;
     /// let (user, _) = auth.sign_in_email("alice", "new-secret")?;
@@ -94,7 +94,7 @@ where
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let auth = Auth::<MemoryStore<User>>::memory()?;
+    /// let auth = Auth::new(MemoryStore::<User>::new())?;
     /// auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// let (user, _) = auth.sign_in_email("alice", "s3cret")?;
     /// assert_eq!(user.id(), 1);
@@ -134,7 +134,7 @@ where
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let auth = Auth::<MemoryStore<User>>::memory()?;
+    /// let auth = Auth::new(MemoryStore::<User>::new())?;
     /// let (_, session) = auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// auth.sign_out(&session)?;
     /// # return Ok(());
@@ -169,7 +169,7 @@ where
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let auth = Auth::<MemoryStore<User>>::memory()?;
+    /// let auth = Auth::new(MemoryStore::<User>::new())?;
     /// let (user, _) = auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// assert_eq!(user.id(), 1);
     /// # return Ok(());

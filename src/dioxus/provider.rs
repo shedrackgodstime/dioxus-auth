@@ -45,7 +45,7 @@ use super::storage::TokenStorageHandle;
 /// #     fn email(&self) -> &str { return &self.name; }
 /// # }
 /// # fn App() -> Element {
-/// #     let auth = match Auth::<MemoryStore<User>>::memory() {
+/// #     let auth = match Auth::new(MemoryStore::<User>::new()) {
 /// #         Ok(auth) => auth,
 /// #         Err(_) => return rsx! { "auth unavailable" },
 /// #     };

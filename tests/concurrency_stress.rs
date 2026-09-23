@@ -351,8 +351,7 @@ fn concurrent_sign_ups_claim_one_identifier_once() {
     const RACERS: usize = 8;
     const IDENTIFIER: &str = "race@example.com";
 
-    let auth =
-        Arc::new(Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct"));
+    let auth = Arc::new(Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct"));
     let barrier = Arc::new(std::sync::Barrier::new(RACERS));
     let mut handles = Vec::new();
     for index in 0..RACERS {

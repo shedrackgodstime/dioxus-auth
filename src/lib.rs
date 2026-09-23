@@ -16,22 +16,19 @@
 //! # Example
 //!
 //! ```
-//! use dioxus_auth::{Auth, AuthUser, MemoryStore};
+//! use dioxus_auth::{Auth, DefaultUser};
 //!
-//! # #[derive(Debug, Clone)]
-//! # struct User { id: u64, name: String }
-//! # impl AuthUser for User {
-//! #     type Id = u64;
-//! #     fn id(&self) -> u64 { return self.id; }
-//! #     fn email(&self) -> &str { return &self.name; }
-//! # }
 //! # fn main() -> Result<(), dioxus_auth::AuthError> {
-//! let auth = Auth::<MemoryStore<User>>::memory()?;
+//! let auth = Auth::memory()?;
 //!
-//! let user = User { id: 1, name: String::from("alice") };
-//! let (user, session) = auth.sign_up_email("alice", "password", user)?;
+//! let alice = DefaultUser {
+//!     id: 1,
+//!     email: String::from("alice"),
+//!     name: String::from("alice"),
+//! };
+//! let (user, session) = auth.sign_up_email("alice", "password", alice)?;
 //! let (user, _session) = auth.sign_in_email("alice", "password")?;
-//! assert_eq!(user.id(), 1);
+//! assert_eq!(user.id, 1);
 //! auth.sign_out(&session)?;
 //! # return Ok(());
 //! # }
@@ -125,7 +122,7 @@ pub use crate::token::MemoryTokenStorage;
 pub use crate::transport::TokenStorage;
 
 #[doc(inline)]
-pub use crate::user::AuthUser;
+pub use crate::user::{AuthUser, DefaultUser};
 
 #[cfg(feature = "dioxus")]
 #[doc(inline)]

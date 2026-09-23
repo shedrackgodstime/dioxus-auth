@@ -41,3 +41,34 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
         return None;
     }
 }
+
+/// The built-in user for the zero-modeling quickstart.
+///
+/// `DefaultUser` is deliberately the minimal app-user shape (`id`, `email`,
+/// `name`): graduating to your own user type is a rename (plus added fields)
+/// and a one-line constructor swap, with zero session migration — sessions
+/// are opaque and user-type-agnostic.
+///
+/// Memory-backed deployments are non-durable by definition: everything dies
+/// with the process. Door 1 is the prototype door.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultUser {
+    /// Stable unique identifier.
+    pub id: u64,
+    /// Login identifier and credential key.
+    pub email: String,
+    /// Display name.
+    pub name: String,
+}
+
+impl AuthUser for DefaultUser {
+    type Id = u64;
+
+    fn id(&self) -> Self::Id {
+        return self.id;
+    }
+
+    fn email(&self) -> &str {
+        return &self.email;
+    }
+}
