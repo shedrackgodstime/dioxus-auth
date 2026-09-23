@@ -20,6 +20,7 @@ mod cookies;
 mod harness;
 mod middleware;
 mod origins;
+mod redaction;
 mod server_fns;
 
 use common::TestUser;

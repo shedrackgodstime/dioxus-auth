@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use ::dioxus::prelude::{Element, Props, component, use_signal};
+use ::dioxus::prelude::{Element, Props, component, rsx, use_signal};
 use ::dioxus_router::use_navigator;
 
 use crate::dioxus::hooks::use_auth;
@@ -55,6 +55,14 @@ where
     let auth = use_auth::<T>();
     let navigator = use_navigator();
     let redirected = use_signal(no_redirect_issued);
+
+    // Mirrors `RequireAuth`: during Loading the identity has not settled yet,
+    // so rendering the guest subtree would flash the login form before restore
+    // answers. Render nothing and issue no navigation until the first settle.
+    if auth.is_loading() {
+        return rsx!();
+    }
+
     return guard_body(
         !auth.is_authenticated(),
         children,

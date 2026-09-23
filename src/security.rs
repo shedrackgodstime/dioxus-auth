@@ -4,6 +4,11 @@ use std::fmt::Debug;
 
 use crate::error::AuthError;
 
+/// Prefix applied to the cookie name when [`CookieConfig`] host-only mode is
+/// on. Single home for the `__Host-` spelling: both cookie emission and
+/// cookie parsing derive the effective name from it.
+const HOST_COOKIE_PREFIX: &str = "__Host-";
+
 /// Configuration for cookie-based sessions.
 ///
 /// Fields are private; read or change them through the accessors and the
@@ -68,6 +73,40 @@ impl CookieConfig {
     #[must_use]
     pub fn name(&self) -> &str {
         return &self.name;
+    }
+
+    /// The cookie name as emitted on the wire and accepted back.
+    ///
+    /// Host-only mode emits `__Host-<name>` and accepts only that exact name,
+    /// so a sibling-app cookie shadow cannot displace the session; otherwise
+    /// the bare name is used on both sides.
+    #[must_use]
+    pub fn effective_name(&self) -> String {
+        if self.host_only {
+            return format!("{HOST_COOKIE_PREFIX}{}", self.name);
+        }
+        return self.name.clone();
+    }
+
+    /// The cookie path scope enforced on the wire.
+    ///
+    /// Host-only mode forces `Path=/` (part of the `__Host-` contract);
+    /// otherwise the configured path applies.
+    #[must_use]
+    pub fn effective_path(&self) -> &str {
+        if self.host_only {
+            return "/";
+        }
+        return &self.path;
+    }
+
+    /// Whether the wire cookie must carry `Secure`.
+    ///
+    /// Host-only mode forces `Secure` (part of the `__Host-` contract) even
+    /// when the configured flag is off.
+    #[must_use]
+    pub const fn forces_secure(&self) -> bool {
+        return self.secure || self.host_only;
     }
 
     /// Whether the cookie is HTTP-only.

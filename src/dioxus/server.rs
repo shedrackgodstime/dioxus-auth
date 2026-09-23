@@ -20,14 +20,16 @@
 pub mod axum;
 mod blocking;
 mod cookies;
+pub mod error;
 pub mod fullstack;
 pub mod registry;
 pub mod server_fn;
 
 pub use axum::{AuthLayer, AuthService, RequireAuthLayer, RequireAuthService};
 pub use cookies::write_session_cookie;
+pub use error::ServerError;
 pub use fullstack::LoginRequest;
 pub use registry::{current_user, require_user, server_init};
-pub use server_fn::{ServerAuthConfig, ServerAuthContext, ServerError};
+pub use server_fn::{ServerAuthConfig, ServerAuthContext};
 
 pub use crate::fullstack_server_fns;

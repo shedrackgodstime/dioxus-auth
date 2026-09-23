@@ -128,6 +128,18 @@ fn rate_limiter_default_tracks_ten_attempts_per_15_minutes() {
 }
 
 #[test]
+fn rate_limiter_prod_matches_the_documented_ceiling() {
+    let limiter = InMemoryRateLimiter::prod();
+    for _ in 0..99 {
+        limiter.record_attempt("bob");
+    }
+    assert!(limiter.check("bob").is_ok());
+    limiter.record_attempt("bob");
+    assert_eq!(limiter.check("bob"), Err(AuthError::RateLimited));
+    assert!(limiter.check("carol").is_ok());
+}
+
+#[test]
 fn rate_limiter_window_expiry_follows_the_injected_clock() {
     // Window expiry is driven by the injected clock without sleeping: attempts
     // inside the window count, attempts older than the window prune on the

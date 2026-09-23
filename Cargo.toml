@@ -6,7 +6,7 @@ clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo
 
 [package]
 name = "dioxus-auth"
-version = "0.2.0"
+version = "0.1.0"
 edition = "2024"
 # MSRV applies to the core library (default features) and is CI-gated in the
 # dedicated "MSRV (1.85.0)" job (`cargo check/clippy --lib`). The `dioxus` and
@@ -42,6 +42,7 @@ include = [
     "/clippy.toml",
     "/rustfmt.toml",
     "/scripts/check-packaging.sh",
+    "/scripts/check-ssot.sh",
     "/docs/README.md",
     "/src/**",
 ]

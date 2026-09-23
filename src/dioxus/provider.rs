@@ -38,7 +38,10 @@ use super::storage::TokenStorageHandle;
 /// #     fn email(&self) -> &str { return &self.name; }
 /// # }
 /// # fn App() -> Element {
-/// #     let auth = Auth::<MemoryStore<User>>::memory().expect("memory facade constructs");
+/// #     let auth = match Auth::<MemoryStore<User>>::memory() {
+/// #         Ok(auth) => auth,
+/// #         Err(_) => return rsx! { "auth unavailable" },
+/// #     };
 /// #     let children = rsx! { "signed in" };
 /// rsx! {
 ///     AuthProvider { auth: auth, children: children }
@@ -79,12 +82,7 @@ where
         return AuthContext::new(
             engine,
             token_storage,
-            &AuthSignals {
-                status,
-                token,
-                token_persisted,
-                restore_unavailable,
-            },
+            &AuthSignals::new(status, token, token_persisted, restore_unavailable),
         );
     });
 

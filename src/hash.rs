@@ -54,13 +54,18 @@ impl Argon2Hasher {
     ///
     /// ```no_run
     /// # use argon2::ParamsBuilder;
-    /// # let params: argon2::Params = ParamsBuilder::new()
-    /// #     .m_cost(3 * 1024)
-    /// #     .t_cost(1)
-    /// #     .p_cost(1)
-    /// #     .build()
-    /// #     .unwrap();
-    /// // let hasher = Argon2Hasher::with_params(params);
+    /// # use dioxus_auth::prelude::Argon2Hasher;
+    /// # fn build_params() -> Result<argon2::Params, argon2::password_hash::Error> {
+    /// #     Ok(ParamsBuilder::new()
+    /// #         .m_cost(3 * 1024)
+    /// #         .t_cost(1)
+    /// #         .p_cost(1)
+    /// #         .build()?)
+    /// # }
+    /// # fn main() -> Result<(), argon2::password_hash::Error> {
+    /// let hasher = Argon2Hasher::with_params(build_params()?);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub const fn with_params(params: Params) -> Self {

@@ -212,7 +212,9 @@ where
             // the free path spends before storage; one dummy verifier pass
             // matches the work the free path spends after it, so user state
             // stays unobservable through timing as well as through the error.
-            self.engine.record_rate_limit_failure(&normalized);
+            // The raw identifier goes in: the gate normalizes once internally,
+            // so pre-normalizing here would fold case and whitespace twice.
+            self.engine.record_rate_limit_failure(identifier);
             self.engine.dummy_verify(password);
             return Err(AuthError::InvalidCredentials);
         }

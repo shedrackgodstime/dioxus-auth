@@ -34,12 +34,35 @@ pub struct AuthContext<T: AuthUser + Clone> {
 /// Reactive signals owned by an [`AuthContext`].
 ///
 /// Bundles the four signals so [`AuthContext::new`] stays within the
-/// parameter limit.
+/// parameter limit. The bundle is built once, by the provider, through
+/// [`AuthSignals::new`].
 pub struct AuthSignals<T: AuthUser + Clone> {
+    /// Reactive authentication status.
     pub status: Signal<AuthStatus<T>>,
+    /// Raw wire session token, when authenticated.
     pub token: Signal<Option<SessionId>>,
+    /// Whether the current token was written to storage.
     pub token_persisted: Signal<bool>,
+    /// Last unknown-class restore failure, if the session question is open.
     pub restore_unavailable: Signal<Option<ErrorCode>>,
+}
+
+impl<T: AuthUser + Clone> AuthSignals<T> {
+    /// Bundles the provider's freshly-initialized signals into the single
+    /// set the context is built from.
+    pub const fn new(
+        status: Signal<AuthStatus<T>>,
+        token: Signal<Option<SessionId>>,
+        token_persisted: Signal<bool>,
+        restore_unavailable: Signal<Option<ErrorCode>>,
+    ) -> Self {
+        return Self {
+            status,
+            token,
+            token_persisted,
+            restore_unavailable,
+        };
+    }
 }
 
 impl<T: AuthUser + Clone> fmt::Debug for AuthContext<T> {

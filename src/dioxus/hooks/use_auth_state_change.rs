@@ -46,8 +46,8 @@ pub struct AuthStateEvent<T: AuthUser> {
 /// # }
 /// # fn main() {
 /// on_auth_state_change::<User, _>(|event| {
-///     if let SessionState::SignedIn(user) = &event.current {
-///         println!("signed in as {}", user.email());
+///     if matches!(event.current, SessionState::SignedIn(_)) {
+///         // Forward the identity to analytics or cross-tab sync here.
 ///     }
 /// });
 /// # }

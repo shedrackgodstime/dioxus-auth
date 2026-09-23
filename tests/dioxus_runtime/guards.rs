@@ -5,12 +5,14 @@
 #![allow(clippy::needless_return)]
 
 use std::cell::Cell;
+use std::sync::Arc;
 
-use dioxus_auth::prelude::{AuthStatus, MemoryTokenStorage, TokenStorageHandle};
+use dioxus_auth::prelude::{AuthEngineHandle, AuthStatus, MemoryTokenStorage, TokenStorageHandle};
 
 use super::common::TestUser;
 use super::harness::{
-    PROBE_MOUNTED, context, current_route, mount, pump, router_dom, seed_valid_token, seeded_engine,
+    PROBE_MOUNTED, UnknownEngine, context, current_route, erased_router_dom, mount, pump,
+    router_dom, seed_valid_token, seeded_engine,
 };
 
 #[test]
@@ -55,4 +57,22 @@ fn redirect_if_authed_bounces_authenticated_users_off_login() {
         auth.status(),
         AuthStatus::Authenticated(TestUser::new(1, "alice"))
     );
+}
+
+#[test]
+fn redirect_if_authed_renders_nothing_and_skips_navigation_while_loading() {
+    let engine = AuthEngineHandle::from_erased(Arc::new(UnknownEngine));
+    let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
+    storage
+        .store(&"a".repeat(64))
+        .expect("storing a well-formed token must succeed");
+    let mut vdom = erased_router_dom(engine, storage, "/login");
+    mount(&mut vdom);
+
+    // The restore question is still open: no redirect may fire and the guest
+    // subtree must not flash before the first settle.
+    let auth = context();
+    assert!(auth.is_loading());
+    assert_eq!(current_route(), "/login");
+    assert!(!PROBE_MOUNTED.with(Cell::get));
 }

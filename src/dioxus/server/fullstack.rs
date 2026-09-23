@@ -28,19 +28,35 @@
 //! [`server_init`](super::registry::server_init) or an axum
 //! [`AuthLayer`](super::axum::AuthLayer).
 
+use std::fmt;
+
 use dioxus_fullstack::ServerFnError;
 
 use crate::dioxus::server::ServerError;
-use crate::dioxus::server::server_fn::auth_error_status;
+use crate::dioxus::server::error::auth_error_status;
 use crate::error::AuthError;
+use crate::status::REDACTED;
 
 /// The wire input for the generated login server function.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+///
+/// `Debug` is **manual and redacted**: the wire input carries the plaintext
+/// password — a derived impl would render it into logs.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LoginRequest {
     /// The user identifier.
     pub identifier: String,
     /// The plaintext password.
     pub password: String,
+}
+
+impl fmt::Debug for LoginRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f
+            .debug_struct("LoginRequest")
+            .field("identifier", &self.identifier)
+            .field("password", &REDACTED)
+            .finish();
+    }
 }
 
 /// Generates the `dioxus_auth_login`, `dioxus_auth_logout`, and

@@ -9,7 +9,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use dioxus_auth::prelude::{
-    Auth, AuthContext, AuthEngine, AuthEngineHandle, MemoryStore, SessionId, TokenStorageHandle,
+    Auth, AuthContext, AuthEngine, AuthEngineHandle, AuthError, AuthOperations, MemoryStore,
+    SessionId, TokenStorageHandle,
 };
 use dioxus_core::VirtualDom;
 use dioxus_history::{History, MemoryHistory};
@@ -90,9 +91,72 @@ pub fn erased_state_dom(
     engine: AuthEngineHandle<TestUser>,
     storage: TokenStorageHandle,
 ) -> VirtualDom {
-    let auth = Auth::from_erased(engine).with_token_storage(storage);
+    let auth = Auth::from_erased(engine)
+        .expect("erased facade constructs")
+        .with_token_storage(storage);
     let props = StateRootProps { auth };
     return VirtualDom::new_with_props(StateRoot, props);
+}
+
+/// Builds the guard tree over a type-erased engine, for tests that need a
+/// router above a failure-injecting engine.
+pub fn erased_router_dom(
+    engine: AuthEngineHandle<TestUser>,
+    storage: TokenStorageHandle,
+    initial_route: &'static str,
+) -> VirtualDom {
+    let history = Rc::new(MemoryHistory::with_initial_path(initial_route));
+    HISTORY_SLOT.with(|slot| *slot.borrow_mut() = Some(history.clone()));
+    let auth = Auth::from_erased(engine)
+        .expect("erased facade constructs")
+        .with_token_storage(storage);
+    let props = RouterRootProps { history, auth };
+    return VirtualDom::new_with_props(RouterRoot, props);
+}
+
+/// An erased engine whose validation never produces an answer, simulating a
+/// transport failure between the client runtime and a remote engine.
+#[derive(Debug)]
+pub struct UnknownEngine;
+
+impl AuthOperations<TestUser> for UnknownEngine {
+    fn login(
+        &self,
+        _identifier: &str,
+        _password: &str,
+    ) -> Result<(TestUser, SessionId), AuthError> {
+        return Err(AuthError::Internal(String::from("transport down")));
+    }
+
+    fn logout(&self, _session_id: &SessionId) -> Result<(), AuthError> {
+        return Err(AuthError::Internal(String::from("transport down")));
+    }
+
+    fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
+        return Err(AuthError::Internal(String::from("transport down")));
+    }
+}
+
+/// An erased engine that definitively rejects every token it is asked about.
+#[derive(Debug)]
+pub struct RejectedEngine;
+
+impl AuthOperations<TestUser> for RejectedEngine {
+    fn login(
+        &self,
+        _identifier: &str,
+        _password: &str,
+    ) -> Result<(TestUser, SessionId), AuthError> {
+        return Err(AuthError::InvalidCredentials);
+    }
+
+    fn logout(&self, _session_id: &SessionId) -> Result<(), AuthError> {
+        return Err(AuthError::InvalidCredentials);
+    }
+
+    fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
+        return Err(AuthError::InvalidCredentials);
+    }
 }
 
 pub fn router_dom(

@@ -9,5 +9,6 @@ mod identity_hasher;
 mod password;
 
 mod engine;
+mod redaction;
 mod security;
 mod session;

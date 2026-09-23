@@ -12,11 +12,7 @@ use crate::security::{CookieConfig, SameSite};
 /// cannot displace it.
 #[must_use]
 pub fn request_cookie_token(headers: &http::HeaderMap, cfg: &CookieConfig) -> Option<String> {
-    let expected = if cfg.host_only() {
-        format!("__Host-{}", cfg.name())
-    } else {
-        String::from(cfg.name())
-    };
+    let expected = cfg.effective_name();
     let mut token = None;
     for value in headers.get_all(http::header::COOKIE) {
         let Ok(value) = value.to_str() else {
@@ -32,6 +28,18 @@ pub fn request_cookie_token(headers: &http::HeaderMap, cfg: &CookieConfig) -> Op
     return token;
 }
 
+/// Reads the request's `Origin` header value, if present and well-formed.
+///
+/// Single home for origin extraction: the axum middleware and the server
+/// context both gate state-changing operations through it, so the two paths
+/// cannot disagree on what counts as "present".
+#[must_use]
+pub fn request_origin_header(headers: &http::HeaderMap) -> Option<&str> {
+    return headers
+        .get(http::header::ORIGIN)
+        .and_then(|header| return header.to_str().ok());
+}
+
 /// Builds the value of a [`Set-Cookie`](http::header::SET_COOKIE) header for
 /// the session cookie. `None` emits a clearing cookie.
 ///
@@ -39,12 +47,8 @@ pub fn request_cookie_token(headers: &http::HeaderMap, cfg: &CookieConfig) -> Op
 /// `Path=/`, no `Domain`, and `Secure`.
 #[must_use]
 pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
-    let name = if cfg.host_only() {
-        format!("__Host-{}", cfg.name())
-    } else {
-        String::from(cfg.name())
-    };
-    let path = if cfg.host_only() { "/" } else { cfg.path() };
+    let name = cfg.effective_name();
+    let path = cfg.effective_path();
     let mut attributes = vec![
         format!("{name}={}", token.unwrap_or("")),
         format!("Path={path}"),
@@ -52,7 +56,7 @@ pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
     if cfg.http_only() {
         attributes.push(String::from("HttpOnly"));
     }
-    if cfg.secure() || cfg.host_only() {
+    if cfg.forces_secure() {
         attributes.push(String::from("Secure"));
     }
     attributes.push(format!("SameSite={}", same_site_name(cfg.same_site())));

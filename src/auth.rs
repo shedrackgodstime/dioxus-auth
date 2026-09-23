@@ -182,30 +182,37 @@ where
     /// Requires `D: Default` only to build the throwaway concrete placeholder
     /// the struct's field type demands; [`AuthProvider`](crate::dioxus::AuthProvider) reads
     /// the `erased_engine` handle first and never touches the placeholder.
+    ///
+    /// # Errors
+    /// Returns `AuthError` if the default hasher cannot pre-compute the
+    /// timing-defense dummy hash for the placeholder engine.
     #[must_use = "the constructed facade must be used"]
-    pub fn from_erased(handle: crate::dioxus::AuthEngineHandle<D::User>) -> Self
+    pub fn from_erased(handle: crate::dioxus::AuthEngineHandle<D::User>) -> Result<Self, AuthError>
     where
         D: Default,
     {
-        let placeholder = Self::placeholder_engine();
-        return Self {
+        let placeholder = match Self::placeholder_engine() {
+            Ok(engine) => engine,
+            Err(error) => return Err(error),
+        };
+        return Ok(Self {
             engine: placeholder,
             erased_engine: Some(handle),
             token_storage: None,
-        };
+        });
     }
 
     /// Builds a throwaway concrete engine for type-checking only; never
     /// dereferenced when the `erased_engine` handle is `Some`.
-    fn placeholder_engine() -> Arc<AuthEngine<D, D>>
+    fn placeholder_engine() -> Result<Arc<AuthEngine<D, D>>, AuthError>
     where
         D: Default,
     {
         let store: Arc<D> = Arc::new(D::default());
-        return AuthEngine::new(Arc::clone(&store), store).map_or_else(
-            |_| unreachable!("a default-constructed store must build an engine"),
-            Arc::new,
-        );
+        return match AuthEngine::new(Arc::clone(&store), store) {
+            Ok(engine) => Ok(Arc::new(engine)),
+            Err(error) => Err(error),
+        };
     }
 }
 

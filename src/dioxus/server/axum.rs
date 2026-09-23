@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use axum::extract::Request;
-use axum::http::{self, Method, StatusCode};
+use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::Route;
 use tower::Layer;
@@ -18,8 +18,8 @@ use tower::Service;
 
 use crate::dioxus::server::ServerAuthConfig;
 use crate::dioxus::server::blocking::run_blocking;
-use crate::dioxus::server::server_fn::{ServerError, authenticate_headers};
-use crate::error::AuthError;
+use crate::dioxus::server::cookies::request_origin_header;
+use crate::dioxus::server::server_fn::authenticate_headers;
 use crate::user::AuthUser;
 
 type BoxFuture = Pin<Box<dyn Future<Output = Result<Response, Infallible>> + Send + 'static>>;
@@ -102,10 +102,12 @@ impl<U: AuthUser> Service<Request> for AuthService<U> {
 /// Server auth middleware that resolves the session and rejects guests.
 ///
 /// Validates the session cookie with the same helper as
-/// [`ServerAuthContext::from_request`](super::server_fn::ServerAuthContext::from_request);
-/// unauthenticated or invalid requests receive `401 Unauthorized` without
-/// reaching the handler. Authenticated requests continue with the engine in
-/// the request extensions.
+/// [`ServerAuthContext::from_request`](super::server_fn::ServerAuthContext::from_request).
+/// Guests receive `401 Unauthorized` without reaching the handler; engine
+/// failures render their canonical status from
+/// [`ServerError::status_code`](super::error::ServerError::status_code)
+/// (rate limiting `429`, CSRF `403`, internal `500`). Authenticated requests
+/// continue with the engine in the request extensions.
 #[derive(Clone, Debug)]
 pub struct RequireAuthLayer<U: AuthUser> {
     config: Arc<ServerAuthConfig<U>>,
@@ -162,10 +164,7 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
             // when it carries no session; safe methods keep working without
             // an Origin, which browsers omit on same-origin navigations.
             if !is_safe_method(request.method()) {
-                let origin = request
-                    .headers()
-                    .get(http::header::ORIGIN)
-                    .and_then(|header| return header.to_str().ok());
+                let origin = request_origin_header(request.headers());
                 match config.cookie().check_origin(origin) {
                     Ok(()) => {}
                     Err(_) => return Ok(forbidden()),
@@ -184,12 +183,21 @@ impl<U: AuthUser> Service<Request> for RequireAuthService<U> {
                 Ok(outcome) => outcome,
                 Err(_) => return Ok(server_error()),
             };
+            // reason: the status mapping is canonical in `ServerError::status_code`
+            // (shared with `auth_error_status`); the middleware renders it instead
+            // of reclassifying, so 429/403 survive the middleware instead of
+            // collapsing to 401.
             let authenticated = match outcome {
                 Ok((_, Some(_))) => true,
-                Err(ServerError::Engine(AuthError::Internal(_))) => {
-                    return Ok(server_error());
+                Ok((_, None)) => false,
+                Err(error) => {
+                    return match error.status_code() {
+                        403 => Ok(forbidden()),
+                        429 => Ok(rate_limited()),
+                        401 => Ok(unauthorized()),
+                        _ => Ok(server_error()),
+                    };
                 }
-                Ok((_, None)) | Err(_) => false,
             };
             if !authenticated {
                 return Ok(unauthorized());
@@ -205,6 +213,10 @@ fn unauthorized() -> Response {
 
 fn forbidden() -> Response {
     return (StatusCode::FORBIDDEN, String::from("forbidden")).into_response();
+}
+
+fn rate_limited() -> Response {
+    return (StatusCode::TOO_MANY_REQUESTS, String::from("rate limited")).into_response();
 }
 
 /// Whether the request method never changes state, so ambient credentials

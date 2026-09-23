@@ -188,3 +188,70 @@ async fn require_auth_layer_allows_safe_reads_without_origin() {
     let response = app.oneshot(read).await.expect("the router must respond");
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+/// A session store that reports rate limiting, pinning the middleware to the
+/// canonical status mapping (`auth_error_status`): 429, not 401.
+#[derive(Debug)]
+struct RateLimitedSessionStore;
+
+impl SessionStore for RateLimitedSessionStore {
+    type Id = u64;
+
+    fn save_session(&self, _session: Session<u64>) -> Result<(), AuthError> {
+        return Err(AuthError::RateLimited);
+    }
+
+    fn find_session(&self, _id: &SessionId) -> Result<Option<Session<u64>>, AuthError> {
+        return Err(AuthError::RateLimited);
+    }
+
+    fn delete_session(&self, _id: &SessionId) -> Result<(), AuthError> {
+        return Err(AuthError::RateLimited);
+    }
+
+    fn touch_session_if_present(
+        &self,
+        _id: &SessionId,
+        _new_expiry: u64,
+        _last_active: u64,
+    ) -> Result<(), AuthError> {
+        return Err(AuthError::RateLimited);
+    }
+
+    fn delete_user_sessions(&self, _user_id: &u64) -> Result<(), AuthError> {
+        return Err(AuthError::RateLimited);
+    }
+
+    fn list_user_sessions(&self, _user_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
+        return Err(AuthError::RateLimited);
+    }
+}
+
+#[tokio::test]
+async fn require_auth_layer_reports_rate_limiting_as_429() {
+    let users = Arc::new(MemoryStore::<TestUser>::new());
+    users.insert_user_with_password(TestUser::new(USER_ID, IDENTIFIER), IDENTIFIER, PASSWORD);
+    let engine = Arc::new(
+        AuthEngine::builder(Arc::clone(&users), Arc::new(RateLimitedSessionStore))
+            .hasher(IdentityHasher)
+            .build()
+            .expect("engine construction must succeed"),
+    );
+    let config = ServerAuthConfig::new(
+        AuthEngineHandle::from(engine),
+        CookieConfig::new().with_name(String::from(COOKIE)),
+    );
+    let app = Router::new()
+        .route("/", get(probe).post(probe))
+        .layer(RequireAuthLayer::new(config));
+
+    let token = SessionId::generate();
+    let cookie = format!("{COOKIE}={}", token.as_str());
+    let request = Request::builder()
+        .uri("/")
+        .header(http::header::COOKIE, cookie)
+        .body(Body::empty())
+        .expect("request construction must succeed");
+    let response = app.oneshot(request).await.expect("the router must respond");
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+}

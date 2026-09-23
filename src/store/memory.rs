@@ -1,6 +1,6 @@
 //! Default in-memory store implementing all storage capability traits.
 
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use parking_lot::RwLock;
 
@@ -22,11 +22,25 @@ use crate::user::AuthUser;
 /// long-lived deployments without external cleanup.
 /// `Clone` neither blocks nor panics on a
 /// poisoned lock: it falls back to an empty store (see `cloned_or_empty`).
-#[derive(Debug)]
+///
+/// `Debug` is **manual and redacted**: a derived impl would render credential
+/// hashes, login identifiers, and full user rows — counts preserve
+/// debuggability without leaking store secrets.
 pub struct MemoryStore<User: AuthUser> {
     users: RwLock<Vec<User>>,
     credentials: RwLock<Vec<(String, User::Id, String)>>,
     sessions: RwLock<Vec<Session<User::Id>>>,
+}
+
+impl<User: AuthUser> Debug for MemoryStore<User> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f
+            .debug_struct("MemoryStore")
+            .field("users", &self.users.read().len())
+            .field("credentials", &self.credentials.read().len())
+            .field("sessions", &self.sessions.read().len())
+            .finish();
+    }
 }
 
 impl<User: AuthUser> Default for MemoryStore<User> {

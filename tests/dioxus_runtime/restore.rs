@@ -7,13 +7,14 @@
 use std::sync::Arc;
 
 use dioxus_auth::prelude::{
-    AuthEngineHandle, AuthError, AuthOperations, AuthStatus, ErrorCode, MemoryTokenStorage,
-    RestoreVerdict, SessionId, SessionState, TokenStorage, TokenStorageHandle,
+    AuthEngineHandle, AuthError, AuthStatus, ErrorCode, MemoryTokenStorage, RestoreVerdict,
+    SessionState, TokenStorage, TokenStorageHandle,
 };
 
 use super::common::TestUser;
 use super::harness::{
-    context, erased_state_dom, mount, seed_valid_token, seeded_engine, state_dom,
+    RejectedEngine, UnknownEngine, context, erased_state_dom, mount, seed_valid_token,
+    seeded_engine, state_dom,
 };
 
 /// A token storage whose reads always fail, simulating broken persistence
@@ -38,51 +39,6 @@ impl TokenStorage for FailingTokenStorage {
 
     fn clear(&mut self) -> Result<(), AuthError> {
         return Err(AuthError::Internal(String::from("storage unavailable")));
-    }
-}
-
-/// An erased engine whose validation never produces an answer, simulating a
-/// transport failure between the client runtime and a remote engine.
-#[derive(Debug)]
-struct UnknownEngine;
-
-impl AuthOperations<TestUser> for UnknownEngine {
-    fn login(
-        &self,
-        _identifier: &str,
-        _password: &str,
-    ) -> Result<(TestUser, SessionId), AuthError> {
-        return Err(AuthError::Internal(String::from("transport down")));
-    }
-
-    fn logout(&self, _session_id: &SessionId) -> Result<(), AuthError> {
-        return Err(AuthError::Internal(String::from("transport down")));
-    }
-
-    fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
-        return Err(AuthError::Internal(String::from("transport down")));
-    }
-}
-
-/// An erased engine that definitively rejects every token it is asked about.
-#[derive(Debug)]
-struct RejectedEngine;
-
-impl AuthOperations<TestUser> for RejectedEngine {
-    fn login(
-        &self,
-        _identifier: &str,
-        _password: &str,
-    ) -> Result<(TestUser, SessionId), AuthError> {
-        return Err(AuthError::InvalidCredentials);
-    }
-
-    fn logout(&self, _session_id: &SessionId) -> Result<(), AuthError> {
-        return Err(AuthError::InvalidCredentials);
-    }
-
-    fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
-        return Err(AuthError::InvalidCredentials);
     }
 }
 

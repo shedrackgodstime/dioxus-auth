@@ -1,65 +1,18 @@
 //! Request-scoped server authentication context.
 
-use std::any::{Any, TypeId};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use dioxus_fullstack::{FullstackContext, http};
-use parking_lot::Mutex;
-use rustc_hash::FxHashMap;
 
 use crate::dioxus::operations::AuthEngineHandle;
 use crate::dioxus::server::blocking::run_blocking;
-use crate::dioxus::server::cookies::request_cookie_token;
+use crate::dioxus::server::cookies::{request_cookie_token, request_origin_header};
+use crate::dioxus::server::error::ServerError;
+use crate::dioxus::server::registry::current_config;
 use crate::error::AuthError;
 use crate::security::CookieConfig;
 use crate::status::SessionId;
 use crate::user::AuthUser;
-
-/// Errors produced by the server authentication context.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ServerError {
-    /// No engine is configured for the current request or process.
-    #[error("no server auth configuration available for this request")]
-    MissingContext,
-    /// [`server_init`](super::registry::server_init) was called twice.
-    #[error("server auth configuration already initialized")]
-    AlreadyInitialized,
-    /// The request did not resolve to an authenticated session.
-    #[error("the request did not carry an authenticated session")]
-    MissingSession,
-    /// The session cookie value is not a valid header value.
-    #[error("invalid session cookie header value")]
-    InvalidCookieValue,
-    /// The underlying auth engine failed.
-    #[error("auth engine error: {0}")]
-    Engine(#[from] AuthError),
-}
-
-impl ServerError {
-    /// The HTTP status code the error should be served with.
-    #[must_use]
-    pub const fn status_code(&self) -> u16 {
-        return match self {
-            Self::MissingSession => 401,
-            Self::Engine(error) => auth_error_status(error),
-            Self::MissingContext | Self::AlreadyInitialized | Self::InvalidCookieValue => 500,
-        };
-    }
-}
-
-/// The HTTP status code for an engine failure.
-///
-/// Shared by [`ServerError::status_code`] and the `ServerFnError` conversion
-/// so the two mappings cannot diverge.
-#[must_use]
-pub const fn auth_error_status(error: &AuthError) -> u16 {
-    return match error {
-        AuthError::InvalidCredentials | AuthError::PasswordHashError => 401,
-        AuthError::RateLimited => 429,
-        AuthError::Csrf => 403,
-        AuthError::Internal(_) => 500,
-    };
-}
 
 /// Engine + cookie configuration for the server slice.
 ///
@@ -210,13 +163,9 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
         identifier: &str,
         password: &str,
     ) -> Result<(U, SessionId), ServerError> {
-        match self
-            .config
-            .cookie()
-            .check_origin(request_origin().as_deref())
-        {
+        match check_state_changing_origin(self.config.cookie()) {
             Ok(()) => {}
-            Err(error) => return Err(ServerError::Engine(error)),
+            Err(error) => return Err(error),
         }
         let engine = Arc::clone(self.engine().engine());
         let identifier = String::from(identifier);
@@ -247,13 +196,9 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
     /// wrapping `AuthError::Csrf` for a missing or mismatched origin.
     #[must_use = "session revocation errors must be handled"]
     pub async fn logout(&self, token: &SessionId) -> Result<(), ServerError> {
-        match self
-            .config
-            .cookie()
-            .check_origin(request_origin().as_deref())
-        {
+        match check_state_changing_origin(self.config.cookie()) {
             Ok(()) => {}
-            Err(error) => return Err(ServerError::Engine(error)),
+            Err(error) => return Err(error),
         }
         let engine = Arc::clone(self.engine().engine());
         let token = token.clone();
@@ -273,6 +218,17 @@ fn blocking_cancelled() -> ServerError {
     )));
 }
 
+/// Enforces the origin gate for a state-changing cookie operation.
+///
+/// Login and logout share this one spelling so the two verbs cannot disagree
+/// on what counts as a present, matching origin.
+fn check_state_changing_origin(cookie: &CookieConfig) -> Result<(), ServerError> {
+    return match cookie.check_origin(request_origin().as_deref()) {
+        Ok(()) => Ok(()),
+        Err(error) => Err(ServerError::Engine(error)),
+    };
+}
+
 /// Reads the request's `Origin` header, if the current request carries one.
 fn request_origin() -> Option<String> {
     let ctx = match FullstackContext::current() {
@@ -280,11 +236,7 @@ fn request_origin() -> Option<String> {
         None => return None,
     };
     let parts = ctx.parts_mut();
-    let origin = parts
-        .headers
-        .get(http::header::ORIGIN)
-        .and_then(|header| return header.to_str().ok())
-        .map(String::from);
+    let origin = request_origin_header(&parts.headers).map(String::from);
     drop(parts);
     return origin;
 }
@@ -315,56 +267,4 @@ pub fn authenticate_headers<U: AuthUser>(
         Ok(user) => Ok((Some(token), user)),
         Err(error) => Err(ServerError::Engine(error)),
     };
-}
-
-type BoxedConfig = Arc<dyn Any + Send + Sync>;
-static GLOBAL: OnceLock<Mutex<FxHashMap<TypeId, BoxedConfig>>> = OnceLock::new();
-
-fn global_registry() -> &'static Mutex<FxHashMap<TypeId, BoxedConfig>> {
-    return GLOBAL.get_or_init(|| return Mutex::new(FxHashMap::default()));
-}
-
-/// Locates the engine configuration for this request or process.
-fn current_config<U: AuthUser>() -> Result<ServerAuthConfig<U>, ServerError> {
-    if let Some(ctx) = FullstackContext::current() {
-        if let Some(config) = ctx.extension::<Arc<ServerAuthConfig<U>>>() {
-            let config = Arc::clone(&config).as_ref().clone();
-            return Ok(config);
-        }
-    }
-
-    let lock = global_registry().lock();
-    return lock.get(&TypeId::of::<ServerAuthConfig<U>>()).map_or_else(
-        || return Err(ServerError::MissingContext),
-        |config| {
-            let config = Arc::clone(config);
-            let config = match config.downcast::<ServerAuthConfig<U>>() {
-                Ok(config) => config,
-                Err(_) => return Err(ServerError::MissingContext),
-            };
-            return Ok(Arc::unwrap_or_clone(config));
-        },
-    );
-}
-
-/// Registers the process-wide server auth configuration.
-///
-/// This is the storage primitive behind
-/// [`server_init`](super::registry::server_init): application code should
-/// call [`server_init`](super::registry::server_init), which is the single
-/// canonical registration path re-exported through the crate prelude.
-///
-/// # Errors
-/// Returns `ServerError::AlreadyInitialized` if a configuration for this user
-/// type is already registered.
-#[must_use = "initialization errors must be handled"]
-pub fn register_global<U: AuthUser>(config: ServerAuthConfig<U>) -> Result<(), ServerError> {
-    let mut lock = global_registry().lock();
-    let key = TypeId::of::<ServerAuthConfig<U>>();
-    if lock.contains_key(&key) {
-        return Err(ServerError::AlreadyInitialized);
-    }
-    lock.insert(key, Arc::new(config));
-    drop(lock);
-    return Ok(());
 }

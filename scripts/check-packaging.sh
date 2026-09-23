@@ -23,6 +23,7 @@ whitelist=(
     '^LICENSE-MIT$'
     '^LICENSE-APACHE$'
     '^scripts/check-packaging\.sh$'
+    '^scripts/check-ssot\.sh$'
     '^src/.*$'
 )
 
@@ -43,6 +44,34 @@ if [ -n "$leaked" ]; then
     echo "FAIL: files outside the packaging whitelist would ship:" >&2
     printf '%s\n' "$leaked" | sed 's/^/  LEAK: /' >&2
 fi
+
+# Reverse direction: every whitelist entry must still match something in the
+# package. Without this, removing a path from Cargo.toml `include` leaves a
+# dead whitelist entry behind and nobody notices the two lists diverged.
+# Cargo artifacts that only exist after packaging (or only sometimes) may
+# legitimately match nothing in `cargo package --list`.
+zero_allowed=(
+    '^\.cargo/.*$'
+    '^\.cargo_vcs_info\.json$'
+    '^Cargo\.lock$'
+    '^Cargo\.toml\.orig$'
+)
+for pattern in "${whitelist[@]}"; do
+    skip=0
+    for allowed in "${zero_allowed[@]}"; do
+        if [ "$pattern" = "$allowed" ]; then
+            skip=1
+            break
+        fi
+    done
+    if [ "$skip" = 1 ]; then
+        continue
+    fi
+    if ! printf '%s\n' "$files" | grep -Eq "$pattern"; then
+        fail=1
+        echo "FAIL: whitelist pattern matches nothing in the package (dead entry?): $pattern" >&2
+    fi
+done
 
 for must in \
     Cargo.toml \

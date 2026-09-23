@@ -11,13 +11,18 @@
 //! when a tokio runtime context is available and falls back to an inline call
 //! otherwise, so the server slice never assumes which executor hosts it.
 
+use std::panic;
+
+use tokio::runtime::Handle;
+use tokio::task;
+
 /// Whether the current async context can dispatch to the blocking pool.
 ///
 /// The check is `Handle::try_current()`: without a runtime context (plain
 /// `#[test]`s, non-tokio executors) the call runs inline on the current
 /// thread instead of failing.
 fn runtime_available() -> bool {
-    return tokio::runtime::Handle::try_current().is_ok();
+    return Handle::try_current().is_ok();
 }
 
 /// Runs a fallible-blocking closure off the async worker when possible.
@@ -39,7 +44,7 @@ where
     if !runtime_available() {
         return Ok(operation());
     }
-    let joined = tokio::task::spawn_blocking(operation).await;
+    let joined = task::spawn_blocking(operation).await;
     return match joined {
         Ok(value) => Ok(value),
         Err(join_error) => {
@@ -47,7 +52,7 @@ where
                 // reason: engine panics are programming errors; re-raising
                 // preserves the crate's panic model instead of converting a
                 // crash into a return value.
-                std::panic::resume_unwind(join_error.into_panic());
+                panic::resume_unwind(join_error.into_panic());
             }
             return Err(join_error);
         }

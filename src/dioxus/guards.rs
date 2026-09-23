@@ -17,8 +17,11 @@ const fn no_redirect_issued() -> bool {
 
 /// Navigation state for a guard redirect.
 pub struct GuardRedirect {
+    /// Where to navigate when the rendered subtree is not at home.
     pub to: String,
+    /// Whether a redirect was already issued for the current period.
     pub issued: Signal<bool>,
+    /// Router navigator used to issue the redirect.
     pub navigator: Navigator,
 }
 
@@ -26,6 +29,9 @@ pub struct GuardRedirect {
 ///
 /// `at_home` is true when the current state matches the rendered subtree:
 /// authenticated for [`RequireAuth`], guest for [`RedirectIfAuthed`].
+///
+/// The returned [`Element`](::dioxus::prelude::Element) is itself `#[must_use]`,
+/// so call sites cannot silently drop the rendered subtree.
 pub fn guard_body(at_home: bool, children: Element, redirect: GuardRedirect) -> Element {
     if at_home {
         let mut issued = redirect.issued;
@@ -38,10 +44,12 @@ pub fn guard_body(at_home: bool, children: Element, redirect: GuardRedirect) -> 
     if !*redirect.issued.read() {
         let mut issued = redirect.issued;
         *issued.write() = true;
-        let _redirection_failure = redirect.navigator.push(redirect.to);
-        // reason: an interior route target never yields an external-navigation
-        // failure, so the Option only reports unsupported (external) targets
-        // that are intentionally ignored here.
+        if redirect.navigator.push(redirect.to).is_some() {
+            // reason: `push` reports `Some` only for external targets the
+            // router cannot open. Unlatch so a later render retries instead of
+            // sitting blank forever with the redirect marked done.
+            *issued.write() = false;
+        }
     }
 
     return rsx!();

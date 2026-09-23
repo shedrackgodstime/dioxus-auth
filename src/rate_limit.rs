@@ -87,6 +87,12 @@ impl Default for InMemoryRateLimiter {
     }
 }
 
+/// Production credential-gate preset: 100 failed attempts per 60-second window.
+const PROD_MAX_ATTEMPTS: usize = 100;
+
+/// Production credential-gate window: 60 seconds.
+const PROD_WINDOW_SECS: u64 = 60;
+
 impl InMemoryRateLimiter {
     /// Creates a new in-memory rate limiter on the system clock.
     ///
@@ -95,6 +101,18 @@ impl InMemoryRateLimiter {
     #[must_use]
     pub fn new(max_attempts: usize, window: Duration) -> Self {
         return Self::with_clock(max_attempts, window, Arc::new(SystemTime::now));
+    }
+
+    /// Production credential-gate preset: 100 failed attempts per 60-second
+    /// window.
+    ///
+    /// This is the single home for the prod numbers quoted by the hardening
+    /// checklist (`docs/README.md`): turn it on for any credential endpoint
+    /// facing the network. Tighter per-verb rules compose by constructing
+    /// additional limiters with [`InMemoryRateLimiter::new`].
+    #[must_use]
+    pub fn prod() -> Self {
+        return Self::new(PROD_MAX_ATTEMPTS, Duration::from_secs(PROD_WINDOW_SECS));
     }
 
     /// Creates a new in-memory rate limiter on a custom clock.
@@ -171,18 +189,20 @@ impl InMemoryRateLimiter {
 impl RateLimiter for InMemoryRateLimiter {
     fn check(&self, identifier: &str) -> Result<(), AuthError> {
         let now = (self.now)();
-        let mut attempts = self.attempts.write();
-        let limited = attempts.get_mut(identifier).is_some_and(|timestamps| {
-            prune_expired(timestamps, now, self.window);
-            return timestamps.len() >= self.max_attempts;
-        });
-        let lapsed = attempts
-            .get(identifier)
-            .is_some_and(|timestamps| return timestamps.is_empty());
-        drop(attempts);
-        if lapsed {
-            self.attempts.write().remove(identifier);
-        }
+        let limited = {
+            let mut attempts = self.attempts.write();
+            let limited = attempts.get_mut(identifier).is_some_and(|timestamps| {
+                prune_expired(timestamps, now, self.window);
+                return timestamps.len() >= self.max_attempts;
+            });
+            let lapsed = attempts
+                .get(identifier)
+                .is_some_and(|timestamps| return timestamps.is_empty());
+            if lapsed {
+                attempts.remove(identifier);
+            }
+            limited
+        };
         if limited {
             return Err(AuthError::RateLimited);
         }

@@ -36,6 +36,8 @@ jobs:
         run: cargo test --all-targets
       - name: Test dioxus feature
         run: cargo test --all-targets --features dioxus
+      - name: Check single-source-of-truth invariants
+        run: bash scripts/check-ssot.sh
       - name: Test fullstack server features
         run: cargo test --all-targets --features dioxus-fullstack,server
       - name: Test doc
