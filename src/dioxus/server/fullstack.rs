@@ -88,11 +88,11 @@ macro_rules! fullstack_server_fns {
         )]
         #[must_use = "the authenticated user must be used"]
         pub async fn dioxus_auth_login(
-            args: $crate::prelude::LoginRequest,
-        ) -> $crate::prelude::ServerFnResult<$user> {
-            let context = $crate::prelude::ServerAuthContext::<$user>::from_request().await?;
+            args: $crate::LoginRequest,
+        ) -> ::dioxus_fullstack::ServerFnResult<$user> {
+            let context = $crate::ServerAuthContext::<$user>::from_request().await?;
             let (user, token) = context.login(&args.identifier, &args.password).await?;
-            $crate::prelude::write_session_cookie(context.config().cookie(), Some(token.as_str()))?;
+            $crate::write_session_cookie(context.config().cookie(), Some(token.as_str()))?;
             return Ok(user);
         }
 
@@ -106,12 +106,12 @@ macro_rules! fullstack_server_fns {
             clippy::unused_async
         )]
         #[must_use = "sign-out must be acknowledged"]
-        pub async fn dioxus_auth_logout() -> $crate::prelude::ServerFnResult<()> {
-            let context = $crate::prelude::ServerAuthContext::<$user>::from_request().await?;
+        pub async fn dioxus_auth_logout() -> ::dioxus_fullstack::ServerFnResult<()> {
+            let context = $crate::ServerAuthContext::<$user>::from_request().await?;
             if let Some(token) = context.token() {
                 context.logout(token).await?;
             }
-            $crate::prelude::write_session_cookie(context.config().cookie(), None)?;
+            $crate::write_session_cookie(context.config().cookie(), None)?;
             return Ok(());
         }
 
@@ -125,8 +125,8 @@ macro_rules! fullstack_server_fns {
             clippy::unused_async
         )]
         #[must_use = "the resolved user must be used"]
-        pub async fn dioxus_auth_session() -> $crate::prelude::ServerFnResult<$user> {
-            let user = $crate::prelude::require_user::<$user>().await?;
+        pub async fn dioxus_auth_session() -> ::dioxus_fullstack::ServerFnResult<$user> {
+            let user = $crate::require_user::<$user>().await?;
             return Ok(user);
         }
     };

@@ -1,15 +1,26 @@
 //! Feature-gated Dioxus runtime layer.
 //!
-//! The runtime is generic over the application [`AuthUser`] type only; the
-//! concrete user/session store generics are hidden behind the erased
-//! [`AuthOperations`] interface so hooks and components never leak them.
+//! The runtime is generic over the application [`AuthUser`](crate::AuthUser)
+//! type only; the concrete user/session store generics are hidden behind the
+//! erased [`AuthOperations`] interface so hooks and components never leak them.
 //!
 //! Component conventions: Dioxus `Props` structs declare `pub` fields as the
 //! `Props` derive requires, and components are declarative constructors
 //! consumed by `rsx!` rather than `#[must_use]`-checked call sites.
 //!
-//! All public items here are re-exported through the crate's
-//! [`prelude`](crate::prelude).
+//! The documented import path for every public item here is the crate root
+//! (`use dioxus_auth::{AuthProvider, use_session, …}`); this module stays
+//! importable for door-3 users who prefer layer paths.
+//!
+//! Dioxus-coupling note (re-audit on every Dioxus bump): this layer touches
+//! only long-lived framework surface — `#[component]` + `Props`, `rsx!` +
+//! `Element`, `use_context` / `use_context_provider`, `use_signal` +
+//! `Readable` / `Writable` signal access, `use_effect` / `use_hook`, and on
+//! the router side `Router`, `Navigator`, `use_navigator`. The engine behind
+//! [`AuthOperations`] never names a Dioxus type, so a framework upgrade can
+//! move components and hooks without touching authentication semantics. Do
+//! not adopt alpha-only APIs (`ReadSignal` / `WriteSignal` split, `use_action`)
+//! until the MSRV-bumped Dioxus upgrade plan says so.
 
 mod context;
 mod guards;

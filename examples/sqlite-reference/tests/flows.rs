@@ -12,9 +12,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{
-    Auth, AuthEngine, AuthError, PasswordUserStore, SessionId, SessionStore,
-};
+use dioxus_auth::{Auth, AuthEngine, AuthError, PasswordUserStore, SessionId, SessionStore};
 use sqlite_reference::{AppUser, SCHEMA_SQL, SqliteStore};
 
 fn user(id: i64, email: &str) -> AppUser {

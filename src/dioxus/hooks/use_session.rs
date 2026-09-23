@@ -8,7 +8,7 @@ use crate::dioxus::context::AuthContext;
 use crate::dioxus::state::SessionState;
 
 /// Reads the reactive session state as an exhaustive
-/// [`SessionState<T>`](crate::prelude::SessionState).
+/// [`SessionState<T>`](crate::SessionState).
 ///
 /// The read half of the runtime: [`SessionState::SignedIn`] renders the
 /// identity, [`SessionState::Guest`] renders signed-out UI,
@@ -16,17 +16,20 @@ use crate::dioxus::state::SessionState;
 /// [`SessionState::Unavailable`] means it could not be asked — call
 /// [`AuthContext::restart`](crate::dioxus::AuthContext::restart) to retry.
 /// For the verb half (login, logout, validate) use
-/// [`use_auth`](crate::prelude::use_auth).
+/// [`use_auth`](crate::use_auth).
+///
+/// Hook rules apply: call at the top level of a component (or another hook),
+/// unconditionally and in the same order on every render.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use dioxus::prelude::*;
-/// use dioxus_auth::prelude::{SessionState, use_session};
+/// use dioxus_auth::{SessionState, use_session};
 ///
 /// # #[derive(Debug, Clone, PartialEq)]
 /// # struct User { id: u64, name: String }
-/// # impl dioxus_auth::prelude::AuthUser for User {
+/// # impl dioxus_auth::AuthUser for User {
 /// #     type Id = u64;
 /// #     fn id(&self) -> u64 { return self.id; }
 /// #     fn email(&self) -> &str { return &self.name; }
@@ -45,6 +48,8 @@ use crate::dioxus::state::SessionState;
 /// # Panics
 /// Panics when no enclosing [`AuthProvider`](crate::dioxus::AuthProvider) has
 /// been mounted above the calling component.
+#[doc(alias = "session")]
+#[doc(alias = "auth state")]
 #[must_use]
 pub fn use_session<T: AuthUser + Clone>() -> SessionState<T> {
     return use_context::<AuthContext<T>>().session_state();

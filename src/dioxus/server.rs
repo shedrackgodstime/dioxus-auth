@@ -17,13 +17,13 @@
 //! when a tokio runtime hosts the request (see the `blocking` module),
 //! falling back to an inline call under other executors.
 
-pub mod axum;
+pub(crate) mod axum;
 mod blocking;
 mod cookies;
-pub mod error;
-pub mod fullstack;
-pub mod registry;
-pub mod server_fn;
+pub(crate) mod error;
+pub(crate) mod fullstack;
+pub(crate) mod registry;
+pub(crate) mod server_fn;
 
 pub use axum::{AuthLayer, AuthService, RequireAuthLayer, RequireAuthService};
 pub use cookies::write_session_cookie;

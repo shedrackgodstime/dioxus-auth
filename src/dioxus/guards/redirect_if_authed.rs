@@ -21,7 +21,7 @@ use super::{GuardRedirect, guard_body, initial_redirect_state};
 ///
 /// ```no_run
 /// use dioxus::prelude::*;
-/// use dioxus_auth::prelude::RedirectIfAuthed;
+/// use dioxus_auth::RedirectIfAuthed;
 ///
 /// # fn LoginForm() -> Element { rsx! { "login form" } }
 /// # fn App() -> Element {
@@ -33,7 +33,7 @@ use super::{GuardRedirect, guard_body, initial_redirect_state};
 /// # }
 /// # #[derive(Debug, Clone, PartialEq)]
 /// # struct User;
-/// # impl dioxus_auth::prelude::AuthUser for User {
+/// # impl dioxus_auth::AuthUser for User {
 /// #     type Id = u64;
 /// #     fn id(&self) -> u64 { return 1; }
 /// #     fn email(&self) -> &str { return "user@example.com"; }

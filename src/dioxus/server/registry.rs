@@ -46,8 +46,8 @@ pub(super) fn current_config<U: AuthUser>() -> Result<ServerAuthConfig<U>, Serve
 
 /// Registers the process-wide server auth configuration.
 ///
-/// Storage primitive behind [`server_init`]; not re-exported through the
-/// prelude, so application code has exactly one registration path.
+/// Storage primitive behind [`server_init`]; not re-exported at the crate
+/// root, so application code has exactly one registration path.
 fn register_global<U: AuthUser>(config: ServerAuthConfig<U>) -> Result<(), ServerError> {
     let mut lock = global_registry().lock();
     let key = TypeId::of::<ServerAuthConfig<U>>();
@@ -62,7 +62,7 @@ fn register_global<U: AuthUser>(config: ServerAuthConfig<U>) -> Result<(), Serve
 /// Registers the process-wide server auth configuration.
 ///
 /// This is the single canonical registration path: the only registration
-/// function re-exported through the crate prelude. It applies when no
+/// function re-exported at the crate root. It applies when no
 /// per-request middleware is present (background tasks, tests,
 /// or routers that do not attach [`AuthLayer`](super::axum::AuthLayer)).
 ///

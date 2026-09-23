@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use super::common::TestUser;
 use super::password::hash_password;
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     Auth, AuthEngine, AuthError, MemoryStore, PasswordUserStore, Session, SessionId, SessionStore,
     UserStore,
 };

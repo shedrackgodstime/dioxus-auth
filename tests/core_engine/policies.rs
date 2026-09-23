@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use super::common::TestUser;
 use super::password::hash_password;
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthEngine, AuthError, InMemoryRateLimiter, MemoryStore, SessionId, SessionStore, UserStore,
 };
 

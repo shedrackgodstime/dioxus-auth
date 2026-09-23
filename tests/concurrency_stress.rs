@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use common::TestUser;
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     Auth, AuthEngine, AuthError, ErrorCode, MemoryStore, PasswordUserStore, Session, SessionId,
     SessionStore,
 };

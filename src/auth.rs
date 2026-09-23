@@ -16,7 +16,7 @@ use crate::user::AuthUser;
 
 /// Entry point for authentication.
 ///
-/// Wraps a shared [`AuthEngine`](crate::engine::AuthEngine) so application
+/// Wraps a shared [`AuthEngine`] so application
 /// setup names one type instead of three. `Clone` shares the engine through
 /// the inner `Arc`; it never clones the stores.
 pub struct Auth<D>
@@ -77,16 +77,16 @@ where
 
     /// Creates authentication over the given store.
     ///
-    /// The store serves both the user and session roles. Uses the default
-    /// Argon2id hasher and 7-day session TTL; deployments that need custom
-    /// hashers, TTLs, or split roles keep using
-    /// [`AuthEngine`](crate::engine::AuthEngine) directly.
+    /// The store serves both the user and session roles, and is shared
+    /// internally — callers pass it by value, never behind an `Arc`. Uses the
+    /// default Argon2id hasher and 7-day session TTL; deployments that need
+    /// custom hashers, TTLs, or split roles keep using
+    /// [`AuthEngine`] directly.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthUser, MemoryStore};
-    /// # use std::sync::Arc;
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
     /// # #[derive(Debug, Clone)]
     /// # struct User;
     /// # impl AuthUser for User {
@@ -94,9 +94,8 @@ where
     /// #     fn id(&self) -> u64 { return 1; }
     /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
-    /// let db = Arc::new(MemoryStore::<User>::new());
-    /// let auth = Auth::new(db)?;
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// let auth = Auth::new(MemoryStore::<User>::new())?;
     /// assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
     /// # return Ok(());
     /// # }
@@ -106,7 +105,8 @@ where
     /// Returns `AuthError` if the default hasher cannot pre-compute the
     /// timing-defense dummy hash.
     #[must_use = "the constructed facade must be used"]
-    pub fn new(db: Arc<D>) -> Result<Self, AuthError> {
+    pub fn new(db: D) -> Result<Self, AuthError> {
+        let db = Arc::new(db);
         let engine = match AuthEngine::new(Arc::clone(&db), db) {
             Ok(engine) => engine,
             Err(error) => return Err(error),
@@ -130,7 +130,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthEngine, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthEngine, AuthUser, MemoryStore};
     /// # use std::sync::Arc;
     /// # #[derive(Debug, Clone)]
     /// # struct User;
@@ -139,7 +139,7 @@ where
     /// #     fn id(&self) -> u64 { return 1; }
     /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// # let db = Arc::new(MemoryStore::<User>::new());
     /// let engine = AuthEngine::builder(Arc::clone(&db), db).build()?;
     /// let auth = Auth::from_engine(engine);
@@ -229,7 +229,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
     /// # #[derive(Debug, Clone)]
     /// # struct User;
     /// # impl AuthUser for User {
@@ -237,7 +237,7 @@ where
     /// #     fn id(&self) -> u64 { return 1; }
     /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
     /// assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
     /// # return Ok(());
@@ -249,7 +249,6 @@ where
     /// timing-defense dummy hash.
     #[must_use = "the constructed facade must be used"]
     pub fn memory() -> Result<Self, AuthError> {
-        let db = Arc::new(MemoryStore::<User>::new());
-        return Self::new(db);
+        return Self::new(MemoryStore::<User>::new());
     }
 }

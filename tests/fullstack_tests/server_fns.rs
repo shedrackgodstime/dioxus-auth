@@ -6,12 +6,12 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthEngine, AuthEngineHandle, AuthError, CookieConfig, MemoryStore, SameSite, ServerAuthConfig,
-    ServerAuthContext, ServerError, ServerFnError, SessionId, current_user, write_session_cookie,
+    ServerAuthContext, ServerError, SessionId, current_user, write_session_cookie,
 };
-use dioxus_fullstack::FullstackContext;
 use dioxus_fullstack::http;
+use dioxus_fullstack::{FullstackContext, ServerFnError};
 
 use super::common::TestUser;
 use super::dioxus_auth_session;

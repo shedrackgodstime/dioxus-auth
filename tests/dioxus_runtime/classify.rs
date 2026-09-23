@@ -1,8 +1,8 @@
 //! `AuthError` restore-classification unit tests.
 //!
-//! Requires the `dioxus` feature for the prelude re-exports.
+//! Requires the `dioxus` feature for the runtime re-exports.
 
-use dioxus_auth::prelude::{AuthError, RestoreClassify, RestoreVerdict};
+use dioxus_auth::{AuthError, RestoreClassify, RestoreVerdict};
 
 #[test]
 fn rejections_classify_as_unauthenticated() {

@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     Argon2Hasher, AuthError, CookieConfig, InMemoryRateLimiter, MemoryTokenStorage,
     OriginValidation, PasswordHasher, RateLimiter, RateLimiterClock, SameSite, TokenStorage,
 };

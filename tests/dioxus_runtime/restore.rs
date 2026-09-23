@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthEngineHandle, AuthError, AuthStatus, ErrorCode, MemoryTokenStorage, RestoreVerdict,
     SessionState, TokenStorage, TokenStorageHandle,
 };

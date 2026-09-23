@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::LoginRequest;
+use dioxus_auth::LoginRequest;
 
 #[test]
 fn login_request_debug_redacts_the_plaintext_password() {

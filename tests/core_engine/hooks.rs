@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::common::TestUser;
 use super::password::hash_password;
-use dioxus_auth::prelude::{AuthEngine, AuthEngineBuilder, AuthError, MemoryStore};
+use dioxus_auth::{AuthEngine, AuthEngineBuilder, AuthError, MemoryStore};
 
 /// Builds an engine with a hook configuration applied.
 fn hook_engine(

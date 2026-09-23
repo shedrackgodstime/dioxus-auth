@@ -28,14 +28,17 @@ pub struct AuthStateEvent<T: AuthUser> {
 /// analytics, logging, cross-tab sync through an application-owned channel.
 /// The first settled state is recorded without firing, so a handler sees
 /// changes between two observed states only (login, logout, refresh); read
-/// the initial state with [`use_session`](crate::prelude::use_session).
+/// the initial state with [`use_session`](crate::use_session).
 /// The subscription lives as long as the calling component stays mounted.
+///
+/// Hook rules apply: call at the top level of a component (or another hook),
+/// unconditionally and in the same order on every render.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use dioxus::prelude::*;
-/// use dioxus_auth::prelude::{SessionState, on_auth_state_change, AuthUser};
+/// use dioxus_auth::{SessionState, on_auth_state_change, AuthUser};
 ///
 /// # #[derive(Debug, Clone, PartialEq)]
 /// # struct User { id: u64, name: String }
@@ -56,6 +59,8 @@ pub struct AuthStateEvent<T: AuthUser> {
 /// # Panics
 /// Panics when no enclosing [`AuthProvider`](crate::dioxus::AuthProvider) has
 /// been mounted above the calling component.
+#[doc(alias = "auth state change")]
+#[doc(alias = "subscribe")]
 pub fn on_auth_state_change<T, F>(mut handler: F)
 where
     T: AuthUser + Clone + PartialEq + 'static,

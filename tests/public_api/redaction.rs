@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::{MemoryStore, MemoryTokenStorage, TokenStorage};
+use dioxus_auth::{MemoryStore, MemoryTokenStorage, TokenStorage};
 
 use crate::common::TestUser;
 

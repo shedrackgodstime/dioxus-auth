@@ -15,7 +15,7 @@ use crate::security::PasswordHasher;
 /// The default parameters are the argon2 crate's recommended production
 /// configuration (Argon2id, m = 19 MiB, t = 2, p = 1) — RFC 9106 §4.1
 /// compliant. Deployments that need stronger or weaker parameters construct a
-/// custom [`Params`](argon2::Params) (via
+/// custom [`Params`] (via
 /// [`ParamsBuilder`](argon2::ParamsBuilder)) and pass it through
 /// [`Argon2Hasher::with_params`].
 ///
@@ -49,12 +49,12 @@ impl Argon2Hasher {
     ///
     /// The algorithm is always Argon2id and the version is always v1.3 —
     /// only the cost parameters (`m_cost`, `t_cost`, `p_cost`) are adjustable.
-    /// Construct a [`Params`](argon2::Params) via
+    /// Construct a [`Params`] via
     /// [`ParamsBuilder`](argon2::ParamsBuilder):
     ///
     /// ```no_run
     /// # use argon2::ParamsBuilder;
-    /// # use dioxus_auth::prelude::Argon2Hasher;
+    /// # use dioxus_auth::Argon2Hasher;
     /// # fn build_params() -> Result<argon2::Params, argon2::password_hash::Error> {
     /// #     Ok(ParamsBuilder::new()
     /// #         .m_cost(3 * 1024)

@@ -78,7 +78,7 @@ for must in \
     Cargo.toml \
     README.md \
     src/lib.rs \
-    src/prelude.rs; do
+    src/auth.rs; do
     if ! printf '%s\n' "$files" | grep -qx "$must"; then
         fail=1
         echo "FAIL: $must is missing from the package (include list dropped it?)" >&2

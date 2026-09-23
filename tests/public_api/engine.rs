@@ -9,7 +9,7 @@ use std::sync::Arc;
 use super::common::TestUser;
 use super::identity_hasher::IdentityHasher;
 use super::password::hash_password;
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthEngine, AuthError, AuthStatus, AuthUser, LoginOptions, MemoryStore, PasswordUserStore,
     Session, SessionId, SessionStore, UserStore,
 };

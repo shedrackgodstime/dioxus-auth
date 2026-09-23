@@ -42,7 +42,7 @@ impl CookieConfig {
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{CookieConfig, SameSite};
+    /// # use dioxus_auth::{CookieConfig, SameSite};
     /// let config = CookieConfig::new()
     ///     .with_secure(false)
     ///     .with_name(String::from("sid"));

@@ -47,7 +47,7 @@ impl<Id> Session<Id> {
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Session, SessionId};
+    /// # use dioxus_auth::{Session, SessionId};
     /// let session = Session::new(SessionId::generate(), 7u64, 1000, 2000);
     /// assert_eq!(session.user_id(), &7);
     /// assert!(!session.is_expired_at(1999));

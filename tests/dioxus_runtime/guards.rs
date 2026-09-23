@@ -7,7 +7,7 @@
 use std::cell::Cell;
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{AuthEngineHandle, AuthStatus, MemoryTokenStorage, TokenStorageHandle};
+use dioxus_auth::{AuthEngineHandle, AuthStatus, MemoryTokenStorage, TokenStorageHandle};
 
 use super::common::TestUser;
 use super::harness::{

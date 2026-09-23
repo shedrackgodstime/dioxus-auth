@@ -8,7 +8,7 @@
 mod common;
 
 use common::TestUser;
-use dioxus_auth::prelude::{MemoryStore, Session, SessionId, SessionStore};
+use dioxus_auth::{MemoryStore, Session, SessionId, SessionStore};
 
 fn storage_session(user_id: u64, created_at: u64, expires_at: u64) -> Session<u64> {
     let storage_id = SessionId::generate().hash_for_storage();

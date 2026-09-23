@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use common::TestUser;
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     Argon2Hasher, Auth, AuthEngine, AuthError, AuthUser, ErrorCode, InMemoryRateLimiter,
     MemoryStore, PasswordHasher,
 };
@@ -28,9 +28,9 @@ fn memory_constructs_with_secure_defaults() {
 }
 
 #[test]
-fn new_wraps_caller_store() {
-    let db = Arc::new(MemoryStore::<TestUser>::new());
-    let auth = Auth::new(Arc::clone(&db)).expect("facade must construct over caller store");
+fn new_takes_the_store_by_value() {
+    let auth =
+        Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct over caller store");
     assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
     return;
 }

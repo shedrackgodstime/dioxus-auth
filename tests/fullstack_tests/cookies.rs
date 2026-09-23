@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::{CookieConfig, SameSite, ServerAuthConfig};
+use dioxus_auth::{CookieConfig, SameSite, ServerAuthConfig};
 use dioxus_fullstack::http;
 
 use super::common::TestUser;

@@ -6,7 +6,7 @@ mod common;
 mod password;
 
 use common::TestUser;
-use dioxus_auth::prelude::{AuthUser, MemoryStore, PasswordUserStore, UserStore};
+use dioxus_auth::{AuthUser, MemoryStore, PasswordUserStore, UserStore};
 use password::hash_password;
 
 #[test]

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{CookieConfig, ServerAuthConfig};
+use dioxus_auth::{CookieConfig, ServerAuthConfig};
 use dioxus_fullstack::axum::extract::Extension;
 use dioxus_fullstack::http::{self, HeaderMap, StatusCode};
 

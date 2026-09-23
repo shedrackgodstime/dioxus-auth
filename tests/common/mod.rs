@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::AuthUser;
+use dioxus_auth::AuthUser;
 
 /// A minimal user for exercising the auth core.
 ///

@@ -12,12 +12,11 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthEngine, AuthEngineHandle, CookieConfig, LoginRequest, MemoryStore, ServerAuthConfig,
-    ServerFnError,
 };
-use dioxus_fullstack::FullstackContext;
 use dioxus_fullstack::http::{self, HeaderMap};
+use dioxus_fullstack::{FullstackContext, ServerFnError};
 
 use super::common::TestUser;
 use super::identity_hasher::IdentityHasher;

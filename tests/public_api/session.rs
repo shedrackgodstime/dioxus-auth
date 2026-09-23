@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::{Session, SessionId};
+use dioxus_auth::{Session, SessionId};
 
 fn storage_session() -> Session<u64> {
     return Session::new(SessionId::generate(), 1, 1000, 2000);

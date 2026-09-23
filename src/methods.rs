@@ -27,7 +27,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
     /// # #[derive(Debug, Clone)]
     /// # struct User { id: u64, name: String }
     /// # impl AuthUser for User {
@@ -35,7 +35,7 @@ where
     /// #     fn id(&self) -> u64 { return self.id; }
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
     /// auth.sign_up_email("alice", "old-secret", User { id: 1, name: String::from("alice") })?;
     /// auth.change_password("alice", "old-secret", "new-secret")?;
@@ -85,7 +85,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
     /// # #[derive(Debug, Clone)]
     /// # struct User { id: u64, name: String }
     /// # impl AuthUser for User {
@@ -93,7 +93,7 @@ where
     /// #     fn id(&self) -> u64 { return self.id; }
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
     /// auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// let (user, _) = auth.sign_in_email("alice", "s3cret")?;
@@ -125,7 +125,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
     /// # #[derive(Debug, Clone)]
     /// # struct User { id: u64, name: String }
     /// # impl AuthUser for User {
@@ -133,7 +133,7 @@ where
     /// #     fn id(&self) -> u64 { return self.id; }
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
     /// let (_, session) = auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// auth.sign_out(&session)?;
@@ -154,13 +154,13 @@ where
     /// Taken and free identifiers cost the same and fail with the same
     /// `InvalidCredentials`, so identifier state is not observable. Probing
     /// any identifier counts toward the same rate gate as sign-in. Works over
-    /// any [`PasswordUserStore`](crate::store::PasswordUserStore): own-DB
+    /// any [`PasswordUserStore`]: own-DB
     /// deployments get the same verb as the memory quickstart.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{Auth, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
     /// # #[derive(Debug, Clone)]
     /// # struct User { id: u64, name: String }
     /// # impl AuthUser for User {
@@ -168,7 +168,7 @@ where
     /// #     fn id(&self) -> u64 { return self.id; }
     /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
     /// let (user, _) = auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// assert_eq!(user.id(), 1);

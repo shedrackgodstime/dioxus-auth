@@ -17,7 +17,7 @@ mod policies;
 use std::sync::Arc;
 
 use common::TestUser;
-use dioxus_auth::prelude::{AuthEngine, MemoryStore};
+use dioxus_auth::{AuthEngine, MemoryStore};
 use password::hash_password;
 
 fn seeded_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUser>> {

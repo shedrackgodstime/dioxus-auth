@@ -1,9 +1,9 @@
-//! Compile-checked mirrors of the README quickstart snippets.
+//! Compile-checked mirrors of the README snippets.
 //!
-//! Each function body is copied verbatim from a ```` ```rust ```` block in
-//! `README.md`. When the README changes, this file changes with it; when the
-//! API changes, CI fails here instead of letting the README drift into
-//! teaching an API that does not exist.
+//! Each function body follows a ```` ```rust ```` block in `README.md`. When
+//! the README changes, this file changes with it; when the API changes, CI
+//! fails here instead of letting the README drift into teaching an API that
+//! does not exist.
 //!
 //! Snippets marked ```` ```rust,ignore ```` in the README (component trees,
 //! fullstack server wiring) are excluded per their own annotation; their
@@ -16,9 +16,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{
-    Argon2Hasher, AuthEngine, AuthUser, InMemoryRateLimiter, MemoryStore, PasswordHasher,
-};
+use dioxus_auth::{Auth, AuthEngine, AuthUser, InMemoryRateLimiter, MemoryStore};
 
 /// A minimal user mirroring the README's `AppUser`. The serde derives exist
 /// so the fullstack drift pins below can expand the server-fn macro against
@@ -41,64 +39,28 @@ impl AuthUser for AppUser {
     }
 }
 
-/// Mirror of the README's "Build the engine" snippet.
+/// Mirror of the README's quickstart snippet: own user type, same verbs.
 #[test]
-fn readme_build_the_engine() {
-    let store = Arc::new(MemoryStore::<AppUser>::new());
+fn readme_quickstart() {
+    let auth = Auth::new(MemoryStore::<AppUser>::new()).expect("facade must construct");
 
-    let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-        .session_ttl_secs(60 * 60 * 24 * 7)
-        .build()
-        .expect("engine construction succeeds");
-
-    // You own user registration: hash the password yourself (the store must
-    // never see plaintext) and provision your store however your app does.
-    // MemoryStore offers a convenience helper that takes an already-hashed
-    // password.
-    let hasher = Argon2Hasher::new();
-    let hash = hasher.hash("password").expect("hashing succeeds");
-    store.insert_user_with_password(
+    auth.sign_up_email(
+        "alice@example.com",
+        "password",
         AppUser {
             id: 1,
-            name: String::from("alice"),
+            name: String::from("alice@example.com"),
         },
-        "alice",
-        hash,
-    );
+    )
+    .expect("sign-up must succeed");
 
-    // The engine must be usable after the mirrored setup.
-    let _ = auth.session_ttl_secs();
-}
+    let (user, session) = auth
+        .sign_in_email("alice@example.com", "password")
+        .expect("sign-in must succeed");
+    assert_eq!(user.id, 1);
 
-/// Mirror of the README's "Log in and validate sessions" snippet, using an
-/// engine built exactly as the README builds one.
-#[test]
-fn readme_login_and_validate_sessions() {
-    let store = Arc::new(MemoryStore::<AppUser>::new());
-    let auth = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
-        .build()
-        .expect("engine construction succeeds");
-    store.insert_user_with_password(
-        AppUser {
-            id: 1,
-            name: String::from("alice"),
-        },
-        "alice",
-        Argon2Hasher::new()
-            .hash("password")
-            .expect("hashing succeeds"),
-    );
-
-    let (user, session) = auth.login("alice", "password").expect("valid credentials");
-    assert_eq!(user.id(), 1);
-
-    let current = auth
-        .validate_session(session.id())
-        .expect("validation must not error");
-    assert!(current.is_some());
-
-    auth.logout(session.id())
-        .expect("revocation must not error");
+    auth.sign_out(&session).expect("sign-out must succeed");
+    return;
 }
 
 /// Mirror of the README's "Hardening" snippet.
@@ -116,6 +78,7 @@ fn readme_hardening_rate_limiter() {
         .expect("engine construction succeeds");
 
     let _ = auth;
+    return;
 }
 
 /// The `rust,ignore` README snippets are excluded from compilation per their
@@ -128,7 +91,7 @@ fn symbol_drift_guards_for_ignored_snippets() {
     use std::marker::PhantomData;
 
     use dioxus::prelude::Element;
-    use dioxus_auth::prelude::{
+    use dioxus_auth::{
         Auth, AuthProvider, AuthProviderProps, MemoryStore, RedirectIfAuthed,
         RedirectIfAuthedProps, RequireAuth, RequireAuthProps, RestoreVerdict, use_auth,
     };
@@ -178,6 +141,6 @@ mod fullstack_snippet_pins {
 
     #[test]
     fn require_user_is_resolvable() {
-        let _ = dioxus_auth::prelude::require_user::<AppUser>;
+        let _ = dioxus_auth::require_user::<AppUser>;
     }
 }

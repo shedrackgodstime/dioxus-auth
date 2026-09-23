@@ -22,7 +22,7 @@ use std::path::Path;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthError, AuthUser, PasswordUserStore, Session, SessionId, SessionStore, UserStore,
 };
 

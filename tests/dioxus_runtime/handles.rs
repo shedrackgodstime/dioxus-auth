@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{AuthEngineHandle, AuthError, AuthOperations, SessionId};
+use dioxus_auth::{AuthEngineHandle, AuthError, AuthOperations, SessionId};
 
 use super::common::TestUser;
 

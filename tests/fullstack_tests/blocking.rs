@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::thread::ThreadId;
 
-use dioxus_auth::prelude::{
+use dioxus_auth::{
     AuthEngine, AuthEngineHandle, AuthError, CookieConfig, MemoryStore, PasswordUserStore,
     ServerAuthConfig, SessionId, UserStore,
 };

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::prelude::{AuthEngine, MemoryStore, Session, SessionId, SessionStore};
+use dioxus_auth::{AuthEngine, MemoryStore, Session, SessionId, SessionStore};
 
 use super::common::TestUser;
 use super::seeded_engine;

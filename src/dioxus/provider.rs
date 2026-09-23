@@ -35,11 +35,11 @@ use super::storage::TokenStorageHandle;
 ///
 /// ```no_run
 /// use dioxus::prelude::*;
-/// use dioxus_auth::prelude::{AuthProvider, Auth, MemoryStore};
+/// use dioxus_auth::{AuthProvider, Auth, MemoryStore};
 ///
 /// # #[derive(Debug, Clone, PartialEq)]
 /// # struct User { id: u64, name: String }
-/// # impl dioxus_auth::prelude::AuthUser for User {
+/// # impl dioxus_auth::AuthUser for User {
 /// #     type Id = u64;
 /// #     fn id(&self) -> u64 { return self.id; }
 /// #     fn email(&self) -> &str { return &self.name; }

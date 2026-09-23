@@ -156,7 +156,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::{AuthEngine, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{AuthEngine, AuthUser, MemoryStore};
     /// # use std::sync::Arc;
     /// # #[derive(Debug, Clone)]
     /// # struct User;
@@ -165,7 +165,7 @@ where
     /// #     fn id(&self) -> u64 { return 1; }
     /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
-    /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let store = Arc::new(MemoryStore::<User>::new());
     /// let engine = AuthEngine::new(Arc::clone(&store), store)?;
     /// assert_eq!(engine.session_ttl_secs(), 60 * 60 * 24 * 7);

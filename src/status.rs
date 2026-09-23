@@ -68,7 +68,7 @@ impl SessionId {
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::prelude::SessionId;
+    /// # use dioxus_auth::SessionId;
     /// let id = SessionId::generate();
     /// assert!(SessionId::is_valid_wire_format(id.as_str()));
     /// assert_ne!(id.hash_for_storage().as_str(), id.as_str());

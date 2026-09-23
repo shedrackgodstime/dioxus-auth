@@ -1,5 +1,5 @@
 //! Tests for the process-global server configuration registry, exercised by
-//! [`server_init`](dioxus_auth::prelude::server_init).
+//! [`server_init`](dioxus_auth::server_init).
 //!
 //! The registry is process-wide, so these tests live in their own binary to
 //! keep `tests/fullstack_tests.rs` deterministic. Every test either registers
@@ -18,7 +18,7 @@ mod fullstack_shared;
 #[path = "common/identity_hasher.rs"]
 mod identity_hasher;
 
-use dioxus_auth::prelude::{ServerAuthConfig, ServerError, SessionId, server_init};
+use dioxus_auth::{ServerAuthConfig, ServerError, SessionId, server_init};
 use dioxus_fullstack::http;
 
 use common::TestUser;

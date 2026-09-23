@@ -20,7 +20,7 @@ use super::storage::TokenStorageHandle;
 ///
 /// Clone is cheap: the engine and storage handles are `Arc`-shared and the
 /// signals are copyable handles. Components read it through
-/// [`use_auth`](crate::prelude::use_auth) and call the state methods directly.
+/// [`use_auth`](crate::use_auth) and call the state methods directly.
 #[derive(Clone)]
 pub struct AuthContext<T: AuthUser + Clone> {
     engine: Arc<dyn AuthOperations<T>>,
@@ -217,7 +217,7 @@ impl<T: AuthUser + Clone> AuthContext<T> {
     }
 
     /// Re-runs the restore attempt after an
-    /// [`SessionState::Unavailable`](crate::prelude::SessionState::Unavailable)
+    /// [`SessionState::Unavailable`](crate::SessionState::Unavailable)
     /// read.
     ///
     /// This is the retry half of the semantics: an unknown outcome left
@@ -257,11 +257,11 @@ impl<T: AuthUser + Clone> AuthContext<T> {
     }
 
     /// The reactive session read: an exhaustive
-    /// [`SessionState`](crate::prelude::SessionState) instead of a struct of
+    /// [`SessionState`](crate::SessionState) instead of a struct of
     /// optional fields.
     ///
     /// Branch on the variant; `Unavailable` carries the stable
-    /// [`ErrorCode`](crate::prelude::ErrorCode) for logging and interop.
+    /// [`ErrorCode`](crate::ErrorCode) for logging and interop.
     /// Subscribes to the underlying signals, so components re-render when
     /// the state changes.
     #[must_use = "the session read must be used"]

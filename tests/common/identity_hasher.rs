@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::{AuthError, PasswordHasher};
+use dioxus_auth::{AuthError, PasswordHasher};
 
 /// A password hasher that treats the stored string as the plaintext.
 ///

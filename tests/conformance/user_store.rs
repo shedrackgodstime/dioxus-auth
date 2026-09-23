@@ -4,7 +4,7 @@
 mod common;
 
 use common::TestUser;
-use dioxus_auth::prelude::{MemoryStore, UserStore};
+use dioxus_auth::{MemoryStore, UserStore};
 
 #[test]
 fn insert_then_find_by_id() {
