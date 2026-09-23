@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use dioxus::prelude::{Element, Props, rsx};
 use dioxus_auth::prelude::{
-    AuthContext, AuthEngine, AuthEngineHandle, MemoryTokenStorage, SessionState,
-    TokenStorageHandle, on_auth_state_change, use_auth,
+    Auth, AuthContext, AuthEngine, MemoryTokenStorage, SessionState, TokenStorageHandle,
+    on_auth_state_change, use_auth,
 };
 use dioxus_core::VirtualDom;
 
@@ -49,19 +49,17 @@ fn label(state: &SessionState<TestUser>) -> String {
 }
 
 /// Root: the provider with the observing child below it.
-#[derive(Clone, PartialEq, Eq, Props)]
+#[derive(Clone, PartialEq, Props)]
 pub struct ObserverRootProps {
-    pub engine: AuthEngineHandle<TestUser>,
-    pub token_storage: TokenStorageHandle,
+    pub auth: Auth<SeededStore>,
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 pub fn ObserverRoot(props: ObserverRootProps) -> Element {
     return rsx! {
-        dioxus_auth::prelude::AuthProvider::<TestUser> {
-            engine: props.engine,
-            token_storage: props.token_storage,
+        dioxus_auth::prelude::AuthProvider::<SeededStore> {
+            auth: props.auth,
             ObserverChild {}
         }
     };
@@ -91,17 +89,11 @@ fn ObserverChild(_: ChildProps) -> Element {
 }
 
 fn events_dom(
-    engine: Arc<AuthEngine<SeededStore, SeededStore>>,
+    engine: &Arc<AuthEngine<SeededStore, SeededStore>>,
     storage: TokenStorageHandle,
 ) -> VirtualDom {
-    let handle = AuthEngineHandle::from(engine);
-    return VirtualDom::new_with_props(
-        ObserverRoot,
-        ObserverRootProps {
-            engine: handle,
-            token_storage: storage,
-        },
-    );
+    let auth = Auth::from_engine((**engine).clone()).with_token_storage(storage);
+    return VirtualDom::new_with_props(ObserverRoot, ObserverRootProps { auth });
 }
 
 fn context() -> AuthContext<TestUser> {
@@ -117,7 +109,7 @@ fn login_and_logout_fire_transitions() {
     clear();
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
-    let mut vdom: VirtualDom = events_dom(engine, storage);
+    let mut vdom: VirtualDom = events_dom(&engine, storage);
     mount(&mut vdom);
     let auth = context();
 
@@ -154,7 +146,7 @@ fn stable_states_fire_nothing_but_logout_fires_once() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
     let _wire = seed_valid_token(&storage, &engine);
-    let mut vdom: VirtualDom = events_dom(engine, storage);
+    let mut vdom: VirtualDom = events_dom(&engine, storage);
     mount(&mut vdom);
     let auth = context();
 

@@ -17,7 +17,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use common::TestUser;
-use dioxus_auth::prelude::{AuthEngine, AuthError, MemoryStore, Session, SessionId, SessionStore};
+use dioxus_auth::prelude::{
+    Auth, AuthEngine, AuthError, ErrorCode, MemoryStore, PasswordUserStore, Session, SessionId,
+    SessionStore,
+};
 use identity_hasher::IdentityHasher;
 use parking_lot::Mutex;
 
@@ -277,4 +280,58 @@ fn validation_without_idle_timeout_does_not_rewrite_the_session() {
         .unwrap();
     assert_eq!(stored.last_active_at_unix(), Some(1_000));
     assert_eq!(stored.expires_at_unix(), 1_200);
+}
+
+/// Concurrent sign-ups for one identifier must produce exactly one account:
+/// the atomic claim in the store, not a lookup-then-write in the facade, is
+/// what decides the winner.
+#[test]
+fn concurrent_sign_ups_claim_one_identifier_once() {
+    const RACERS: usize = 8;
+    const IDENTIFIER: &str = "race@example.com";
+
+    let auth =
+        Arc::new(Auth::<MemoryStore<TestUser>>::memory().expect("memory facade must construct"));
+    let barrier = Arc::new(std::sync::Barrier::new(RACERS));
+    let mut handles = Vec::new();
+    for index in 0..RACERS {
+        let id = index as u64 + 1;
+        let auth = Arc::clone(&auth);
+        let barrier = Arc::clone(&barrier);
+        handles.push(std::thread::spawn(move || {
+            barrier.wait();
+            return auth.sign_up_email(IDENTIFIER, "s3cret", TestUser::new(id, "racer"));
+        }));
+    }
+
+    let mut winners = Vec::new();
+    let mut losers = Vec::new();
+    for handle in handles {
+        match handle.join().expect("racer must not panic") {
+            Ok(entry) => winners.push(entry),
+            Err(error) => losers.push(error),
+        }
+    }
+
+    assert_eq!(
+        winners.len(),
+        1,
+        "exactly one sign-up may claim the identifier"
+    );
+    assert_eq!(losers.len(), RACERS - 1);
+    for error in &losers {
+        assert_eq!(error.code(), ErrorCode::InvalidCredentials);
+    }
+
+    let stored = auth
+        .engine()
+        .user_store()
+        .find_by_identifier(IDENTIFIER)
+        .expect("lookup must not fail")
+        .expect("the winner must be stored");
+    assert_eq!(
+        stored.0.id, winners[0].0.id,
+        "the stored account must be the winner's"
+    );
+    return;
 }

@@ -20,7 +20,7 @@ fn require_auth_redirects_guests_and_gates_the_subtree() {
     });
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
-    let mut vdom = router_dom(engine, storage, "/");
+    let mut vdom = router_dom(&engine, storage, "/");
     mount(&mut vdom);
 
     assert_eq!(current_route(), "/login");
@@ -45,7 +45,7 @@ fn redirect_if_authed_bounces_authenticated_users_off_login() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
     let _ = seed_valid_token(&storage, &engine);
-    let mut vdom = router_dom(engine, storage, "/login");
+    let mut vdom = router_dom(&engine, storage, "/login");
     mount(&mut vdom);
 
     assert_eq!(current_route(), "/");

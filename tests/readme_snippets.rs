@@ -36,12 +36,8 @@ impl AuthUser for AppUser {
         return self.id;
     }
 
-    fn display_name(&self) -> Option<String> {
-        return Some(self.name.clone());
-    }
-
-    fn clone_box(&self) -> Box<dyn AuthUser<Id = Self::Id>> {
-        return Box::new(self.clone());
+    fn email(&self) -> &str {
+        return &self.name;
     }
 }
 
@@ -133,22 +129,15 @@ fn symbol_drift_guards_for_ignored_snippets() {
 
     use dioxus::prelude::Element;
     use dioxus_auth::prelude::{
-        AuthEngineHandle, AuthProvider, AuthProviderProps, RedirectIfAuthed, RedirectIfAuthedProps,
-        RequireAuth, RequireAuthProps, RestoreVerdict, TokenStorageHandle, use_auth,
+        Auth, AuthProvider, AuthProviderProps, MemoryStore, RedirectIfAuthed,
+        RedirectIfAuthedProps, RequireAuth, RequireAuthProps, RestoreVerdict, use_auth,
     };
 
     // "Wire the Dioxus runtime": the provider component and its props.
-    fn provider_surface(
-        engine: AuthEngineHandle<AppUser>,
-        token_storage: TokenStorageHandle,
-        children: Element,
-    ) {
-        let _: fn(AuthProviderProps<AppUser>) -> Element = AuthProvider::<AppUser>;
-        let _ = AuthProviderProps::<AppUser> {
-            engine,
-            token_storage,
-            children,
-        };
+    fn provider_surface(auth: Auth<MemoryStore<AppUser>>, children: Element) {
+        let _: fn(AuthProviderProps<MemoryStore<AppUser>>) -> Element =
+            AuthProvider::<MemoryStore<AppUser>>;
+        let _ = AuthProviderProps::<MemoryStore<AppUser>> { auth, children };
     }
 
     // "Current user": the hook and the state accessors it teaches.

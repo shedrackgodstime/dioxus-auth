@@ -47,21 +47,28 @@ where
         return self.do_login(identifier, password, options);
     }
 
-    /// Applies the credential rate gate for one normalized identifier.
+    /// Applies the credential rate gate for one identifier.
     ///
-    /// Every credential verb passes through here so probing shares one
-    /// throttle window regardless of which verb carries the attack.
-    pub(crate) fn check_rate_limit(&self, limiter_key: &str) -> Result<(), AuthError> {
+    /// Normalizes here, once, so every verb shares one throttle window
+    /// regardless of spacing or case and no caller has to remember to normalize.
+    pub(crate) fn check_rate_limit(&self, identifier: &str) -> Result<(), AuthError> {
         if let Some(limiter) = &self.rate_limiter {
-            return limiter.check(limiter_key);
+            return limiter.check(&Self::normalize_identifier(identifier));
         }
         return Ok(());
     }
 
-    /// Records a failed credential attempt for one normalized identifier.
-    pub(crate) fn record_rate_limit_failure(&self, limiter_key: &str) {
+    /// Records a failed credential attempt for one identifier.
+    pub(crate) fn record_rate_limit_failure(&self, identifier: &str) {
         if let Some(limiter) = &self.rate_limiter {
-            limiter.record_attempt(limiter_key);
+            limiter.record_attempt(&Self::normalize_identifier(identifier));
+        }
+    }
+
+    /// Clears the throttle budget for one identifier after proven knowledge.
+    pub(crate) fn record_rate_limit_success(&self, identifier: &str) {
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.record_success(&Self::normalize_identifier(identifier));
         }
     }
 
@@ -78,12 +85,22 @@ where
         identifier: &str,
         password: &str,
     ) -> Result<U::User, AuthError> {
-        let limiter_key = identifier.trim().to_lowercase();
-        match self.check_rate_limit(&limiter_key) {
+        match self.check_rate_limit(identifier) {
             Ok(()) => {}
             Err(e) => return Err(e),
         }
-        return self.authenticate_user(identifier, password, &limiter_key);
+        return self.authenticate_user(identifier, password);
+    }
+
+    /// Canonical identifier key.
+    ///
+    /// Trimmed and lowercased here, once, so spacing and case are display
+    /// variants of one throttle budget and one credential row rather than
+    /// separate keys. Every credential verb funnels its store and limiter
+    /// calls through this; stores compare byte-for-byte, never folding case
+    /// or whitespace themselves.
+    pub(crate) fn normalize_identifier(identifier: &str) -> String {
+        return identifier.trim().to_lowercase();
     }
 
     pub(crate) fn do_login(
@@ -92,8 +109,6 @@ where
         password: &str,
         options: LoginOptions<'_>,
     ) -> Result<(U::User, Session<U::Id>), AuthError> {
-        let limiter_key = identifier.trim().to_lowercase();
-
         let user = match self.verify_password(identifier, password) {
             Ok(user) => user,
             Err(e) => return Err(e),
@@ -128,23 +143,26 @@ where
         );
 
         self.fire_on_sign_in(&user);
-        if let Some(limiter) = &self.rate_limiter {
-            limiter.record_success(&limiter_key);
-        }
+        self.record_rate_limit_success(identifier);
         return Ok((user, wire_session));
+    }
+
+    /// Runs one verifier pass against the dummy hash.
+    ///
+    /// Credential paths that must not reveal identifier state burn the same
+    /// verifier work the unknown-identifier miss path runs; the outcome is
+    /// discarded and the caller returns `InvalidCredentials` either way.
+    pub(crate) fn dummy_verify(&self, password: &str) {
+        let _burned = self.hasher.verify(password, &self.dummy_hash).is_ok();
     }
 
     /// Resolves and verifies the user for an identifier/password pair.
     ///
     /// Constant-time defense: unknown-user login runs one Argon2 verification
     /// against the dummy hash, so miss and hit take indistinguishable time.
-    fn authenticate_user(
-        &self,
-        identifier: &str,
-        password: &str,
-        limiter_key: &str,
-    ) -> Result<U::User, AuthError> {
-        let user_entry = match self.users.find_by_identifier(identifier) {
+    fn authenticate_user(&self, identifier: &str, password: &str) -> Result<U::User, AuthError> {
+        let normalized = Self::normalize_identifier(identifier);
+        let user_entry = match self.users.find_by_identifier(&normalized) {
             Ok(entry) => entry,
             Err(e) => return Err(e),
         };
@@ -152,11 +170,8 @@ where
         let (user, password_hash) = if let Some(entry) = user_entry {
             entry
         } else {
-            self.record_rate_limit_failure(limiter_key);
-            // reason: the dummy verification exists only to burn verifier time
-            // on unknown identifiers; its outcome is irrelevant, so both arms
-            // fall through to `InvalidCredentials` without branching on it.
-            let _burned = self.hasher.verify(password, &self.dummy_hash).is_ok();
+            self.record_rate_limit_failure(&normalized);
+            self.dummy_verify(password);
             return Err(AuthError::InvalidCredentials);
         };
 
@@ -172,7 +187,7 @@ where
             .verify(password, &password_hash)
             .unwrap_or(false);
         if !is_valid {
-            self.record_rate_limit_failure(limiter_key);
+            self.record_rate_limit_failure(&normalized);
             return Err(AuthError::InvalidCredentials);
         }
         return Ok(user);
@@ -231,18 +246,5 @@ where
             session = session.with_user_agent(user_agent);
         }
         return session;
-    }
-
-    /// Whether an identifier (e.g. email or username) exists in the store.
-    ///
-    /// # Errors
-    /// Returns a store error if the lookup fails.
-    #[must_use = "the existence check must be used"]
-    pub fn identifier_exists(&self, identifier: &str) -> Result<bool, AuthError> {
-        match self.users.find_by_identifier(identifier) {
-            Ok(Some(_)) => return Ok(true),
-            Ok(None) => return Ok(false),
-            Err(e) => return Err(e),
-        }
     }
 }

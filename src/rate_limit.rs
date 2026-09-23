@@ -9,6 +9,11 @@ use parking_lot::RwLock;
 use crate::error::AuthError;
 
 /// Capability for rate limiting authentication attempts.
+///
+/// Keys are pre-normalized by the engine: every credential path funnels through
+/// the gate helpers, which trim and lowercase the identifier once, so an
+/// implementation receives one canonical key per identifier and must not
+/// normalize again.
 pub trait RateLimiter: std::fmt::Debug + Send + Sync {
     /// Checks whether the identifier is currently rate-limited.
     ///
@@ -31,6 +36,18 @@ pub trait RateLimiter: std::fmt::Debug + Send + Sync {
 /// Default rate-limit window: 15 minutes, in seconds.
 const DEFAULT_WINDOW_SECS: u64 = 15 * 60;
 
+/// Default ceiling on simultaneously tracked identifiers.
+const DEFAULT_MAX_TRACKED_IDENTIFIERS: usize = 10_000;
+
+/// Drops attempts that have lapsed out of the window.
+fn prune_expired(timestamps: &mut Vec<SystemTime>, now: SystemTime, window: Duration) {
+    timestamps.retain(|attempt| {
+        return now
+            .duration_since(*attempt)
+            .is_ok_and(|elapsed| return elapsed < window);
+    });
+}
+
 /// Wall-clock source producing the current instant.
 pub type RateLimiterClock = Arc<dyn Fn() -> SystemTime + Send + Sync>;
 
@@ -45,6 +62,7 @@ pub type RateLimiterClock = Arc<dyn Fn() -> SystemTime + Send + Sync>;
 pub struct InMemoryRateLimiter {
     max_attempts: usize,
     window: Duration,
+    max_tracked: usize,
     attempts: RwLock<BTreeMap<String, Vec<SystemTime>>>,
     now: RateLimiterClock,
 }
@@ -57,6 +75,7 @@ impl std::fmt::Debug for InMemoryRateLimiter {
             .debug_struct("InMemoryRateLimiter")
             .field("max_attempts", &self.max_attempts)
             .field("window", &self.window)
+            .field("max_tracked", &self.max_tracked)
             .finish_non_exhaustive();
     }
 }
@@ -91,24 +110,79 @@ impl InMemoryRateLimiter {
         return Self {
             max_attempts,
             window,
+            max_tracked: DEFAULT_MAX_TRACKED_IDENTIFIERS,
             attempts: RwLock::new(BTreeMap::new()),
             now,
         };
+    }
+
+    /// Sets the ceiling on simultaneously tracked identifiers.
+    ///
+    /// A lapsed-identifier sweep runs when a new key needs room; if the sweep
+    /// frees nothing, the least recently active entry is evicted. Bounding the
+    /// map is what keeps a flood of distinct identifiers from growing it
+    /// without limit. Values below one are treated as one.
+    #[must_use]
+    pub fn with_max_tracked(mut self, max_tracked: usize) -> Self {
+        self.max_tracked = max_tracked.max(1);
+        return self;
+    }
+
+    /// Number of identifiers currently tracked.
+    ///
+    /// Exposed for capacity monitoring: the map is bounded by
+    /// [`with_max_tracked`](Self::with_max_tracked), and entries are reclaimed
+    /// once their attempt window lapses.
+    #[must_use]
+    pub fn tracked_identifiers(&self) -> usize {
+        return self.attempts.read().len();
+    }
+
+    /// Makes room for a new identifier when the map is at its ceiling.
+    fn make_room(
+        &self,
+        attempts: &mut BTreeMap<String, Vec<SystemTime>>,
+        identifier: &str,
+        now: SystemTime,
+    ) {
+        if attempts.contains_key(identifier) || attempts.len() < self.max_tracked {
+            return;
+        }
+        attempts.retain(|_, timestamps| {
+            prune_expired(timestamps, now, self.window);
+            return !timestamps.is_empty();
+        });
+        if attempts.len() < self.max_tracked {
+            return;
+        }
+        let victim = attempts
+            .iter()
+            .filter_map(|(key, timestamps)| {
+                return timestamps.last().map(|last| return (key.clone(), *last));
+            })
+            .min_by_key(|(_, last)| return *last)
+            .map(|(key, _)| return key);
+        if let Some(victim) = victim {
+            attempts.remove(&victim);
+        }
     }
 }
 
 impl RateLimiter for InMemoryRateLimiter {
     fn check(&self, identifier: &str) -> Result<(), AuthError> {
         let now = (self.now)();
-        let limited = {
-            let mut attempts = self.attempts.write();
-            attempts.get_mut(identifier).is_some_and(|timestamps| {
-                timestamps.retain(|t| {
-                    return now.duration_since(*t).is_ok_and(|d| return d < self.window);
-                });
-                return timestamps.len() >= self.max_attempts;
-            })
-        };
+        let mut attempts = self.attempts.write();
+        let limited = attempts.get_mut(identifier).is_some_and(|timestamps| {
+            prune_expired(timestamps, now, self.window);
+            return timestamps.len() >= self.max_attempts;
+        });
+        let lapsed = attempts
+            .get(identifier)
+            .is_some_and(|timestamps| return timestamps.is_empty());
+        drop(attempts);
+        if lapsed {
+            self.attempts.write().remove(identifier);
+        }
         if limited {
             return Err(AuthError::RateLimited);
         }
@@ -118,10 +192,15 @@ impl RateLimiter for InMemoryRateLimiter {
     fn record_attempt(&self, identifier: &str) {
         let now = (self.now)();
         let mut attempts = self.attempts.write();
-        attempts
-            .entry(identifier.to_string())
-            .or_default()
-            .push(now);
+        self.make_room(&mut attempts, identifier, now);
+        let timestamps = attempts.entry(identifier.to_string()).or_default();
+        prune_expired(timestamps, now, self.window);
+        timestamps.push(now);
+        if timestamps.len() > self.max_attempts {
+            let excess = timestamps.len() - self.max_attempts;
+            timestamps.drain(..excess);
+        }
+        drop(attempts);
     }
 
     fn record_success(&self, identifier: &str) {

@@ -1,12 +1,12 @@
-//! Email+password method verbs (M1).
+//! Email + password verbs on the [`Auth`](crate::auth::Auth) facade.
 //!
-//! Inherent [`Auth`](crate::auth::Auth) impls, one per verb. Server routes and
-//! client twins consume these same verbs, so the method stays one coherent
-//! unit. Slice 1e renames them to their final `sign_*_email` forms; until then
-//! they mirror engine vocabulary. The request/reset pair needs a delivery
-//! channel, so it rides Gate 2 with `Mailer`, not here.
+//! Inherent impls, one per verb: `sign_up_email`, `sign_in_email`,
+//! `sign_out`, and `change_password`. Server routes and client twins call
+//! these same verbs. Password reset arrives with the mailer seam, which owns
+//! the delivery channel.
 
 use crate::auth::Auth;
+use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::status::SessionId;
 use crate::store::{MemoryStore, PasswordUserStore, SessionStore, UserStore};
@@ -31,14 +31,13 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn display_name(&self) -> Option<String> { return Some(self.name.clone()); }
-    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(self.clone()); }
+    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
-    /// auth.sign_up("alice", "old-secret", User { id: 1, name: String::from("alice") })?;
+    /// auth.sign_up_email("alice", "old-secret", User { id: 1, name: String::from("alice") })?;
     /// auth.change_password("alice", "old-secret", "new-secret")?;
-    /// let (user, _) = auth.sign_in("alice", "new-secret")?;
+    /// let (user, _) = auth.sign_in_email("alice", "new-secret")?;
     /// assert_eq!(user.id(), 1);
     /// # return Ok(());
     /// # }
@@ -70,13 +69,13 @@ where
             Ok(()) => {}
             Err(error) => return Err(error),
         }
-        if let Some(limiter) = &self.engine.rate_limiter {
-            limiter.record_success(&identifier.trim().to_lowercase());
-        }
+        self.engine.record_rate_limit_success(identifier);
         return Ok(());
     }
 
-    /// Signs in with an identifier and password.
+    /// Signs in with an identifier and password (`sign_in_email` is the M1
+    /// email-password verb; the bare `sign_in` name is reserved for future
+    /// stringly method selection that §1.3 forbids — use this form).
     ///
     /// Returns the user with the raw wire session id on success. Unknown
     /// identifiers and wrong passwords share `InvalidCredentials`.
@@ -90,13 +89,12 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn display_name(&self) -> Option<String> { return Some(self.name.clone()); }
-    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(self.clone()); }
+    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
-    /// auth.sign_up("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
-    /// let (user, _) = auth.sign_in("alice", "s3cret")?;
+    /// auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
+    /// let (user, _) = auth.sign_in_email("alice", "s3cret")?;
     /// assert_eq!(user.id(), 1);
     /// # return Ok(());
     /// # }
@@ -106,7 +104,7 @@ where
     /// Returns `InvalidCredentials` for bad credentials, `RateLimited` when
     /// limited, or a store or hasher error.
     #[must_use = "the authenticated user and session must be used"]
-    pub fn sign_in(
+    pub fn sign_in_email(
         &self,
         identifier: &str,
         password: &str,
@@ -131,12 +129,11 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn display_name(&self) -> Option<String> { return Some(self.name.clone()); }
-    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(self.clone()); }
+    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
-    /// let (_, session) = auth.sign_up("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
+    /// let (_, session) = auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// auth.sign_out(&session)?;
     /// # return Ok(());
     /// # }
@@ -157,11 +154,9 @@ where
     /// Signs up by provisioning credentials, then signing in.
     ///
     /// The caller builds the user; the store provisions the credential row.
-    /// Taken identifiers and unknown identifiers in [`Auth::sign_in`] return
-    /// the identical `InvalidCredentials` after the same throttle-and-burn
-    /// sequence — no existence oracle, and probing any identifier counts
-    /// toward the same rate gate as login. MemoryStore-only until the 1e
-    /// sweep adds the general provision seam.
+    /// Taken and free identifiers cost the same and fail with the same
+    /// `InvalidCredentials`, so identifier state is not observable. Probing
+    /// any identifier counts toward the same rate gate as sign-in.
     ///
     /// # Examples
     ///
@@ -172,12 +167,11 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn display_name(&self) -> Option<String> { return Some(self.name.clone()); }
-    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(self.clone()); }
+    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
     /// let auth = Auth::<MemoryStore<User>>::memory()?;
-    /// let (user, _) = auth.sign_up("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
+    /// let (user, _) = auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
     /// assert_eq!(user.id(), 1);
     /// # return Ok(());
     /// # }
@@ -188,37 +182,40 @@ where
     /// `InvalidCredentials` if the identifier is taken, or a store or hasher
     /// error.
     #[must_use = "the provisioned user and session must be used"]
-    pub fn sign_up(
+    pub fn sign_up_email(
         &self,
         identifier: &str,
         password: &str,
         user: User,
     ) -> Result<(User, SessionId), AuthError> {
-        let limiter_key = identifier.trim().to_lowercase();
-        match self.engine.check_rate_limit(&limiter_key) {
+        match self.engine.check_rate_limit(identifier) {
             Ok(()) => {}
             Err(error) => return Err(error),
-        }
-        let entry = match self.engine.user_store().find_by_identifier(identifier) {
-            Ok(entry) => entry,
-            Err(error) => return Err(error),
-        };
-        if entry.is_some() {
-            // reason: the taken path mirrors login's miss path exactly — one
-            // recorded attempt plus one burned verifier run — so taken and
-            // free identifiers are indistinguishable in cost, outcome, and
-            // throttle accounting.
-            self.engine.record_rate_limit_failure(&limiter_key);
-            let _burned = self.engine.hasher().hash(password).is_ok();
-            return Err(AuthError::InvalidCredentials);
         }
         let hash = match self.engine.hasher().hash(password) {
             Ok(hash) => hash,
             Err(error) => return Err(error),
         };
-        self.engine
-            .user_store()
-            .insert_user_with_password(user, identifier, hash);
-        return self.sign_in(identifier, password);
+        let normalized =
+            AuthEngine::<MemoryStore<User>, MemoryStore<User>>::normalize_identifier(identifier);
+        let provisioned =
+            match self
+                .engine
+                .user_store()
+                .provision_user_with_password(user, &normalized, &hash)
+            {
+                Ok(provisioned) => provisioned,
+                Err(error) => return Err(error),
+            };
+        if !provisioned {
+            // The identifier or id row is taken. The hash above is the work
+            // the free path spends before storage; one dummy verifier pass
+            // matches the work the free path spends after it, so user state
+            // stays unobservable through timing as well as through the error.
+            self.engine.record_rate_limit_failure(&normalized);
+            self.engine.dummy_verify(password);
+            return Err(AuthError::InvalidCredentials);
+        }
+        return self.sign_in_email(identifier, password);
     }
 }

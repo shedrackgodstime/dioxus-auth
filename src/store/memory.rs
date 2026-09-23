@@ -83,6 +83,11 @@ impl<User: AuthUser> MemoryStore<User> {
     }
 
     /// Inserts or updates a user with login identifier and hashed password.
+    ///
+    /// Replaces the credential of an existing identifier. For registration,
+    /// where a taken identifier must be rejected without disturbing the
+    /// existing account, use
+    /// [`provision_user_with_password`](PasswordUserStore::provision_user_with_password).
     pub fn insert_user_with_password(
         &self,
         user: User,
@@ -155,6 +160,36 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             }
         }
         return Ok(());
+    }
+
+    #[allow(clippy::significant_drop_tightening)]
+    fn provision_user_with_password(
+        &self,
+        user: Self::User,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError> {
+        // One guard order, both tables: `credentials` before `users`, held
+        // across the identifier check, the id check, and both pushes, so the
+        // claim is one indivisible step. A racing provisioner blocks on the
+        // guard, then observes the identifier or the id row as taken. The
+        // guards must span the returns — that span is the indivisibility this
+        // method exists to provide.
+        let mut credentials = self.credentials.write();
+        if credentials
+            .iter()
+            .any(|(ident, _, _)| return ident == identifier)
+        {
+            return Ok(false);
+        }
+        let mut users = self.users.write();
+        let id = user.id();
+        if users.iter().any(|existing| return existing.id() == id) {
+            return Ok(false);
+        }
+        credentials.push((identifier.to_string(), id, password_hash.to_string()));
+        users.push(user);
+        return Ok(true);
     }
 }
 

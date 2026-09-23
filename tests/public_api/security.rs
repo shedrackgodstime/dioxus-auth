@@ -127,11 +127,11 @@ fn rate_limiter_default_tracks_ten_attempts_per_15_minutes() {
     assert!(limiter.check("carol").is_ok());
 }
 
-/// Window expiry must be driven by the injected clock, deterministically and
-/// without sleeping: attempts inside the window count, attempts older than the
-/// window are pruned on the next check.
 #[test]
 fn rate_limiter_window_expiry_follows_the_injected_clock() {
+    // Window expiry is driven by the injected clock without sleeping: attempts
+    // inside the window count, attempts older than the window prune on the
+    // next check.
     let now = Arc::new(parking_lot::Mutex::new(
         SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000),
     ));
@@ -150,4 +150,31 @@ fn rate_limiter_window_expiry_follows_the_injected_clock() {
     assert!(limiter.check("dana").is_ok());
     limiter.record_attempt("dana");
     assert!(limiter.check("dana").is_ok());
+    return;
+}
+
+#[test]
+fn rate_limiter_evicts_stale_entries_at_the_tracking_ceiling() {
+    // A flood of distinct identifiers must not grow the map without limit:
+    // once the ceiling is reached, lapsed entries are reclaimed and the fresh
+    // arrival is admitted without dropping live budgets.
+    let now = Arc::new(parking_lot::Mutex::new(
+        SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000),
+    ));
+    let clock: RateLimiterClock = {
+        let now = Arc::clone(&now);
+        Arc::new(move || return *now.lock())
+    };
+    let limiter =
+        InMemoryRateLimiter::with_clock(1, Duration::from_secs(60), clock).with_max_tracked(3);
+    for index in 0..3 {
+        limiter.record_attempt(&format!("stale-{index}"));
+    }
+    assert_eq!(limiter.tracked_identifiers(), 3);
+    *now.lock() = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000 + 120);
+    limiter.record_attempt("newcomer");
+    assert_eq!(limiter.tracked_identifiers(), 1);
+    assert!(limiter.check("stale-0").is_ok());
+    assert_eq!(limiter.check("newcomer"), Err(AuthError::RateLimited));
+    return;
 }

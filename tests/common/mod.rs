@@ -23,16 +23,12 @@ impl AuthUser for TestUser {
         return self.id;
     }
 
-    fn display_name(&self) -> Option<String> {
-        return Some(self.name.clone());
+    fn email(&self) -> &str {
+        return &self.name;
     }
 
     fn session_auth_hash(&self) -> Option<&str> {
         return None;
-    }
-
-    fn clone_box(&self) -> Box<dyn AuthUser<Id = Self::Id>> {
-        return Box::new(self.clone());
     }
 }
 

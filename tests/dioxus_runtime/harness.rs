@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use dioxus_auth::prelude::{
-    AuthContext, AuthEngine, AuthEngineHandle, MemoryStore, SessionId, TokenStorageHandle,
+    Auth, AuthContext, AuthEngine, AuthEngineHandle, MemoryStore, SessionId, TokenStorageHandle,
 };
 use dioxus_core::VirtualDom;
 use dioxus_history::{History, MemoryHistory};
@@ -76,11 +76,12 @@ pub fn context() -> AuthContext<TestUser> {
 }
 
 pub fn state_dom(
-    engine: Arc<AuthEngine<SeededStore, SeededStore>>,
+    engine: &Arc<AuthEngine<SeededStore, SeededStore>>,
     storage: TokenStorageHandle,
 ) -> VirtualDom {
-    let handle = AuthEngineHandle::from(engine);
-    return erased_state_dom(handle, storage);
+    let auth = Auth::from_engine((**engine).clone()).with_token_storage(storage);
+    let props = StateRootProps { auth };
+    return VirtualDom::new_with_props(StateRoot, props);
 }
 
 /// Builds the state tree over a type-erased engine, for tests that substitute
@@ -89,26 +90,20 @@ pub fn erased_state_dom(
     engine: AuthEngineHandle<TestUser>,
     storage: TokenStorageHandle,
 ) -> VirtualDom {
-    let props = StateRootProps {
-        engine,
-        token_storage: storage,
-    };
+    let auth = Auth::from_erased(engine).with_token_storage(storage);
+    let props = StateRootProps { auth };
     return VirtualDom::new_with_props(StateRoot, props);
 }
 
 pub fn router_dom(
-    engine: Arc<AuthEngine<SeededStore, SeededStore>>,
+    engine: &Arc<AuthEngine<SeededStore, SeededStore>>,
     storage: TokenStorageHandle,
     initial_route: &'static str,
 ) -> VirtualDom {
     let history = Rc::new(MemoryHistory::with_initial_path(initial_route));
     HISTORY_SLOT.with(|slot| *slot.borrow_mut() = Some(history.clone()));
-    let handle = AuthEngineHandle::from(engine);
-    let props = RouterRootProps {
-        history,
-        engine: handle,
-        token_storage: storage,
-    };
+    let auth = Auth::from_engine((**engine).clone()).with_token_storage(storage);
+    let props = RouterRootProps { history, auth };
     return VirtualDom::new_with_props(RouterRoot, props);
 }
 

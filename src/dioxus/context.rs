@@ -200,9 +200,10 @@ impl<T: AuthUser + Clone> AuthContext<T> {
     /// This is the retry half of the N4 semantics: an unknown outcome left
     /// the tree rendering and the session question open, so a component (or
     /// a timer) may ask again. A definitive rejection settles to guest here
-    /// exactly as in [`AuthContext::restore`].
+    /// exactly as in [`AuthContext::restore`]. Dioxus vocabulary, so `restart`
+    /// is the primary name (the plan pins it over React's `refetch`).
     #[must_use = "the retry verdict must be handled"]
-    pub fn refetch(&self) -> RestoreVerdict {
+    pub fn restart(&self) -> RestoreVerdict {
         return self.restore();
     }
 

@@ -22,11 +22,6 @@ pub struct GuardRedirect {
     pub navigator: Navigator,
 }
 
-/// Whether two guards render the same children.
-pub fn children_agree(left: &Element, right: &Element) -> bool {
-    return left == right;
-}
-
 /// Shared redirect-or-render body for the route guards.
 ///
 /// `at_home` is true when the current state matches the rendered subtree:

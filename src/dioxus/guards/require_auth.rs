@@ -1,45 +1,14 @@
 //! Authentication gate: renders children only while authenticated.
 
-use std::fmt;
 use std::marker::PhantomData;
 
-use ::dioxus::prelude::{Element, Props, use_signal};
+use ::dioxus::prelude::{Element, Props, component, rsx, use_signal};
 use ::dioxus_router::use_navigator;
 
 use crate::dioxus::hooks::use_auth;
 use crate::user::AuthUser;
 
-use super::{GuardRedirect, children_agree, guard_body, no_redirect_issued};
-
-/// Props for [`RequireAuth`].
-///
-/// Fields are public because the Dioxus `Props` derive requires it. `Debug`
-/// is redacted: rendering children would dump the subtree on every diff log.
-#[derive(Clone, Props)]
-pub struct RequireAuthProps<T: AuthUser + Clone> {
-    /// Route to navigate to while the context is not authenticated.
-    pub redirect_to: String,
-    /// Children rendered only while authenticated.
-    pub children: Element,
-    /// Type marker completing the generic; never set by callers.
-    #[props(default)]
-    pub generic: PhantomData<fn() -> T>,
-}
-
-impl<T: AuthUser + Clone> fmt::Debug for RequireAuthProps<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return f.write_str("RequireAuthProps(..)");
-    }
-}
-
-impl<T: AuthUser + Clone> PartialEq for RequireAuthProps<T> {
-    fn eq(&self, other: &Self) -> bool {
-        // reason: the generic marker carries no rendered state, so equality
-        // only compares the redirect target and children.
-        return self.redirect_to == other.redirect_to
-            && children_agree(&self.children, &other.children);
-    }
-}
+use super::{GuardRedirect, guard_body, no_redirect_issued};
 
 /// Gates a subtree behind authentication.
 ///
@@ -51,25 +20,33 @@ impl<T: AuthUser + Clone> PartialEq for RequireAuthProps<T> {
 /// # Panics
 /// Panics when no [`Router`](dioxus_router::Router) encloses this component or
 /// no [`AuthProvider`](crate::dioxus::AuthProvider) provides the context.
-#[allow(non_snake_case)]
-// reason: dioxus components follow PascalCase naming, which the `non_snake_case`
-// lint otherwise rejects.
-// reason: clippy's `missing_errors_doc` cannot apply to `Element`, which is not
-// a `Result`; the attributes the lint inspects are only reachable through the
-// component machinery, so it is masked here.
-#[allow(clippy::missing_errors_doc)]
-pub fn RequireAuth<T>(props: RequireAuthProps<T>) -> Element
+#[component]
+pub fn RequireAuth<T>(
+    redirect_to: String,
+    children: Element,
+    #[props(default)] generic: PhantomData<fn() -> T>,
+) -> Element
 where
     T: AuthUser + Clone,
 {
     let auth = use_auth::<T>();
     let navigator = use_navigator();
     let redirected = use_signal(no_redirect_issued);
+
+    // During Loading the identity has not settled yet — render nothing and
+    // issue no navigation. The provider gates its initial restore on the same
+    // condition, so this branch is only taken before the first settle; once
+    // the status becomes Authenticated or Guest the guard re-evaluates and
+    // either renders children or issues at most one redirect.
+    if auth.is_loading() {
+        return rsx!();
+    }
+
     return guard_body(
         auth.is_authenticated(),
-        props.children,
+        children,
         GuardRedirect {
-            to: props.redirect_to,
+            to: redirect_to,
             issued: redirected,
             navigator,
         },

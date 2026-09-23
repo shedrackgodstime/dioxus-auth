@@ -3,10 +3,11 @@
 use std::fmt;
 use std::sync::Arc;
 
+use crate::auth::Auth;
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::status::SessionId;
-use crate::store::{PasswordUserStore, SessionStore};
+use crate::store::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
 
 /// Erased authorization operations used by the runtime layer.
@@ -107,5 +108,24 @@ where
 {
     fn from(engine: Arc<AuthEngine<U, S>>) -> Self {
         return Self(engine);
+    }
+}
+
+/// Bridges the `Auth` facade to the engine handle that [`AuthProvider`] consumes.
+///
+/// Before this impl, a Door-1 caller had to write
+/// `AuthEngineHandle::from(Arc::clone(auth.engine()))` — three concepts
+/// (`Arc`, `AuthEngineHandle`, erasure) that the first-page budget forbids.
+/// `Auth::into()` keeps that bridge to a single word.
+impl<D> From<Auth<D>> for AuthEngineHandle<D::User>
+where
+    D: PasswordUserStore + SessionStore<Id = <D as UserStore>::Id> + 'static,
+{
+    fn from(auth: Auth<D>) -> Self {
+        // Coerce the concrete engine Arc to the erased trait-object Arc,
+        // then clone the erased handle (Arc<AuthEngine> does not coerce when
+        // passed directly into Arc::clone's expected type).
+        let erased: Arc<dyn AuthOperations<D::User>> = auth.engine;
+        return Self(erased);
     }
 }

@@ -7,9 +7,7 @@
 use std::rc::Rc;
 
 use dioxus::prelude::{Callback, Element, Props, VNode, rsx};
-use dioxus_auth::prelude::{
-    AuthEngineHandle, AuthProvider, RedirectIfAuthed, RequireAuth, TokenStorageHandle, use_auth,
-};
+use dioxus_auth::prelude::{AuthProvider, RedirectIfAuthed, RequireAuth, use_auth};
 use dioxus_history::History;
 use dioxus_router::{
     Routable,
@@ -17,7 +15,7 @@ use dioxus_router::{
 };
 
 use super::common::TestUser;
-use super::harness::{CONTEXT_SLOT, PROBE_MOUNTED};
+use super::harness::{CONTEXT_SLOT, PROBE_MOUNTED, SeededStore};
 
 /// Probes the provided auth context into the context slot and records its
 /// mount.
@@ -104,17 +102,15 @@ fn Login(_: LoginProps) -> Element {
 /// Root for the state-only tests: provider plus a probe, no router.
 #[derive(Clone)]
 pub struct StateRootProps {
-    pub engine: AuthEngineHandle<TestUser>,
-    pub token_storage: TokenStorageHandle,
+    pub auth: dioxus_auth::prelude::Auth<SeededStore>,
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
 #[allow(non_snake_case)]
 pub fn StateRoot(props: StateRootProps) -> Element {
     return rsx! {
-        AuthProvider::<TestUser> {
-            engine: props.engine,
-            token_storage: props.token_storage,
+        AuthProvider::<SeededStore> {
+            auth: props.auth,
             Probe {}
         }
     };
@@ -125,8 +121,7 @@ pub fn StateRoot(props: StateRootProps) -> Element {
 #[derive(Clone)]
 pub struct RouterRootProps {
     pub history: Rc<dyn History>,
-    pub engine: AuthEngineHandle<TestUser>,
-    pub token_storage: TokenStorageHandle,
+    pub auth: dioxus_auth::prelude::Auth<SeededStore>,
 }
 
 // reason: Dioxus components are PascalCase fns by framework convention.
@@ -139,9 +134,8 @@ pub fn RouterRoot(props: RouterRootProps) -> Element {
     return rsx! {
         HistoryProvider {
             history: history_callback,
-            AuthProvider::<TestUser> {
-                engine: props.engine,
-                token_storage: props.token_storage,
+            AuthProvider::<SeededStore> {
+                auth: props.auth,
                 ContextCapture {},
                 Router::<Route> {}
             }

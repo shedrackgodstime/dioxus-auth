@@ -147,19 +147,3 @@ fn builder_ttl_and_idle_timeout_flow_through_to_getters() {
     assert_eq!(engine.session_ttl_secs(), 30);
     assert_eq!(engine.idle_timeout_secs(), Some(10));
 }
-
-#[test]
-fn identifier_exists_returns_true_for_registered_account() {
-    let engine = seeded_engine();
-    let exists = engine.identifier_exists("alice").unwrap();
-
-    assert!(exists);
-}
-
-#[test]
-fn identifier_exists_returns_false_for_unknown_identifier() {
-    let engine = seeded_engine();
-    let exists = engine.identifier_exists("ghost").unwrap();
-
-    assert!(!exists);
-}

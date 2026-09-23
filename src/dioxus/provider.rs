@@ -1,72 +1,48 @@
 //! Root auth provider component.
 
-use std::fmt;
+use std::sync::Arc;
 
-use ::dioxus::prelude::{Element, Props, rsx, use_context_provider, use_signal};
+use ::dioxus::prelude::{Element, Props, component, rsx, use_context_provider, use_signal};
 
+use crate::auth::Auth;
 use crate::error::ErrorCode;
 use crate::status::{AuthStatus, SessionId};
-use crate::user::AuthUser;
+use crate::store::{PasswordUserStore, SessionStore, UserStore};
+use crate::token::MemoryTokenStorage;
 
 use super::context::{AuthContext, AuthSignals};
-use super::guards::children_agree;
 use super::operations::AuthEngineHandle;
 use super::storage::TokenStorageHandle;
 
-/// Props for [`AuthProvider`].
-///
-/// Fields are public because the Dioxus `Props` derive requires it. `Debug`
-/// is redacted: rendering children would dump the subtree on every diff log.
-#[derive(Clone, Props)]
-pub struct AuthProviderProps<T: AuthUser + Clone> {
-    /// Type-erased authentication engine supplied by the application.
-    pub engine: AuthEngineHandle<T>,
-    /// Client token storage consumed on mount and on login/logout.
-    pub token_storage: TokenStorageHandle,
-    /// Application tree rendered below the auth context.
-    pub children: Element,
-}
-
-impl<T: AuthUser + Clone> fmt::Debug for AuthProviderProps<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return f.write_str("AuthProviderProps(..)");
-    }
-}
-
-impl<T: AuthUser + Clone> PartialEq for AuthProviderProps<T> {
-    fn eq(&self, other: &Self) -> bool {
-        let engine_agrees = self.engine == other.engine;
-        let storage_agrees = self.token_storage == other.token_storage;
-        let kids_agree = children_agree(&self.children, &other.children);
-        return engine_agrees && storage_agrees && kids_agree;
-    }
-}
-
 /// Provides authentication state to the subtree.
 ///
-/// The provider restores the identity from the token storage on its first
-/// render, and hands a reactive [`AuthContext`] to every descendant. Mount a
+/// Mount once above the router with the single [`Auth`] entry point; storage
+/// and restore wiring are the provider's responsibility, so the page-one
+/// budget never names a handle. The provider restores the identity from a
+/// default in-memory token storage on its first render, and hands a reactive
+/// [`AuthContext`] to every descendant. Mount a
 /// [`Router`](dioxus_router::Router) outside (or above) it so route guards can
 /// navigate.
-#[allow(non_snake_case)]
-// reason: dioxus components follow PascalCase naming, which the
-// `non_snake_case` lint otherwise rejects.
-// reason: clippy's `missing_errors_doc` cannot apply to `Element`, which is not
-// a `Result`; the attributes the lint inspects are only reachable through the
-// component machinery, so it is masked here.
-#[allow(clippy::missing_errors_doc)]
-pub fn AuthProvider<T>(props: AuthProviderProps<T>) -> Element
+///
+/// # Panics
+/// Panics when the default Argon2id hasher cannot pre-compute the
+/// timing-defense dummy hash.
+#[component]
+pub fn AuthProvider<D>(auth: Auth<D>, children: Element) -> Element
 where
-    T: AuthUser + Clone,
+    D: PasswordUserStore + SessionStore<Id = <D as UserStore>::Id> + 'static,
 {
-    let AuthProviderProps {
-        engine,
-        token_storage,
-        children,
-    } = props;
+    let engine: AuthEngineHandle<D::User> = auth
+        .erased_engine
+        .clone()
+        .unwrap_or_else(|| return AuthEngineHandle::from(Arc::clone(auth.engine())));
+    let token_storage = auth
+        .token_storage
+        .take()
+        .unwrap_or_else(|| return TokenStorageHandle::new(MemoryTokenStorage::new()));
 
     let status = use_signal(|| {
-        return AuthStatus::<T>::Loading;
+        return AuthStatus::<D::User>::Loading;
     });
     let token = use_signal(|| {
         return None::<SessionId>;
@@ -95,7 +71,7 @@ where
         // definitive rejection demotes to guest, while an unknown outcome
         // (storage failure, rate limit, transport error) leaves the tree in
         // Loading with the failure recorded, so `session_state()` reports
-        // `Unavailable` and `refetch()` can be used to ask again.
+        // `Unavailable` and `restart()` can be used to ask again.
         let _verdict = context.restore();
     }
 

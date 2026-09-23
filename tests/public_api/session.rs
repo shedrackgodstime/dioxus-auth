@@ -11,7 +11,7 @@ fn storage_session() -> Session<u64> {
 }
 
 #[test]
-fn session_id_generates_valid_128_hex_chars() {
+fn session_id_is_64_hex_chars_256_bits() {
     let id = SessionId::generate();
     let raw = id.as_str();
     assert_eq!(raw.len(), 64);

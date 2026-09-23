@@ -10,5 +10,8 @@ Cargo.lock
 /scratch
 /.agent-rules
 
+# Agent tool artifact (see findings F12, 03-v2-implementation-findings-2026-09-22.md).
+/.freebuff
+
 # Separate project cloned into the examples dir; has its own git history.
 /examples/utmelab

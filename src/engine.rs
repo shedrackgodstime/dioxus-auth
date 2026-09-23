@@ -150,8 +150,7 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return 1; }
-    /// #     fn display_name(&self) -> Option<String> { return None; }
-    /// #     fn clone_box(&self) -> Box<dyn AuthUser<Id = u64>> { return Box::new(Self); }
+    /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::prelude::AuthError> {
     /// let store = Arc::new(MemoryStore::<User>::new());

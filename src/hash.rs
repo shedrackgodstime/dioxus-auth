@@ -5,26 +5,79 @@ use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{
     PasswordHash, PasswordHasher as Argon2PasswordHasher, PasswordVerifier, SaltString,
 };
+use argon2::{Algorithm, Params, Version};
 
 use crate::error::AuthError;
 use crate::security::PasswordHasher;
 
 /// Argon2id password hasher.
-#[derive(Debug, Clone, Default)]
-pub struct Argon2Hasher;
+///
+/// The default parameters are the argon2 crate's recommended production
+/// configuration (Argon2id, m = 19 MiB, t = 2, p = 1) — RFC 9106 §4.1
+/// compliant. Deployments that need stronger or weaker parameters construct a
+/// custom [`Params`](argon2::Params) (via
+/// [`ParamsBuilder`](argon2::ParamsBuilder)) and pass it through
+/// [`Argon2Hasher::with_params`].
+///
+/// The algorithm is locked to Argon2id and the version to v1.3; only the
+/// cost parameters are customizable, per the non-negotiable posture in the
+/// security plan.
+#[derive(Debug, Clone)]
+pub struct Argon2Hasher {
+    params: Params,
+}
+
+impl Default for Argon2Hasher {
+    fn default() -> Self {
+        return Self {
+            params: Params::DEFAULT,
+        };
+    }
+}
 
 impl Argon2Hasher {
-    /// Creates a new Argon2 hasher.
+    /// Creates a new Argon2id hasher with the recommended production parameters
+    /// (m = 19 MiB, t = 2, p = 1, variant Argon2id, version 1.3).
+    ///
+    /// See [`Argon2Hasher::with_params`] for custom cost parameters.
     #[must_use]
-    pub const fn new() -> Self {
-        return Self;
+    pub fn new() -> Self {
+        return Self::default();
+    }
+
+    /// Creates a hasher with custom Argon2 parameters.
+    ///
+    /// The algorithm is always Argon2id and the version is always v1.3 —
+    /// only the cost parameters (`m_cost`, `t_cost`, `p_cost`) are adjustable.
+    /// Construct a [`Params`](argon2::Params) via
+    /// [`ParamsBuilder`](argon2::ParamsBuilder):
+    ///
+    /// ```no_run
+    /// # use argon2::ParamsBuilder;
+    /// # let params: argon2::Params = ParamsBuilder::new()
+    /// #     .m_cost(3 * 1024)
+    /// #     .t_cost(1)
+    /// #     .p_cost(1)
+    /// #     .build()
+    /// #     .unwrap();
+    /// // let hasher = Argon2Hasher::with_params(params);
+    /// ```
+    #[must_use]
+    pub const fn with_params(params: Params) -> Self {
+        return Self { params };
+    }
+
+    /// Builds the locked-down Argon2 instance: Argon2id, version 1.3, with the
+    /// configured cost parameters.
+    fn argon2(&self) -> Argon2<'_> {
+        return Argon2::new(Algorithm::Argon2id, Version::V0x13, self.params.clone());
     }
 }
 
 impl PasswordHasher for Argon2Hasher {
     fn hash(&self, password: &str) -> Result<String, AuthError> {
         let salt = SaltString::generate(&mut OsRng);
-        let result = Argon2::default().hash_password(password.as_bytes(), &salt);
+        let result = self.argon2().hash_password(password.as_bytes(), &salt);
         let encoded = match result {
             Ok(encoded) => encoded,
             Err(_) => return Err(AuthError::PasswordHashError),
@@ -37,7 +90,7 @@ impl PasswordHasher for Argon2Hasher {
             Ok(parsed) => parsed,
             Err(_) => return Err(AuthError::PasswordHashError),
         };
-        let result = Argon2::default().verify_password(password.as_bytes(), &parsed);
+        let result = self.argon2().verify_password(password.as_bytes(), &parsed);
         return Ok(result.is_ok());
     }
 }

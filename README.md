@@ -30,7 +30,7 @@ You own the database, users, and data. **dioxus-auth** provides the authenticati
 - Session management (TTL, idle timeout, single active session, scoped sign-out)
 - Email+password authentication (Argon2id, timing-attack mitigated, no-enumeration errors)
 - Magic link / passwordless email (planned, same session model)
-- `use_session()` reactive state (`{ data, pending, error, refetch }`) + route guards
+- `use_session()` reactive state (`{ data, pending, error, restart }`) + route guards
 - Custom user and session stores (you own the schema; guides ship copy-paste SQL)
 - Secure defaults: `HttpOnly` + `Secure` cookies, `SameSite=Lax`, origin enforcement
 - Origin/CSRF enforcement and `__Host-` cookie support for fullstack apps

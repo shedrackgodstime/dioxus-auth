@@ -20,7 +20,7 @@ use super::harness::{
 fn provider_restores_guest_from_empty_storage() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
 
     let auth = context();
@@ -37,7 +37,7 @@ fn provider_restores_authenticated_user_from_stored_token() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
     let wire = seed_valid_token(&storage, &engine);
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
 
     let auth = context();
@@ -59,7 +59,7 @@ fn provider_restores_authenticated_user_from_stored_token() {
 fn login_roundtrip_persists_token_and_sets_status() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
-    let mut vdom = state_dom(engine, storage.clone());
+    let mut vdom = state_dom(&engine, storage.clone());
     mount(&mut vdom);
     let auth = context();
 
@@ -83,7 +83,7 @@ fn login_roundtrip_persists_token_and_sets_status() {
 fn login_rejects_wrong_password_and_leaves_guest_state() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
-    let mut vdom = state_dom(engine, storage.clone());
+    let mut vdom = state_dom(&engine, storage.clone());
     mount(&mut vdom);
     let auth = context();
 
@@ -105,7 +105,7 @@ fn login_rejects_wrong_password_and_leaves_guest_state() {
 fn logout_clears_guest_and_revokes_the_session() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
-    let mut vdom = state_dom(engine, storage.clone());
+    let mut vdom = state_dom(&engine, storage.clone());
     mount(&mut vdom);
     let auth = context();
     assert!(auth.login("alice", "pw").is_ok());
@@ -137,7 +137,7 @@ fn validate_reports_guest_when_the_token_is_revoked() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
     let wire = seed_valid_token(&storage, &engine);
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
     let auth = context();
     assert!(auth.is_authenticated());
@@ -159,7 +159,7 @@ fn restore_demotes_stale_tokens_to_guest_but_keeps_storage() {
     storage
         .store(&stale)
         .expect("storing a stale token must succeed");
-    let mut vdom = state_dom(engine, storage.clone());
+    let mut vdom = state_dom(&engine, storage.clone());
     mount(&mut vdom);
 
     let auth = context();
@@ -176,7 +176,7 @@ fn restore_demotes_malformed_tokens_to_guest() {
     storage
         .store("not-a-wire-token")
         .expect("storing must succeed");
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
 
     let auth = context();
@@ -188,7 +188,7 @@ fn restore_demotes_malformed_tokens_to_guest() {
 fn login_and_logout_route_through_the_single_engine_spelling() {
     /// Counts engine login/logout invocations so the test can prove the
     /// context delegates (one spelling), rather than re-implementing the
-    /// credential work next to `sign_in` / `AuthOperations::login`.
+    /// credential work next to `sign_in_email` / `AuthOperations::login`.
     #[derive(Debug, Default)]
     struct CountingEngine {
         logins: std::sync::atomic::AtomicUsize,

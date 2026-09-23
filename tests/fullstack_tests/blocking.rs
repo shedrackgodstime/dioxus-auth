@@ -75,6 +75,17 @@ impl PasswordUserStore for ProbingUserStore {
     fn update_password(&self, id: &u64, new_hash: &str) -> Result<(), AuthError> {
         return self.inner.update_password(id, new_hash);
     }
+
+    fn provision_user_with_password(
+        &self,
+        user: TestUser,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError> {
+        return self
+            .inner
+            .provision_user_with_password(user, identifier, password_hash);
+    }
 }
 
 /// Credential lookups during login must not run on the async worker polling

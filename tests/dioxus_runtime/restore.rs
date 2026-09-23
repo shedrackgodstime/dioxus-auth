@@ -90,7 +90,7 @@ impl AuthOperations<TestUser> for RejectedEngine {
 fn restore_keeps_loading_when_storage_fails() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(FailingTokenStorage::new());
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
 
     let auth = context();
@@ -147,7 +147,7 @@ fn restore_reports_the_restored_verdict_on_success() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
     let _wire = seed_valid_token(&storage, &engine);
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
 
     let auth = context();
@@ -172,8 +172,8 @@ fn session_state_maps_unanswered_restores_to_unavailable() {
         SessionState::Unavailable(ErrorCode::Internal)
     );
 
-    // The retry half: refetch re-asks, still unknown, still unavailable.
-    assert_eq!(auth.refetch(), RestoreVerdict::Unknown);
+    // The retry half: restart re-asks, still unknown, still unavailable.
+    assert_eq!(auth.restart(), RestoreVerdict::Unknown);
     assert_eq!(
         auth.session_state(),
         SessionState::Unavailable(ErrorCode::Internal)
@@ -197,7 +197,7 @@ fn session_state_maps_definitive_answers_and_pending() {
     let engine = seeded_engine();
     let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
     let _wire = seed_valid_token(&storage, &engine);
-    let mut vdom = state_dom(engine, storage);
+    let mut vdom = state_dom(&engine, storage);
     mount(&mut vdom);
     let auth = context();
     assert_eq!(
