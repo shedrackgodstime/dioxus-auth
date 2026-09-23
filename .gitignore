@@ -1,17 +1,7 @@
-# Unanchored so per-example build dirs (examples/*/target) are covered too.
 target
 /.cargo
 /.cargo_vcs_info.json
 Cargo.toml.orig
 Cargo.lock
-# Per-clone symlinks into the private knowledge base (agent rules, scratch
-# notes). Untracked but followed by cargo's package walk, which made
-# scripts/check-packaging.sh report the KB files as shipping in the crate.
 /scratch
 /.agent-rules
-
-# Agent tool artifact (see findings F12, 03-v2-implementation-findings-2026-09-22.md).
-/.freebuff
-
-# Separate project cloned into the examples dir; has its own git history.
-/examples/utmelab
