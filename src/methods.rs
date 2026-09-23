@@ -6,8 +6,8 @@
 //! the delivery channel.
 
 use crate::auth::Auth;
-use crate::engine::AuthEngine;
 use crate::error::AuthError;
+use crate::login::normalize_identifier;
 use crate::status::SessionId;
 use crate::store::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
@@ -195,7 +195,7 @@ where
             Ok(hash) => hash,
             Err(error) => return Err(error),
         };
-        let normalized = AuthEngine::<D, D>::normalize_identifier(identifier);
+        let normalized = normalize_identifier(identifier);
         let provisioned =
             match self
                 .engine

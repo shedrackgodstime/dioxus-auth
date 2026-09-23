@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use dioxus_auth::{
     AuthEngine, AuthEngineHandle, AuthError, CookieConfig, MemoryStore, SameSite, ServerAuthConfig,
-    ServerAuthContext, ServerError, SessionId, current_user, write_session_cookie,
+    ServerAuthContext, ServerError, SessionId, current_user, require_user, write_session_cookie,
 };
 use dioxus_fullstack::http;
 use dioxus_fullstack::{FullstackContext, ServerFnError};
@@ -266,4 +266,14 @@ fn auth_errors_map_to_status_codes() {
     };
     assert_eq!(text, "internal error");
     assert!(!text.contains("boom"));
+}
+
+/// Async entry points stay `Send`: futures holding the context, config, or
+/// engine across an `.await` must not trap callers on a single thread.
+#[test]
+fn server_futures_are_send() {
+    fn assert_send<T: Send>(_: T) {}
+    assert_send(ServerAuthContext::<TestUser>::from_request());
+    assert_send(current_user::<TestUser>());
+    assert_send(require_user::<TestUser>());
 }

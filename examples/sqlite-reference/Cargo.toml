@@ -13,5 +13,5 @@ categories = ["authentication", "database"]
 
 [dependencies]
 dioxus-auth = { path = "../.." }
-parking_lot = "0.12"
+parking_lot.workspace = true
 rusqlite = { version = "0.40", features = ["bundled"] }

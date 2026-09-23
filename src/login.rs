@@ -7,6 +7,22 @@ use crate::status::SessionId;
 use crate::store::{PasswordUserStore, SessionStore};
 use crate::user::AuthUser;
 
+/// Canonical identifier key.
+///
+/// Trimmed and lowercased here, once, so spacing and case are display
+/// variants of one throttle budget and one credential row rather than
+/// separate keys. Every credential verb funnels its store and limiter calls
+/// through this; stores compare byte-for-byte, never folding case or
+/// whitespace themselves.
+///
+/// A free function, not a method: normalization belongs to no receiver.
+/// Plain `pub` (not `pub(crate)`): the parent module is already `pub(crate)`,
+/// which carries the restriction — spelling it again trips
+/// `redundant_pub_crate`.
+pub fn normalize_identifier(identifier: &str) -> String {
+    return identifier.trim().to_lowercase();
+}
+
 impl<U, S> AuthEngine<U, S>
 where
     U: PasswordUserStore,
@@ -53,7 +69,7 @@ where
     /// regardless of spacing or case and no caller has to remember to normalize.
     pub(crate) fn check_rate_limit(&self, identifier: &str) -> Result<(), AuthError> {
         if let Some(limiter) = &self.rate_limiter {
-            return limiter.check(&Self::normalize_identifier(identifier));
+            return limiter.check(&normalize_identifier(identifier));
         }
         return Ok(());
     }
@@ -61,14 +77,14 @@ where
     /// Records a failed credential attempt for one identifier.
     pub(crate) fn record_rate_limit_failure(&self, identifier: &str) {
         if let Some(limiter) = &self.rate_limiter {
-            limiter.record_attempt(&Self::normalize_identifier(identifier));
+            limiter.record_attempt(&normalize_identifier(identifier));
         }
     }
 
     /// Clears the throttle budget for one identifier after proven knowledge.
     pub(crate) fn record_rate_limit_success(&self, identifier: &str) {
         if let Some(limiter) = &self.rate_limiter {
-            limiter.record_success(&Self::normalize_identifier(identifier));
+            limiter.record_success(&normalize_identifier(identifier));
         }
     }
 
@@ -90,17 +106,6 @@ where
             Err(e) => return Err(e),
         }
         return self.authenticate_user(identifier, password);
-    }
-
-    /// Canonical identifier key.
-    ///
-    /// Trimmed and lowercased here, once, so spacing and case are display
-    /// variants of one throttle budget and one credential row rather than
-    /// separate keys. Every credential verb funnels its store and limiter
-    /// calls through this; stores compare byte-for-byte, never folding case
-    /// or whitespace themselves.
-    pub(crate) fn normalize_identifier(identifier: &str) -> String {
-        return identifier.trim().to_lowercase();
     }
 
     pub(crate) fn do_login(
@@ -175,7 +180,7 @@ where
     /// Constant-time defense: unknown-user login runs one Argon2 verification
     /// against the dummy hash, so miss and hit take indistinguishable time.
     fn authenticate_user(&self, identifier: &str, password: &str) -> Result<U::User, AuthError> {
-        let normalized = Self::normalize_identifier(identifier);
+        let normalized = normalize_identifier(identifier);
         let user_entry = match self.users.find_by_identifier(&normalized) {
             Ok(entry) => entry,
             Err(e) => return Err(e),

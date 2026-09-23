@@ -20,6 +20,9 @@ cargo clippy --workspace --all-targets --features dioxus -- -D warnings -W clipp
 
 # The dioxus/fullstack layers are cfg-gated out of the default build, so a
 # default-only clippy never sees them. Each layer is gated explicitly.
+echo "==> check (fullstack without server)"
+cargo check --workspace --features dioxus-fullstack --lib
+
 echo "==> clippy (fullstack)"
 cargo clippy --workspace --all-targets --features dioxus-fullstack,server -- -D warnings -W clippy::pedantic
 

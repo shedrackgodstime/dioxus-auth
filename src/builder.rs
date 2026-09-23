@@ -70,8 +70,12 @@ where
     S: SessionStore<Id = U::Id>,
 {
     /// Creates a new builder with the given user and session stores.
+    ///
+    /// Door-3 code reaches this through
+    /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder), the
+    /// documented entry point — never directly.
     #[must_use = "a builder must eventually be built"]
-    pub fn new(users: Arc<U>, sessions: Arc<S>) -> Self {
+    pub(super) fn new(users: Arc<U>, sessions: Arc<S>) -> Self {
         return Self {
             users,
             sessions,

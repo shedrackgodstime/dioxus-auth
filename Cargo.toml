@@ -1,8 +1,11 @@
 [workspace]
 members = [".", "examples/sqlite-reference"]
 
+[workspace.dependencies]
+parking_lot = "0.12"
+
 [lints]
-rust = { warnings = "deny" }
+rust = { warnings = "deny", ambiguous_negative_literals = "deny", missing_debug_implementations = "deny", redundant_imports = "deny", redundant_lifetimes = "deny", trivial_numeric_casts = "deny", unused_lifetimes = "deny" }
 clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny", implicit_return = "deny" }
 
 [package]
@@ -70,7 +73,7 @@ dioxus-fullstack = { version = "0.7", optional = true }
 dioxus-router = { version = "0.7", optional = true, default-features = false, features = ["html"] }
 dioxus-signals = { version = "0.7", optional = true }
 hex = "0.4"
-parking_lot = "0.12"
+parking_lot.workspace = true
 rand_core = { version = "0.6", features = ["std"] }
 rustc-hash = "2"
 serde = { version = "1", optional = true, features = ["derive"] }
