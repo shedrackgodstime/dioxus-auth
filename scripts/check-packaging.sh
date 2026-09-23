@@ -20,7 +20,6 @@ whitelist=(
     '^README\.md$'
     '^CHANGELOG\.md$'
     '^docs/README\.md$'
-    '^docs/REVIEW\.md$'
     '^LICENSE$'
     '^LICENSE-MIT$'
     '^LICENSE-APACHE$'

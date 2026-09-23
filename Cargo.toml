@@ -48,7 +48,6 @@ include = [
     "/scripts/check-docs.sh",
     "/scripts/verify.sh",
     "/docs/README.md",
-    "/docs/REVIEW.md",
     "/src/**",
 ]
 

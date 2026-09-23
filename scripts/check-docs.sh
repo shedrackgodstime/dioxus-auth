@@ -9,8 +9,9 @@ fail=0
 
 # D1/D7: private-KB citations and design-journal pointers must never ship in
 # source. (N4-style domain terms like "N4 verdict" live in prose, not as
-# citations, and are out of scope for this grep.)
-if grep -rnE 'RULES §|AM[0-9]+|review finding|Spec [0-9]+|scratch/|conclusion/|archive/' \
+# citations, and are out of scope for this grep. Rule justifications cite
+# content — "explicit return on every tail expression" — never rule numbers.)
+if grep -rnE 'RULES|AM[0-9]+|review finding|Spec [0-9]+|scratch/|conclusion/|archive/' \
     src/ tests/ examples/sqlite-reference/src examples/sqlite-reference/tests \
     --include='*.rs'; then
     fail=1

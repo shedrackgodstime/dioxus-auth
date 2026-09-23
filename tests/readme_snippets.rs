@@ -10,7 +10,7 @@
 //! symbols are pinned by `symbol_drift_guards` below and exercised end-to-end
 //! by the `dioxus_runtime` and fullstack test suites.
 
-// reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
+// reason: project style requires explicit `return` on tail expressions, so the
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 

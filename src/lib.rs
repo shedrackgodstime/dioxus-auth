@@ -61,7 +61,7 @@
 #![deny(clippy::unwrap_in_result)]
 #![deny(clippy::panic_in_result_fn)]
 #![allow(clippy::needless_return)]
-// reason: RULES 13.5/14.5 require explicit `return` on every tail expression,
+// reason: project style requires explicit `return` on every tail expression,
 // which the style-group lint `needless_return` then flags. The explicit-return
 // rule is stricter, so the conflicting style lint is disabled crate-wide.
 pub mod auth;

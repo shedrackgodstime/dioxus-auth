@@ -1,6 +1,6 @@
 //! Restore-verdict tests: loading, rejection, and success classification.
 
-// reason: RULES 13.5/14.5 require explicit `return` on tail expressions, so the
+// reason: project style requires explicit `return` on tail expressions, so the
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
