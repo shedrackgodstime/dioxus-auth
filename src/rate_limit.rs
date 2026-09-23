@@ -96,8 +96,10 @@ const PROD_WINDOW_SECS: u64 = 60;
 impl InMemoryRateLimiter {
     /// Creates a new in-memory rate limiter on the system clock.
     ///
-    /// * `max_attempts` — maximum failed attempts allowed within `window`
-    /// * `window` — rolling time window for counting attempts
+    /// * `max_attempts` — maximum failed attempts allowed within `window`.
+    ///   Zero denies every attempt (fail-closed kill switch).
+    /// * `window` — rolling time window for counting attempts. Zero prunes
+    ///   every attempt immediately, so nothing is ever limited.
     #[must_use]
     pub fn new(max_attempts: usize, window: Duration) -> Self {
         return Self::with_clock(max_attempts, window, Arc::new(SystemTime::now));

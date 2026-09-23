@@ -95,6 +95,9 @@ where
     }
 
     /// Sets the session TTL.
+    ///
+    /// Must be non-zero; [`build`](Self::build) rejects a zero TTL because it
+    /// would mint instantly-dead sessions.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn session_ttl(mut self, duration: Duration) -> Self {
         self.session_ttl_secs = duration.as_secs();
@@ -102,6 +105,9 @@ where
     }
 
     /// Sets the session TTL in seconds.
+    ///
+    /// Must be non-zero; [`build`](Self::build) rejects a zero TTL because it
+    /// would mint instantly-dead sessions.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn session_ttl_secs(mut self, secs: u64) -> Self {
         self.session_ttl_secs = secs;
@@ -109,6 +115,9 @@ where
     }
 
     /// Sets the idle timeout (max time without validated activity).
+    ///
+    /// Must be non-zero when set; [`build`](Self::build) rejects a zero idle
+    /// timeout because it would invalidate every session on next use.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn idle_timeout(mut self, duration: Duration) -> Self {
         self.idle_timeout_secs = Some(duration.as_secs());
@@ -116,6 +125,9 @@ where
     }
 
     /// Sets the idle timeout in seconds.
+    ///
+    /// Must be non-zero when set; [`build`](Self::build) rejects a zero idle
+    /// timeout because it would invalidate every session on next use.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn idle_timeout_secs(mut self, secs: u64) -> Self {
         self.idle_timeout_secs = Some(secs);
@@ -123,6 +135,12 @@ where
     }
 
     /// Enforces single active session per user on login.
+    ///
+    /// Process-local exactness: concurrent logins serialize through the
+    /// engine's login lock, so exactly one session survives per login race.
+    /// Distributed deployments need the same atomicity from their session
+    /// store transaction — concurrent logins across processes can otherwise
+    /// both survive.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
     pub const fn single_active_session(mut self, enabled: bool) -> Self {
         self.single_active_session = enabled;
@@ -170,9 +188,21 @@ where
     /// Builds the authentication engine.
     ///
     /// # Errors
-    /// Returns `AuthError` if the timing-defense dummy hash cannot be computed.
+    /// Returns `AuthError` if the timing-defense dummy hash cannot be computed,
+    /// or `AuthError::Internal` if the session TTL or idle timeout is zero —
+    /// a zero lifetime mints instantly-dead sessions, which is never intended.
     #[must_use = "the constructed engine must be used"]
     pub fn build(self) -> Result<AuthEngine<U, S>, AuthError> {
+        if self.session_ttl_secs == 0 {
+            return Err(AuthError::Internal(String::from(
+                "session TTL must be non-zero",
+            )));
+        }
+        if self.idle_timeout_secs == Some(0) {
+            return Err(AuthError::Internal(String::from(
+                "idle timeout must be non-zero",
+            )));
+        }
         let hasher = self
             .hasher
             .unwrap_or_else(|| return Arc::new(Argon2Hasher::new()));
@@ -193,6 +223,7 @@ where
             rate_limiter: self.rate_limiter,
             dummy_hash,
             now: self.now,
+            login_lock: Arc::new(parking_lot::Mutex::new(())),
         });
     }
 }

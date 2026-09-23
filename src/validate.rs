@@ -24,6 +24,12 @@ where
     /// user, and ensures the `auth_hash` has not been invalidated (e.g. by a
     /// password change). Idle timeout and sliding TTL are applied on success.
     ///
+    /// Expiry is wall-clock: a clock that moves backwards can re-validate a
+    /// session whose expiry passed unobserved. Expired sessions are deleted
+    /// eagerly on use, so resurrection needs zero validations across the whole
+    /// expired window — deployments with hard revocation deadlines want a
+    /// store with background sweeping, not lazy expiry alone.
+    ///
     /// # Errors
     /// Returns a store error if a lookup or update fails.
     #[must_use = "the validated user must be used"]

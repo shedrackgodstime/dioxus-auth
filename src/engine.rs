@@ -3,6 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use parking_lot::Mutex;
+
 use crate::builder::AuthEngineBuilder;
 use crate::error::AuthError;
 use crate::rate_limit::RateLimiter;
@@ -110,6 +112,16 @@ where
     pub(crate) dummy_hash: String,
     /// Clock producing the current UNIX timestamp in seconds.
     pub(crate) now: Arc<dyn Fn() -> u64 + Send + Sync>,
+    /// Serializes the rotate-then-save window of [`AuthEngine::login`].
+    ///
+    /// Rotation (single-active enforcement, stale-credential sweep) and the
+    /// session save must read-modify-write as one step: two logins racing
+    /// through the window would otherwise both survive, breaking
+    /// single-active enforcement exactly when it matters. The guard is held
+    /// across store calls only — never across user hooks, which may call back
+    /// into the engine. Process-local: distributed deployments need the same
+    /// atomicity from their session store transaction.
+    pub(crate) login_lock: Arc<Mutex<()>>,
 }
 
 impl<U, S> fmt::Debug for AuthEngine<U, S>
@@ -128,6 +140,7 @@ where
             .field("rate_limiter", &self.rate_limiter)
             .field("dummy_hash", &self.dummy_hash.len())
             .field("now", &"<clock>")
+            .field("login_lock", &"<mutex>")
             .finish();
     }
 }

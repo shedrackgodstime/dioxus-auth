@@ -119,21 +119,29 @@ where
         let user_id = user.id();
         let auth_hash = user.session_auth_hash().map(str::to_string);
 
-        match self.rotate_stale_sessions(&user_id, auth_hash.as_deref()) {
-            Ok(()) => {}
-            Err(e) => return Err(e),
-        }
-
+        // reason: the guard is scoped to rotation + save only. Holding it
+        // across the sign-in hook below would deadlock hooks that call back
+        // into the engine (the lock is non-reentrant); releasing it here keeps
+        // the read-modify-write atomic without extending the critical section
+        // into user code. ID generation stays outside: it needs no sharing.
         let raw_id = SessionId::generate();
         let storage_id = raw_id.hash_for_storage();
-        let storage_session = Self::apply_session_options(
-            Session::new(storage_id, user_id.clone(), now, expires_at).with_last_active(now),
-            auth_hash.as_deref(),
-            &options,
-        );
-        match self.sessions.save_session(storage_session) {
-            Ok(()) => {}
-            Err(e) => return Err(e),
+        {
+            let _guard = self.login_lock.lock();
+            match self.rotate_stale_sessions(&user_id, auth_hash.as_deref()) {
+                Ok(()) => {}
+                Err(e) => return Err(e),
+            }
+
+            let storage_session = Self::apply_session_options(
+                Session::new(storage_id, user_id.clone(), now, expires_at).with_last_active(now),
+                auth_hash.as_deref(),
+                &options,
+            );
+            match self.sessions.save_session(storage_session) {
+                Ok(()) => {}
+                Err(e) => return Err(e),
+            }
         }
 
         let wire_session = Self::apply_session_options(

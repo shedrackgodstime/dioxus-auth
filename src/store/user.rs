@@ -50,6 +50,11 @@ pub trait PasswordUserStore: UserStore {
 
     /// Updates a user's stored password hash.
     ///
+    /// Updating an unknown id is a silent no-op `Ok(())`: the engine only
+    /// calls this after proving the identifier exists, so the path is
+    /// unreachable through credential verbs. Direct store users who need
+    /// existence feedback must check first.
+    ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "a failed hash update must be handled"]

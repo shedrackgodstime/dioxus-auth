@@ -102,6 +102,12 @@ impl<User: AuthUser> MemoryStore<User> {
     /// where a taken identifier must be rejected without disturbing the
     /// existing account, use
     /// [`provision_user_with_password`](PasswordUserStore::provision_user_with_password).
+    ///
+    /// No aliasing checks: pairing an identifier that belongs to user A with
+    /// a user object carrying user B's id re-points the identifier at B while
+    /// B's old identifier still resolves to B. Callers maintain one
+    /// identifier per user row; this is a development store, not a
+    /// constraint-enforcing database.
     pub fn insert_user_with_password(
         &self,
         user: User,

@@ -198,3 +198,19 @@ fn memory_store_clone_is_independent() {
     assert!(store.find_session(session.id()).unwrap().is_some());
     assert!(clone.find_session(session.id()).unwrap().is_none());
 }
+
+#[test]
+fn builder_rejects_zero_ttl_and_zero_idle_timeouts() {
+    let store = Arc::new(MemoryStore::<TestUser>::new());
+    let zero_ttl = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store)).session_ttl_secs(0);
+    assert!(zero_ttl.build().is_err());
+
+    let zero_idle =
+        AuthEngine::builder(Arc::clone(&store), Arc::clone(&store)).idle_timeout_secs(0);
+    assert!(zero_idle.build().is_err());
+
+    let valid = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+        .session_ttl_secs(60)
+        .idle_timeout_secs(30);
+    assert!(valid.build().is_ok());
+}

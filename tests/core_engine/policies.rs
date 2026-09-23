@@ -147,3 +147,17 @@ fn builder_ttl_and_idle_timeout_flow_through_to_getters() {
     assert_eq!(engine.session_ttl_secs(), 30);
     assert_eq!(engine.idle_timeout_secs(), Some(10));
 }
+
+/// Empty and whitespace-only identifiers normalize to nothing and share the
+/// unknown-identifier path: `InvalidCredentials`, no panic, no oracle.
+#[test]
+fn empty_identifiers_share_the_unknown_identifier_path() {
+    let engine = seeded_engine();
+
+    for identifier in ["", "   ", "\t\n "] {
+        assert_eq!(
+            engine.login(identifier, "s3cret").unwrap_err(),
+            AuthError::InvalidCredentials
+        );
+    }
+}

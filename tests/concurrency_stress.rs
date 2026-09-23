@@ -282,6 +282,67 @@ fn validation_without_idle_timeout_does_not_rewrite_the_session() {
     assert_eq!(stored.expires_at_unix(), 1_200);
 }
 
+/// Concurrent logins under single-active enforcement must leave exactly one
+/// session: rotation and save serialize through the engine's login lock, so
+/// no two racers can both survive the window.
+#[test]
+fn concurrent_logins_under_single_active_leave_exactly_one_session() {
+    const RACERS: usize = 8;
+
+    let store = Arc::new(MemoryStore::<TestUser>::new());
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", "pw");
+    let engine = Arc::new(
+        AuthEngine::builder(Arc::clone(&store), store)
+            .hasher(IdentityHasher)
+            .single_active_session(true)
+            .build()
+            .expect("engine construction must succeed"),
+    );
+    let barrier = Arc::new(std::sync::Barrier::new(RACERS));
+    let mut handles = Vec::new();
+    for _ in 0..RACERS {
+        let engine = Arc::clone(&engine);
+        let barrier = Arc::clone(&barrier);
+        handles.push(std::thread::spawn(move || {
+            barrier.wait();
+            return engine
+                .login("alice", "pw")
+                .map(|(_, session)| return session.id().clone());
+        }));
+    }
+
+    let mut wires = Vec::new();
+    for handle in handles {
+        wires.push(
+            handle
+                .join()
+                .expect("racer must not panic")
+                .expect("login must succeed"),
+        );
+    }
+    assert_eq!(wires.len(), RACERS);
+
+    let survivors = engine
+        .session_store()
+        .list_user_sessions(&1)
+        .expect("listing must not fail");
+    assert_eq!(
+        survivors.len(),
+        1,
+        "single-active logins must serialize rotate+save"
+    );
+    let live = wires
+        .iter()
+        .filter(|id| {
+            return engine
+                .validate_session(id)
+                .expect("validation must not fail")
+                .is_some();
+        })
+        .count();
+    assert_eq!(live, 1, "exactly one wire token may still validate");
+}
+
 /// Concurrent sign-ups for one identifier must produce exactly one account:
 /// the atomic claim in the store, not a lookup-then-write in the facade, is
 /// what decides the winner.
