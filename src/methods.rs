@@ -55,7 +55,10 @@ where
         current_password: &str,
         new_password: &str,
     ) -> Result<(), AuthError> {
-        let user = match self.engine.verify_password(identifier, current_password) {
+        let user = match self
+            .engine
+            .verify_password(identifier, current_password, None)
+        {
             Ok(user) => user,
             Err(error) => return Err(error),
         };
@@ -71,7 +74,7 @@ where
             Ok(()) => {}
             Err(error) => return Err(error),
         }
-        self.engine.record_rate_limit_success(identifier);
+        self.engine.record_rate_limit_success(identifier, None);
         return Ok(());
     }
 
@@ -187,7 +190,7 @@ where
         password: &str,
         user: D::User,
     ) -> Result<(D::User, SessionId), AuthError> {
-        match self.engine.check_rate_limit(identifier) {
+        match self.engine.check_rate_limit(identifier, None) {
             Ok(()) => {}
             Err(error) => return Err(error),
         }
@@ -212,7 +215,7 @@ where
             // stays unobservable through timing as well as through the error.
             // The raw identifier goes in: the gate normalizes once internally,
             // so pre-normalizing here would fold case and whitespace twice.
-            self.engine.record_rate_limit_failure(identifier);
+            self.engine.record_rate_limit_failure(identifier, None);
             self.engine.dummy_verify(password);
             return Err(AuthError::InvalidCredentials);
         }

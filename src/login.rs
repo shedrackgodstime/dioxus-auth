@@ -7,6 +7,14 @@ use crate::status::SessionId;
 use crate::store::{PasswordUserStore, SessionStore};
 use crate::user::AuthUser;
 
+/// Limiter key for one caller IP, if the caller supplied it.
+///
+/// Namespaced so IP budgets can never collide with identifier budgets, no
+/// matter what identifier string an application accepts.
+fn ip_key(ip: Option<&str>) -> Option<String> {
+    return ip.map(|ip| return format!("ip\x00{}", normalize_identifier(ip)));
+}
+
 /// Canonical identifier key.
 ///
 /// Trimmed and lowercased here, once, so spacing and case are display
@@ -63,28 +71,52 @@ where
         return self.do_login(identifier, password, options);
     }
 
-    /// Applies the credential rate gate for one identifier.
+    /// Applies the credential rate gate for one identifier, plus the caller
+    /// IP when one is known.
     ///
+    /// The identifier gate stops targeted guessing; the IP gate stops
+    /// identifier rotation (spraying many identifiers from one source).
     /// Normalizes here, once, so every verb shares one throttle window
     /// regardless of spacing or case and no caller has to remember to normalize.
-    pub(crate) fn check_rate_limit(&self, identifier: &str) -> Result<(), AuthError> {
+    pub(crate) fn check_rate_limit(
+        &self,
+        identifier: &str,
+        ip: Option<&str>,
+    ) -> Result<(), AuthError> {
         if let Some(limiter) = &self.rate_limiter {
-            return limiter.check(&normalize_identifier(identifier));
+            match limiter.check(&normalize_identifier(identifier)) {
+                Ok(()) => {}
+                Err(error) => return Err(error),
+            }
+            if let Some(ip) = ip_key(ip) {
+                match limiter.check(&ip) {
+                    Ok(()) => {}
+                    Err(error) => return Err(error),
+                }
+            }
         }
         return Ok(());
     }
 
-    /// Records a failed credential attempt for one identifier.
-    pub(crate) fn record_rate_limit_failure(&self, identifier: &str) {
+    /// Records a failed credential attempt for one identifier, plus the
+    /// caller IP when one is known.
+    pub(crate) fn record_rate_limit_failure(&self, identifier: &str, ip: Option<&str>) {
         if let Some(limiter) = &self.rate_limiter {
             limiter.record_attempt(&normalize_identifier(identifier));
+            if let Some(ip) = ip_key(ip) {
+                limiter.record_attempt(&ip);
+            }
         }
     }
 
-    /// Clears the throttle budget for one identifier after proven knowledge.
-    pub(crate) fn record_rate_limit_success(&self, identifier: &str) {
+    /// Clears the throttle budgets for one identifier (and caller IP, when
+    /// known) after proven knowledge.
+    pub(crate) fn record_rate_limit_success(&self, identifier: &str, ip: Option<&str>) {
         if let Some(limiter) = &self.rate_limiter {
             limiter.record_success(&normalize_identifier(identifier));
+            if let Some(ip) = ip_key(ip) {
+                limiter.record_success(&ip);
+            }
         }
     }
 
@@ -100,12 +132,13 @@ where
         &self,
         identifier: &str,
         password: &str,
+        ip: Option<&str>,
     ) -> Result<U::User, AuthError> {
-        match self.check_rate_limit(identifier) {
+        match self.check_rate_limit(identifier, ip) {
             Ok(()) => {}
             Err(e) => return Err(e),
         }
-        return self.authenticate_user(identifier, password);
+        return self.authenticate_user(identifier, password, ip);
     }
 
     pub(crate) fn do_login(
@@ -114,7 +147,7 @@ where
         password: &str,
         options: LoginOptions<'_>,
     ) -> Result<(U::User, Session<U::Id>), AuthError> {
-        let user = match self.verify_password(identifier, password) {
+        let user = match self.verify_password(identifier, password, options.ip_address()) {
             Ok(user) => user,
             Err(e) => return Err(e),
         };
@@ -162,7 +195,7 @@ where
         );
 
         self.fire_on_sign_in(&user);
-        self.record_rate_limit_success(identifier);
+        self.record_rate_limit_success(identifier, options.ip_address());
         return Ok((user, wire_session));
     }
 
@@ -179,7 +212,12 @@ where
     ///
     /// Constant-time defense: unknown-user login runs one Argon2 verification
     /// against the dummy hash, so miss and hit take indistinguishable time.
-    fn authenticate_user(&self, identifier: &str, password: &str) -> Result<U::User, AuthError> {
+    fn authenticate_user(
+        &self,
+        identifier: &str,
+        password: &str,
+        ip: Option<&str>,
+    ) -> Result<U::User, AuthError> {
         let normalized = normalize_identifier(identifier);
         let user_entry = match self.users.find_by_identifier(&normalized) {
             Ok(entry) => entry,
@@ -189,7 +227,7 @@ where
         let (user, password_hash) = if let Some(entry) = user_entry {
             entry
         } else {
-            self.record_rate_limit_failure(&normalized);
+            self.record_rate_limit_failure(identifier, ip);
             self.dummy_verify(password);
             return Err(AuthError::InvalidCredentials);
         };
@@ -206,7 +244,7 @@ where
             .verify(password, &password_hash)
             .unwrap_or(false);
         if !is_valid {
-            self.record_rate_limit_failure(&normalized);
+            self.record_rate_limit_failure(identifier, ip);
             return Err(AuthError::InvalidCredentials);
         }
         return Ok(user);

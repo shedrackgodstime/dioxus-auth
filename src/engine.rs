@@ -30,7 +30,8 @@ impl<'a> LoginOptions<'a> {
         };
     }
 
-    /// Client IP address for session activity tracking.
+    /// Client IP address for session activity tracking and the per-IP
+    /// rate-limit dimension.
     #[must_use]
     pub const fn ip_address(&self) -> Option<&'a str> {
         return self.ip_address;

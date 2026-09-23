@@ -10,7 +10,8 @@ use std::time::Duration;
 use super::common::TestUser;
 use super::password::hash_password;
 use dioxus_auth::{
-    AuthEngine, AuthError, InMemoryRateLimiter, MemoryStore, SessionId, SessionStore, UserStore,
+    AuthEngine, AuthError, InMemoryRateLimiter, LoginOptions, MemoryStore, SessionId, SessionStore,
+    UserStore,
 };
 
 use super::seeded_engine;
@@ -160,4 +161,42 @@ fn empty_identifiers_share_the_unknown_identifier_path() {
             AuthError::InvalidCredentials
         );
     }
+}
+
+/// Identifier rotation does not escape the throttle: failures from one IP
+/// share a budget across identifiers, while other IPs are unaffected.
+#[test]
+fn rate_limit_trips_per_ip_across_identifiers() {
+    let store = MemoryStore::<TestUser>::new();
+    store.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+        .rate_limiter(InMemoryRateLimiter::new(2, Duration::from_secs(60)))
+        .build()
+        .expect("engine construction must succeed");
+
+    let attempt = |identifier: &str, ip: &str| {
+        return engine.login_with_options(
+            identifier,
+            "wrong",
+            LoginOptions::new().with_ip_address(Some(ip)),
+        );
+    };
+
+    assert_eq!(
+        attempt("alice", "10.0.0.1").expect_err("first failure must error"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        attempt("nobody", "10.0.0.1").expect_err("second failure must error"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        attempt("other", "10.0.0.1").expect_err("IP budget must trip"),
+        AuthError::RateLimited
+    );
+    assert_eq!(
+        attempt("alice", "10.0.0.2").expect_err("other IPs must be unaffected"),
+        AuthError::InvalidCredentials
+    );
 }
