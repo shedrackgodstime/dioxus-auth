@@ -31,10 +31,10 @@ use dioxus_auth::{
 /// A test (`schema_doc_matches_const`) asserts the README contains this exact
 /// string, so the copy-paste SQL cannot rot away from the DDL the store runs.
 ///
-/// Deviation from `plan/06` §3.2, recorded: that shape omits `sessions.created_at`,
-/// but the engine's absolute-TTL math (`created_at + ttl`, see
-/// `validate_session`) needs it persisted. Everything else follows the plan's
-/// column names.
+/// One documented deviation: the 4-table shape in the auth guides omits
+/// `sessions.created_at`, but the engine's absolute-TTL math
+/// (`created_at + ttl`, see `validate_session`) needs it persisted.
+/// Everything else follows the guide's column names.
 pub const SCHEMA_SQL: &str = "CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL,

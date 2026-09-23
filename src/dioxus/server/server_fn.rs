@@ -57,7 +57,7 @@ impl<U: AuthUser> ServerAuthConfig<U> {
 
 /// The resolved authentication state of the current request.
 ///
-/// Guests resolve normally too: a missing or stale token simply yields
+/// Guests resolve normally too: a missing or stale token yields
 /// [`user`](Self::user) = `None`. Only a missing engine configuration is an
 /// error.
 #[derive(Debug, Clone)]

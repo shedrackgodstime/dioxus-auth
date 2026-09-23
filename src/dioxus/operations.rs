@@ -16,7 +16,7 @@ use crate::user::AuthUser;
 /// user/session store generics are hidden behind this trait object so hooks
 /// and components never leak `MemoryStore<…>`-style types.
 ///
-/// Single-spelling rule (1c resolution, recorded): credential verification
+/// Single-spelling rule: credential verification lives in exactly one place —
 /// lives in exactly one place — [`AuthEngine::login`](crate::engine::AuthEngine::login)
 /// and its helpers. The [`AuthContext`](super::context::AuthContext) calls these
 /// operations rather than the [`Auth`](crate::auth::Auth) facade verbs because

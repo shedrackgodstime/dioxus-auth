@@ -18,7 +18,7 @@ auth.sign_up_email("alice@example.com", "password", AppUser { ... })?;
 
 `users` (identity) · `accounts` (credentials, one row per login method) ·
 `sessions` (opaque server-side sessions, keyed by `sha256(raw token)`) ·
-`verifications` (reserved for Gate-2 magic-link flows; created now so the
+`verifications` (reserved for future magic-link flows; created now so the
 shape is complete, unused by email+password verbs).
 
 ```sql
@@ -56,9 +56,9 @@ CREATE TABLE verifications (
 
 A test (`schema_doc_matches_const`) asserts this block is byte-identical to
 the `SCHEMA_SQL` constant the store executes — the copy-paste SQL cannot rot
-away from the DDL. One recorded deviation from `plan/06` §3.2: that shape
-omits `sessions.created_at`, but the engine's absolute-TTL math needs it
-persisted, so the column stays.
+away from the DDL. One documented deviation: the guide's 4-table shape omits
+`sessions.created_at`, but the engine needs it persisted for absolute-TTL
+math, so the column stays.
 
 ## Notes for owners
 
