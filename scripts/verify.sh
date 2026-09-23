@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Full local gate: everything the CI Test job runs, in the same order.
+# Full local gate: fmt, lints, checks, tests, doctests, docs build,
+# packaging, and the invariant scripts — everything mergeable except the
+# toolchain-gated jobs (MSRV, audit installs, coverage, wasm stay in CI).
 # Single home for the check matrix (CI calls this script; see
 # .github/workflows/ci.yml) so local runs and CI runs cannot diverge.
 #
@@ -38,10 +40,16 @@ cargo test --workspace --all-targets --features dioxus-fullstack,server
 echo "==> doctests"
 cargo test --workspace --doc
 
+echo "==> docs build"
+RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus-fullstack
+
+echo "==> packaging"
+bash scripts/check-packaging.sh
+
 echo "==> doc invariants"
 bash scripts/check-docs.sh
 
 echo "==> ssot invariants"
 bash scripts/check-ssot.sh
 
-echo "verify ok: fmt, clippy x3, tests x3, doctests, docs, ssot"
+echo "verify ok: fmt, clippy x3, checks, tests x3, doctests, docs, packaging, ssot"

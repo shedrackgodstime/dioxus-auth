@@ -31,6 +31,12 @@ impl<U: PartialEq> PartialEq for AuthStatus<U> {
 
 impl<U: Eq> Eq for AuthStatus<U> {}
 
+/// Raw token entropy: 256 bits per session id.
+const TOKEN_BYTES: usize = 32;
+
+/// Wire length of a hex-encoded session id (`TOKEN_BYTES` as lowercase hex).
+const TOKEN_HEX_LEN: usize = TOKEN_BYTES * 2;
+
 /// Opaque session identifier.
 ///
 /// On the wire (cookie, bearer header) this is the raw 256-bit token.
@@ -56,7 +62,7 @@ impl SessionId {
     /// lookup, so oversized or malformed inputs are cheap rejections.
     #[must_use]
     pub fn is_valid_wire_format(token: &str) -> bool {
-        return token.len() == 64
+        return token.len() == TOKEN_HEX_LEN
             && token
                 .bytes()
                 .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
@@ -75,7 +81,7 @@ impl SessionId {
     /// ```
     #[must_use]
     pub fn generate() -> Self {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0u8; TOKEN_BYTES];
         OsRng.fill_bytes(&mut bytes);
         return Self(hex::encode(bytes));
     }

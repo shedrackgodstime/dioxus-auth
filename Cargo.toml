@@ -51,6 +51,7 @@ include = [
     "/scripts/check-docs.sh",
     "/scripts/verify.sh",
     "/docs/README.md",
+    "/docs/THREAT-MODEL.md",
     "/src/**",
 ]
 
