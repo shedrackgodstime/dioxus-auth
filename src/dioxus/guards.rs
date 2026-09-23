@@ -11,7 +11,7 @@ use ::dioxus_router::Navigator;
 use ::dioxus_signals::{ReadableExt, WritableExt};
 
 /// The initial redirect flag for a guard: no redirect has been issued yet.
-const fn no_redirect_issued() -> bool {
+const fn initial_redirect_state() -> bool {
     return false;
 }
 

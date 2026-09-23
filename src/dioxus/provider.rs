@@ -24,6 +24,13 @@ use super::storage::TokenStorageHandle;
 /// [`Router`](dioxus_router::Router) outside (or above) it so route guards can
 /// navigate.
 ///
+/// Restore runs synchronously inside the first render — including server-side
+/// renders. The engine core is synchronous by design, so a store that blocks
+/// (network, disk) stalls the render worker while restore runs; SSR
+/// deployments with remote stores must front them with a fast local cache or
+/// accept the stall. Server functions do not share this path: they dispatch
+/// through the blocking boundary instead.
+///
 /// # Examples
 ///
 /// ```no_run
@@ -61,10 +68,9 @@ where
         .erased_engine
         .clone()
         .unwrap_or_else(|| return AuthEngineHandle::from(Arc::clone(auth.engine())));
-    let token_storage = auth
-        .token_storage
-        .take()
-        .unwrap_or_else(|| return TokenStorageHandle::new(MemoryTokenStorage::new()));
+    let token_storage = auth.token_storage.unwrap_or_else(|| {
+        return TokenStorageHandle::new(MemoryTokenStorage::new());
+    });
 
     let status = use_signal(|| {
         return AuthStatus::<D::User>::Loading;

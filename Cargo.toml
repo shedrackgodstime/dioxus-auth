@@ -43,6 +43,7 @@ include = [
     "/rustfmt.toml",
     "/scripts/check-packaging.sh",
     "/scripts/check-ssot.sh",
+    "/scripts/verify.sh",
     "/docs/README.md",
     "/src/**",
 ]

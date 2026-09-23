@@ -29,12 +29,7 @@ const fn service_ready() -> std::task::Poll<Result<(), Infallible>> {
 }
 
 fn forward(mut inner: Route, request: Request) -> BoxFuture {
-    return Box::pin(async move {
-        return match inner.call(request).await {
-            Ok(response) => Ok(response),
-            Err(infallible) => match infallible {},
-        };
-    });
+    return Box::pin(async move { return inner.call(request).await });
 }
 
 /// Server auth middleware that makes the engine available to every request.

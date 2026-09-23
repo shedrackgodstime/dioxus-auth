@@ -9,7 +9,7 @@ use crate::auth::Auth;
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::status::SessionId;
-use crate::store::{MemoryStore, PasswordUserStore, SessionStore, UserStore};
+use crate::store::{PasswordUserStore, SessionStore, UserStore};
 use crate::user::AuthUser;
 
 impl<D> Auth<D>
@@ -147,18 +147,15 @@ where
     pub fn sign_out(&self, session_id: &SessionId) -> Result<(), AuthError> {
         return self.engine.logout(session_id);
     }
-}
 
-impl<User> Auth<MemoryStore<User>>
-where
-    User: AuthUser + Clone,
-{
     /// Signs up by provisioning credentials, then signing in.
     ///
     /// The caller builds the user; the store provisions the credential row.
     /// Taken and free identifiers cost the same and fail with the same
     /// `InvalidCredentials`, so identifier state is not observable. Probing
-    /// any identifier counts toward the same rate gate as sign-in.
+    /// any identifier counts toward the same rate gate as sign-in. Works over
+    /// any [`PasswordUserStore`](crate::store::PasswordUserStore): own-DB
+    /// deployments get the same verb as the memory quickstart.
     ///
     /// # Examples
     ///
@@ -188,8 +185,8 @@ where
         &self,
         identifier: &str,
         password: &str,
-        user: User,
-    ) -> Result<(User, SessionId), AuthError> {
+        user: D::User,
+    ) -> Result<(D::User, SessionId), AuthError> {
         match self.engine.check_rate_limit(identifier) {
             Ok(()) => {}
             Err(error) => return Err(error),
@@ -198,8 +195,7 @@ where
             Ok(hash) => hash,
             Err(error) => return Err(error),
         };
-        let normalized =
-            AuthEngine::<MemoryStore<User>, MemoryStore<User>>::normalize_identifier(identifier);
+        let normalized = AuthEngine::<D, D>::normalize_identifier(identifier);
         let provisioned =
             match self
                 .engine

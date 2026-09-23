@@ -7,7 +7,10 @@ use crate::error::AuthError;
 /// Stores and retrieves the persistent session token on the client.
 ///
 /// Implementations are application-selected; the engine never reads or writes
-/// tokens itself.
+/// tokens itself. Reads and writes run synchronously inside component renders
+/// (provider restore, login, logout), so implementations must be fast and
+/// non-blocking — a storage call that waits on the network stalls the render
+/// worker.
 pub trait TokenStorage: Debug + Send + Sync {
     /// Stores a token.
     ///

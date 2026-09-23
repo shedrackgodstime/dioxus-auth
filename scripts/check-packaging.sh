@@ -24,6 +24,7 @@ whitelist=(
     '^LICENSE-APACHE$'
     '^scripts/check-packaging\.sh$'
     '^scripts/check-ssot\.sh$'
+    '^scripts/verify\.sh$'
     '^src/.*$'
 )
 

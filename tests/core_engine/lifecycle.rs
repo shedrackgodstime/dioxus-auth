@@ -4,8 +4,11 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::SessionId;
+use std::sync::Arc;
 
+use dioxus_auth::prelude::{AuthEngine, MemoryStore, Session, SessionId, SessionStore};
+
+use super::common::TestUser;
 use super::seeded_engine;
 
 #[test]
@@ -101,4 +104,29 @@ fn successful_validation_keeps_the_session_active() {
     let validated = engine.validate_session(session.id()).unwrap().unwrap();
 
     assert_eq!(validated.id, 1);
+}
+
+/// Logging out a session whose user row is already gone must still delete the
+/// session row: deleting a user never strands orphan sessions behind.
+#[test]
+fn logout_deletes_sessions_whose_user_row_is_gone() {
+    let store = MemoryStore::<TestUser>::new();
+    let wire = SessionId::generate();
+    let storage = wire.hash_for_storage();
+    store
+        .save_session(Session::new(storage.clone(), 999, 1_000, 9_999_999_999))
+        .expect("seeding must succeed");
+    let store = Arc::new(store);
+    let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+        .build()
+        .expect("engine construction must succeed");
+
+    engine.logout(&wire).expect("logout must succeed");
+    assert!(
+        store
+            .find_session(&storage)
+            .expect("lookup must succeed")
+            .is_none(),
+        "no orphan session may survive its missing user"
+    );
 }

@@ -19,29 +19,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Check format
-        run: cargo fmt -- --check
-      # `--pedantic` is a clippy flag and belongs after the `--` separator;
-      # before it, cargo rejects the argument and the step never ran.
-      - name: Check clippy
-        run: cargo clippy --all-targets -- -D warnings -W clippy::pedantic
-      # The dioxus/fullstack layers are cfg-gated out of the default build,
-      # so a default-only clippy never sees them. Gate each layer explicitly
-      # or doc-link/type regressions in those layers slip through.
-      - name: Check clippy (dioxus)
-        run: cargo clippy --all-targets --features dioxus -- -D warnings -W clippy::pedantic
-      - name: Check clippy (fullstack)
-        run: cargo clippy --all-targets --features dioxus-fullstack,server -- -D warnings -W clippy::pedantic
-      - name: Test all targets
-        run: cargo test --all-targets
-      - name: Test dioxus feature
-        run: cargo test --all-targets --features dioxus
-      - name: Check single-source-of-truth invariants
-        run: bash scripts/check-ssot.sh
-      - name: Test fullstack server features
-        run: cargo test --all-targets --features dioxus-fullstack,server
-      - name: Test doc
-        run: cargo test --doc
+      # Full matrix lives in scripts/verify.sh (single home: local runs call
+      # the same script, so the two cannot diverge). `--pedantic` is a clippy
+      # flag and belongs after the `--` separator; before it, cargo rejects
+      # the argument and the step never runs.
+      - name: Verify (fmt, clippy x3, tests x3, doctests, ssot)
+        run: bash scripts/verify.sh
 
   msrv:
     # MSRV gate: the core library (default features) must build on the

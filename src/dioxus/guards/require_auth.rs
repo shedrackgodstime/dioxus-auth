@@ -8,7 +8,7 @@ use ::dioxus_router::use_navigator;
 use crate::dioxus::hooks::use_auth;
 use crate::user::AuthUser;
 
-use super::{GuardRedirect, guard_body, no_redirect_issued};
+use super::{GuardRedirect, guard_body, initial_redirect_state};
 
 /// Gates a subtree behind authentication.
 ///
@@ -54,7 +54,7 @@ where
 {
     let auth = use_auth::<T>();
     let navigator = use_navigator();
-    let redirected = use_signal(no_redirect_issued);
+    let redirected = use_signal(initial_redirect_state);
 
     // During Loading the identity has not settled yet — render nothing and
     // issue no navigation. The provider gates its initial restore on the same

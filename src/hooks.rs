@@ -26,6 +26,10 @@ where
 /// A panicking hook indicates a programming error: it is intentionally not
 /// caught. The panic stops the program.
 ///
+/// Visibility lives on the module (`pub(crate) mod hooks`): plain `pub` here
+/// is already crate-internal, and `pub(crate)` would trip
+/// `redundant_pub_crate`.
+///
 /// # Panics
 /// Propagates any panic raised by `hook`; panics in hooks are programming
 /// errors and must stop the program rather than be caught.

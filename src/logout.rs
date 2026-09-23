@@ -15,6 +15,8 @@ where
     ///
     /// The `session_id` is the raw wire token; the engine hashes it before
     /// touching the store. Malformed wire tokens are a cheap no-op rejection.
+    /// The session row is deleted even when its user row is already gone, so
+    /// deleting a user never strands orphan sessions behind.
     ///
     /// # Errors
     /// Returns a store error if the lookup or deletion fails.
@@ -26,15 +28,16 @@ where
             Err(e) => return Err(e),
         };
         let user = match self.users.find_by_id(session.user_id()) {
-            Ok(Some(user)) => user,
-            Ok(None) => return Ok(()),
+            Ok(user) => user,
             Err(e) => return Err(e),
         };
         match self.sessions.delete_session(session.id()) {
             Ok(()) => {}
             Err(e) => return Err(e),
         }
-        self.fire_on_sign_out(&user);
+        if let Some(user) = user {
+            self.fire_on_sign_out(&user);
+        }
         return Ok(());
     }
 
