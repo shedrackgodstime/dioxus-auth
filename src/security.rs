@@ -103,10 +103,12 @@ impl CookieConfig {
     /// Whether the wire cookie must carry `Secure`.
     ///
     /// Host-only mode forces `Secure` (part of the `__Host-` contract) even
-    /// when the configured flag is off.
+    /// when the configured flag is off — and so does `SameSite::None`:
+    /// browsers reject `None` without `Secure`, which would otherwise fail
+    /// sessions silently instead of loudly.
     #[must_use]
-    pub const fn forces_secure(&self) -> bool {
-        return self.secure || self.host_only;
+    pub fn forces_secure(&self) -> bool {
+        return self.secure || self.host_only || self.same_site == SameSite::None;
     }
 
     /// Whether the cookie is HTTP-only.

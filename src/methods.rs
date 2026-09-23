@@ -18,9 +18,11 @@ where
 {
     /// Changes a password after proving the current one.
     ///
-    /// Verifies without minting a session, then updates the hash and revokes
-    /// every session for the user. Unknown identifiers and wrong passwords
-    /// share `InvalidCredentials` — no existence oracle.
+    /// Verifies without minting a session, then revokes every session for the
+    /// user and updates the hash. Revocation runs first: if it fails, the
+    /// credential is untouched and the change reports the store error with
+    /// nothing mutated. Unknown identifiers and wrong passwords share
+    /// `InvalidCredentials` — no existence oracle.
     ///
     /// # Examples
     ///
@@ -61,11 +63,11 @@ where
             Ok(hash) => hash,
             Err(error) => return Err(error),
         };
-        match self.engine.user_store().update_password(&user.id(), &hash) {
+        match self.engine.revoke_all_user_sessions(&user.id()) {
             Ok(()) => {}
             Err(error) => return Err(error),
         }
-        match self.engine.revoke_all_user_sessions(&user.id()) {
+        match self.engine.user_store().update_password(&user.id(), &hash) {
             Ok(()) => {}
             Err(error) => return Err(error),
         }

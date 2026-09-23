@@ -119,26 +119,32 @@ where
         let user_id = user.id();
         let auth_hash = user.session_auth_hash().map(str::to_string);
 
-        // reason: the guard is scoped to rotation + save only. Holding it
+        // reason: the guard is scoped to save + rotation only. Holding it
         // across the sign-in hook below would deadlock hooks that call back
         // into the engine (the lock is non-reentrant); releasing it here keeps
-        // the read-modify-write atomic without extending the critical section
-        // into user code. ID generation stays outside: it needs no sharing.
+        // the write window atomic without extending the critical section into
+        // user code. ID generation stays outside: it needs no sharing.
         let raw_id = SessionId::generate();
         let storage_id = raw_id.hash_for_storage();
+        let storage_session = Self::apply_session_options(
+            Session::new(storage_id.clone(), user_id.clone(), now, expires_at)
+                .with_last_active(now),
+            auth_hash.as_deref(),
+            &options,
+        );
         {
             let _guard = self.login_lock.lock();
-            match self.rotate_stale_sessions(&user_id, auth_hash.as_deref()) {
+            // Save before rotation: if the save fails, prior sessions are
+            // untouched and the login reports the store error with nothing
+            // lost. Rotation spares the just-saved session, so a rotation
+            // failure leaves a valid-but-unreturned session that the next
+            // login's rotation sweeps — failures self-heal on retry instead
+            // of destroying live sessions.
+            match self.sessions.save_session(storage_session) {
                 Ok(()) => {}
                 Err(e) => return Err(e),
             }
-
-            let storage_session = Self::apply_session_options(
-                Session::new(storage_id, user_id.clone(), now, expires_at).with_last_active(now),
-                auth_hash.as_deref(),
-                &options,
-            );
-            match self.sessions.save_session(storage_session) {
+            match self.rotate_stale_sessions(&user_id, auth_hash.as_deref(), &storage_id) {
                 Ok(()) => {}
                 Err(e) => return Err(e),
             }
@@ -201,22 +207,34 @@ where
         return Ok(user);
     }
 
-    /// Deletes sessions superseded by the current credential state.
+    /// Deletes sessions superseded by the current credential state, sparing
+    /// the just-saved session.
     ///
-    /// With single-active-session enforcement every existing session goes;
-    /// otherwise only sessions minted under a rotated credential version are
-    /// removed, so a password change revokes them at the next login rather
+    /// With single-active-session enforcement every other existing session
+    /// goes; otherwise only sessions minted under a rotated credential version
+    /// are removed, so a password change revokes them at the next login rather
     /// than only on first use (`validate_session` also drops them lazily).
+    /// `spare` is the storage-form id saved moments ago in the same locked
+    /// window: rotation must never reap the session it just made room for.
     fn rotate_stale_sessions(
         &self,
         user_id: &U::Id,
         current_hash: Option<&str>,
+        spare: &SessionId,
     ) -> Result<(), AuthError> {
         if self.single_active_session {
-            return match self.sessions.delete_user_sessions(user_id) {
-                Ok(()) => Ok(()),
-                Err(e) => Err(e),
+            let sessions = match self.sessions.list_user_sessions(user_id) {
+                Ok(sessions) => sessions,
+                Err(e) => return Err(e),
             };
+            for session in sessions {
+                if session.id() != spare {
+                    if let Err(e) = self.sessions.delete_session(session.id()) {
+                        return Err(e);
+                    }
+                }
+            }
+            return Ok(());
         }
         let Some(current_hash) = current_hash else {
             return Ok(());
@@ -226,6 +244,9 @@ where
             Err(e) => return Err(e),
         };
         for session in sessions {
+            if session.id() == spare {
+                continue;
+            }
             if let Some(session_hash) = session.auth_hash() {
                 if session_hash != current_hash {
                     if let Err(e) = self.sessions.delete_session(session.id()) {

@@ -69,6 +69,10 @@ pub fn assert_cleared_cookie(headers: &HeaderMap) {
         "logout must emit a clearing cookie"
     );
     assert!(
+        set_cookie.contains("Expires=Thu, 01 Jan 1970 00:00:00 GMT"),
+        "logout must expire the cookie for legacy clients too"
+    );
+    assert!(
         response_token(headers, COOKIE).is_empty(),
         "logout must clear the cookie value"
     );

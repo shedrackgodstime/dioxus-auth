@@ -9,6 +9,7 @@ mod common;
 #[path = "../common/password.rs"]
 mod password;
 
+mod faults;
 mod hooks;
 mod lifecycle;
 mod policies;

@@ -62,6 +62,9 @@ pub fn session_cookie_value(cfg: &CookieConfig, token: Option<&str>) -> String {
     attributes.push(format!("SameSite={}", same_site_name(cfg.same_site())));
     if token.is_none() {
         attributes.push(String::from("Max-Age=0"));
+        // `Max-Age=0` clears on modern clients; the epoch `Expires` keeps
+        // legacy ones honest too.
+        attributes.push(String::from("Expires=Thu, 01 Jan 1970 00:00:00 GMT"));
     } else if let Some(max_age) = cfg.max_age() {
         attributes.push(format!("Max-Age={max_age}"));
     }

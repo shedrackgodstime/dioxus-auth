@@ -4,7 +4,7 @@
 // conflicting style lint `needless_return` is allowed with this justification.
 #![allow(clippy::needless_return)]
 
-use dioxus_auth::prelude::{CookieConfig, ServerAuthConfig};
+use dioxus_auth::prelude::{CookieConfig, SameSite, ServerAuthConfig};
 use dioxus_fullstack::http;
 
 use super::common::TestUser;
@@ -113,4 +113,31 @@ async fn default_config_rejects_the_prefixed_cookie_name() {
     );
     let result = run_session(parts).await;
     assert_eq!(error_code(&result), 401);
+}
+
+#[tokio::test]
+async fn same_site_none_forces_secure_even_when_disabled() {
+    let base = build_config(COOKIE);
+    let cookie = CookieConfig::new()
+        .with_name(String::from(COOKIE))
+        .with_secure(false)
+        .with_same_site(SameSite::None);
+    let config = ServerAuthConfig::new(base.engine().clone(), cookie);
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (result, headers) = run_login(parts, IDENTIFIER, PASSWORD).await;
+    result.expect("login must succeed");
+
+    let set_cookie = headers
+        .get(http::header::SET_COOKIE)
+        .expect("login must set a response cookie")
+        .to_str()
+        .expect("the Set-Cookie header must be valid");
+    assert!(
+        set_cookie.contains("SameSite=None"),
+        "the configured policy must render"
+    );
+    assert!(
+        set_cookie.contains("Secure"),
+        "SameSite=None without Secure is rejected by browsers; the crate must force it"
+    );
 }

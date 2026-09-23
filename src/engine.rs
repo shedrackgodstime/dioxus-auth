@@ -112,10 +112,10 @@ where
     pub(crate) dummy_hash: String,
     /// Clock producing the current UNIX timestamp in seconds.
     pub(crate) now: Arc<dyn Fn() -> u64 + Send + Sync>,
-    /// Serializes the rotate-then-save window of [`AuthEngine::login`].
+    /// Serializes the save-then-rotate window of [`AuthEngine::login`].
     ///
-    /// Rotation (single-active enforcement, stale-credential sweep) and the
-    /// session save must read-modify-write as one step: two logins racing
+    /// The session save and rotation (single-active enforcement,
+    /// stale-credential sweep) must land as one step: two logins racing
     /// through the window would otherwise both survive, breaking
     /// single-active enforcement exactly when it matters. The guard is held
     /// across store calls only — never across user hooks, which may call back
