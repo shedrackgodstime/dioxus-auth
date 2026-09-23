@@ -64,6 +64,15 @@
 // reason: project style requires explicit `return` on every tail expression,
 // which the style-group lint `needless_return` then flags. The explicit-return
 // rule is stricter, so the conflicting style lint is disabled crate-wide.
+
+//! README mirror anchor: the rust blocks in `README.md` compile as
+//! doctests, so the guide cannot rot away from the API. Component trees and
+//! server wiring stay `rust,ignore` with symbol pins in
+//! `tests/readme_snippets.rs`.
+#[doc(hidden)]
+#[doc = include_str!("../README.md")]
+mod readme_mirror {}
+
 pub mod auth;
 pub mod builder;
 #[cfg(feature = "dioxus")]

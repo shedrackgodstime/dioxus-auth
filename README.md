@@ -38,7 +38,7 @@ fn main() -> Result<(), dioxus_auth::AuthError> {
 }
 ```
 
-Memory dies with the process. This is the prototype door. Unknown
+Memory dies with the process, so prototype with it. Unknown
 identifiers and wrong passwords share one `InvalidCredentials` error:
 identifier state is never observable.
 
@@ -50,6 +50,17 @@ identifier state is never observable.
    `id` and `email`).
 3. Nothing else changes: same verbs, same sessions, same error codes.
    Sessions are opaque and user-type-agnostic, so zero migration.
+
+Your data lives in four tables. Column sketch below; the exact DDL ships
+in `examples/sqlite-reference`, which also implements the store. Apply it
+with any SQL tool, then point a store at it:
+
+```sql
+users(id, email, name, ...)  -- your AppUser rows
+accounts(provider, identifier, user_id, password_hash)  -- credentials
+sessions(id, user_id, expiry, activity, metadata)  -- opaque server sessions
+verifications(id, identifier, token, expiry)  -- reserved for future flows
+```
 
 ```rust
 use dioxus_auth::{Auth, AuthUser, MemoryStore};
@@ -125,15 +136,36 @@ Rate limiting is opt-in. Turn it on for any credential endpoint facing the
 network:
 
 ```rust
-use std::time::Duration;
-use dioxus_auth::{AuthEngine, InMemoryRateLimiter, MemoryStore};
 use std::sync::Arc;
+use std::time::Duration;
+use dioxus_auth::{AuthEngine, AuthUser, InMemoryRateLimiter, MemoryStore};
 
-let limiter = InMemoryRateLimiter::new(5, Duration::from_secs(60));
-let store = Arc::new(MemoryStore::<AppUser>::new());
-let auth = AuthEngine::builder(store.clone(), store)
-    .rate_limiter(limiter)
-    .build()?;
+#[derive(Debug, Clone)]
+struct AppUser {
+    id: u64,
+    email: String,
+}
+
+impl AuthUser for AppUser {
+    type Id = u64;
+
+    fn id(&self) -> u64 {
+        self.id
+    }
+
+    fn email(&self) -> &str {
+        &self.email
+    }
+}
+
+fn main() -> Result<(), dioxus_auth::AuthError> {
+    let limiter = InMemoryRateLimiter::new(5, Duration::from_secs(60));
+    let store = Arc::new(MemoryStore::<AppUser>::new());
+    let _auth = AuthEngine::builder(store.clone(), store)
+        .rate_limiter(limiter)
+        .build()?;
+    Ok(())
+}
 ```
 
 Production preset: 100 attempts per 60-second window
