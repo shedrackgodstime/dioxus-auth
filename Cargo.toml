@@ -36,6 +36,7 @@ include = [
     "/.github/workflows/ci.yml",
     "/.gitignore",
     "/Cargo.toml",
+    "/CHANGELOG.md",
     "/LICENSE",
     "/LICENSE-MIT",
     "/LICENSE-APACHE",
@@ -44,8 +45,10 @@ include = [
     "/rustfmt.toml",
     "/scripts/check-packaging.sh",
     "/scripts/check-ssot.sh",
+    "/scripts/check-docs.sh",
     "/scripts/verify.sh",
     "/docs/README.md",
+    "/docs/REVIEW.md",
     "/src/**",
 ]
 

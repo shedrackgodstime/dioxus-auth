@@ -35,7 +35,10 @@ cargo test --workspace --all-targets --features dioxus-fullstack,server
 echo "==> doctests"
 cargo test --workspace --doc
 
+echo "==> doc invariants"
+bash scripts/check-docs.sh
+
 echo "==> ssot invariants"
 bash scripts/check-ssot.sh
 
-echo "verify ok: fmt, clippy x3, tests x3, doctests, ssot"
+echo "verify ok: fmt, clippy x3, tests x3, doctests, docs, ssot"

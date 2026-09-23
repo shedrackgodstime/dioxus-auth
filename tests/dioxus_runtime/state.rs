@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use dioxus_auth::{
-    AuthEngineHandle, AuthError, AuthOperations, AuthStatus, MemoryTokenStorage, SessionId,
+    Auth, AuthEngineHandle, AuthError, AuthOperations, AuthStatus, MemoryTokenStorage, SessionId,
     TokenStorageHandle,
 };
 
@@ -242,4 +242,47 @@ fn login_and_logout_route_through_the_single_engine_spelling() {
         1,
         "one context logout must be exactly one engine logout"
     );
+}
+
+/// Facade verbs and runtime twins agree: same store, same credentials, same
+/// user, sessions that validate to the same identity, same error codes.
+#[test]
+fn facade_and_runtime_twins_produce_identical_results() {
+    let engine = seeded_engine();
+    let storage = TokenStorageHandle::new(MemoryTokenStorage::new());
+    let mut vdom = state_dom(&engine, storage);
+    mount(&mut vdom);
+    let context = context();
+    let auth = Auth::from_engine((*engine).clone());
+
+    let (facade_user, facade_session) = auth
+        .sign_in_email("alice", "pw")
+        .expect("facade sign-in must succeed");
+    context
+        .login("alice", "pw")
+        .expect("context login must succeed");
+    let context_user = context.user().expect("context must be authenticated");
+    assert_eq!(facade_user, context_user);
+
+    let context_session = context.token().expect("token must be set");
+    for session in [&facade_session, &context_session] {
+        let validated = engine
+            .validate_session(session)
+            .expect("validation must succeed")
+            .expect("both sessions must validate");
+        assert_eq!(validated, facade_user);
+    }
+
+    assert_eq!(
+        auth.sign_in_email("alice", "wrong")
+            .expect_err("facade must reject"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        context
+            .login("alice", "wrong")
+            .expect_err("context must reject"),
+        AuthError::InvalidCredentials
+    );
+    return;
 }

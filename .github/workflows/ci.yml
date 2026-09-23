@@ -23,7 +23,7 @@ jobs:
       # the same script, so the two cannot diverge). `--pedantic` is a clippy
       # flag and belongs after the `--` separator; before it, cargo rejects
       # the argument and the step never runs.
-      - name: Verify (fmt, clippy x3, tests x3, doctests, ssot)
+      - name: Verify (fmt, clippy x3, tests x3, doctests, docs, ssot)
         run: bash scripts/verify.sh
 
   msrv:
