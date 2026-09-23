@@ -61,6 +61,21 @@ pub struct DefaultUser {
     pub name: String,
 }
 
+impl DefaultUser {
+    /// Creates a default user.
+    ///
+    /// Prefer this over struct-literal construction: future fields will
+    /// arrive here first, keeping this call compiling across releases.
+    #[must_use]
+    pub fn new(id: u64, email: impl Into<String>, name: impl Into<String>) -> Self {
+        return Self {
+            id,
+            email: email.into(),
+            name: name.into(),
+        };
+    }
+}
+
 impl AuthUser for DefaultUser {
     type Id = u64;
 

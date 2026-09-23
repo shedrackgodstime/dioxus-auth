@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use common::TestUser;
 use dioxus_auth::{
-    Argon2Hasher, Auth, AuthEngine, AuthError, AuthUser, ErrorCode, InMemoryRateLimiter,
-    MemoryStore, PasswordHasher,
+    Argon2Hasher, Auth, AuthEngine, AuthError, AuthUser, DefaultUser, ErrorCode,
+    InMemoryRateLimiter, MemoryStore, PasswordHasher,
 };
 use password::hash_password;
 
@@ -338,5 +338,18 @@ fn sign_up_taken_and_free_paths_cost_equal_argon2_work() {
     );
     assert_eq!(free_work, (1, 1), "free path: one hash plus one verify");
     assert_eq!(taken_work, (1, 1), "taken path: one hash plus one verify");
+    return;
+}
+
+#[test]
+fn default_user_constructor_flows_through_memory() {
+    let auth = Auth::memory().expect("quickstart must construct");
+    let alice = DefaultUser::new(1, "alice@example.com", "alice");
+    assert_eq!(alice.id(), 1);
+    assert_eq!(alice.email(), "alice@example.com");
+    let (user, _) = auth
+        .sign_up_email("alice@example.com", "pw", alice)
+        .expect("sign-up must succeed");
+    assert_eq!(user, DefaultUser::new(1, "alice@example.com", "alice"));
     return;
 }

@@ -12,7 +12,9 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::{Auth, AuthEngine, AuthError, PasswordUserStore, SessionId, SessionStore};
+use dioxus_auth::{
+    Auth, AuthEngine, AuthError, DefaultUser, PasswordUserStore, SessionId, SessionStore,
+};
 use sqlite_reference::{AppUser, SCHEMA_SQL, SqliteStore};
 
 fn user(id: i64, email: &str) -> AppUser {
@@ -197,4 +199,72 @@ fn touch_missing_sessions_is_a_noop_and_single_active_rotates() {
             .is_some(),
         "the newest session must survive rotation"
     );
+}
+
+/// Graduation across the real boundary: the memory quickstart (`DefaultUser`)
+/// and the own-DB store (`AppUser`) answer identically — same verbs, same
+/// error codes. Written out on both sides: the facades have different store
+/// types, so the parity is literal.
+#[test]
+fn graduation_from_memory_quickstart_preserves_behavior() {
+    let quick = Auth::memory().expect("quickstart must construct");
+    quick
+        .sign_up_email(
+            "alice@example.com",
+            "password",
+            DefaultUser {
+                id: 1,
+                email: String::from("alice@example.com"),
+                name: String::from("alice"),
+            },
+        )
+        .expect("sign-up must succeed");
+
+    let owned = Auth::new(SqliteStore::open_in_memory().expect("store must open"))
+        .expect("facade must construct");
+    owned
+        .sign_up_email(
+            "alice@example.com",
+            "password",
+            user(1, "alice@example.com"),
+        )
+        .expect("sign-up must succeed");
+
+    assert_eq!(
+        quick
+            .sign_in_email("alice@example.com", "wrong")
+            .expect_err("wrong password must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        owned
+            .sign_in_email("alice@example.com", "wrong")
+            .expect_err("wrong password must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        quick
+            .sign_in_email("nobody@example.com", "password")
+            .expect_err("unknown identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        owned
+            .sign_in_email("nobody@example.com", "password")
+            .expect_err("unknown identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+
+    let (_, quick_session) = quick
+        .sign_in_email("alice@example.com", "password")
+        .expect("sign-in must succeed");
+    let (_, owned_session) = owned
+        .sign_in_email("alice@example.com", "password")
+        .expect("sign-in must succeed");
+    quick
+        .sign_out(&quick_session)
+        .expect("sign-out must succeed");
+    owned
+        .sign_out(&owned_session)
+        .expect("sign-out must succeed");
 }

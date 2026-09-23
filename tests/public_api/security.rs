@@ -21,6 +21,30 @@ fn argon2_hash_verify_roundtrip() {
 }
 
 #[test]
+fn argon2_custom_params_roundtrip() {
+    use argon2::ParamsBuilder;
+
+    let params = ParamsBuilder::new()
+        .m_cost(8 * 1024)
+        .t_cost(1)
+        .p_cost(1)
+        .build()
+        .expect("test params must build");
+    let hasher = Argon2Hasher::with_params(params);
+    let hash = hasher.hash("pw").expect("hashing must succeed");
+    assert!(
+        hasher
+            .verify("pw", &hash)
+            .expect("verification must succeed")
+    );
+    assert!(
+        !hasher
+            .verify("wrong", &hash)
+            .expect("verification must succeed")
+    );
+}
+
+#[test]
 fn argon2_verify_malformed_hash_is_error() {
     let hasher = Argon2Hasher::new();
     assert_eq!(
