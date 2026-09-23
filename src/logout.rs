@@ -78,6 +78,20 @@ where
         return self.sessions.find_session(&storage_id);
     }
 
+    /// Lists all sessions belonging to a user.
+    ///
+    /// The read half of multi-session management ("log out other devices"):
+    /// list here, revoke one session with [`revoke_session`](Self::revoke_session)
+    /// or all of them with [`revoke_all_user_sessions`](Self::revoke_all_user_sessions).
+    /// Order is store-defined; compare by id, never by position.
+    ///
+    /// # Errors
+    /// Returns a store error if the listing fails.
+    #[must_use = "the session list must be used"]
+    pub fn list_user_sessions(&self, user_id: &U::Id) -> Result<Vec<Session<U::Id>>, AuthError> {
+        return self.sessions.list_user_sessions(user_id);
+    }
+
     /// Revokes all sessions belonging to a user.
     ///
     /// # Errors

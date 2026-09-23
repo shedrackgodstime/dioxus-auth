@@ -130,3 +130,37 @@ fn logout_deletes_sessions_whose_user_row_is_gone() {
         "no orphan session may survive its missing user"
     );
 }
+
+/// Multi-session management on the engine: list both logins, revoke all,
+/// list empty. Compare by id, never by position — order is store-defined.
+#[test]
+fn list_and_revoke_all_cover_every_session() {
+    let engine = seeded_engine();
+
+    let (_, first) = engine.login("alice", "s3cret").expect("login must succeed");
+    let (_, second) = engine.login("alice", "s3cret").expect("login must succeed");
+
+    let listed = engine.list_user_sessions(&1).expect("listing must succeed");
+    assert_eq!(listed.len(), 2);
+    // The store holds storage-form ids (`sha256` of the wire tokens).
+    assert!(
+        listed
+            .iter()
+            .any(|s| return s.id() == &first.id().hash_for_storage())
+    );
+    assert!(
+        listed
+            .iter()
+            .any(|s| return s.id() == &second.id().hash_for_storage())
+    );
+
+    engine
+        .revoke_all_user_sessions(&1)
+        .expect("revocation must succeed");
+    assert!(
+        engine
+            .list_user_sessions(&1)
+            .expect("listing must succeed")
+            .is_empty()
+    );
+}
