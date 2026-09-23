@@ -19,7 +19,10 @@ yet written; unmarked entries exist.
   snippet lives here (the crate never ships a black-box sign-in screen). (FUTURE)
 - **Your user, your database (Door 2)** — own `AppUser` + own store with the
   same verbs; the documented 4-table shape (`user` / `session` / `account` /
-  `verification`) as copy-paste SQL you apply yourself. No scaffolding required. (FUTURE)
+  `verification`) as copy-paste SQL you apply yourself. No scaffolding required.
+  Reference implementation with guide: `examples/sqlite-reference` (schema,
+  store, and engine-flow tests; the guide asserts its SQL stays byte-identical
+  to the DDL). (The `.with_*` builder surface it points at is still FUTURE.)
 - **Full control (Door 3)** — custom stores, hashers, rate limiters, audit
   hooks, `__Host-`, per-request authority, conformance proofs. (FUTURE)
 
