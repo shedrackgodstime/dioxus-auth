@@ -106,6 +106,9 @@ pub use crate::error::{AuthError, ErrorCode};
 pub use crate::hash::Argon2Hasher;
 
 #[doc(inline)]
+pub use crate::methods::SignupOptions;
+
+#[doc(inline)]
 pub use crate::rate_limit::{InMemoryRateLimiter, RateLimiter, RateLimiterClock};
 
 #[doc(inline)]

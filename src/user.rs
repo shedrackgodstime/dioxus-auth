@@ -3,47 +3,26 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-/// The user identity trait.
+/// The application user contract for resolver-backed stores.
 ///
-/// Applications implement this to provide user data to the authentication system.
-/// The crate is generic over this trait, so application domain logic
-/// (roles, subscriptions, profile fields) stays entirely on the user type.
-///
-/// This is the session-owner contract, nothing more: [`AuthUser::id`] is the
-/// stable unique identifier (e.g. `u64`, `Uuid`, `String`) that sessions point
-/// at and that [`UserStore`](crate::store::UserStore) rehydrates through
-/// `find_by_id`. Login identifiers travel as separate `&str` arguments on the
-/// credential verbs (`sign_up_email`/`sign_in_email`); the engine normalizes
-/// them once (trim plus lowercase) before any store call, and stores compare
-/// byte-for-byte without folding case or whitespace themselves. The user
-/// struct carries every other field (email, name, roles, …) as plain
-/// application data the engine never reads. `Clone` lets the engine hand
-/// identities to callers.
+/// Applications implement this on their user type so resolving stores can
+/// persist app rows keyed by [`AuthUser::id`] and hand them back through
+/// [`UserStore::resolve`](crate::store::UserStore::resolve). The engine
+/// itself never reads this trait: it authenticates subjects and returns
+/// application keys, leaving model interpretation to the application
+/// (loader closures) or the resolving store. Login identifiers travel as
+/// separate `&str` arguments on the credential verbs; the engine
+/// normalizes them once (trim plus lowercase) before any store call, and
+/// stores compare byte-for-byte without folding case or whitespace
+/// themselves. Session binding lives on the subject row as the stored
+/// secret itself, so no per-user hook is needed for rotation.
 pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
-    /// Stable unique identifier for the user (e.g. `u64`, `Uuid`, `String`).
+    /// Stable application-row identifier (e.g. `u64`, `Uuid`, `String`).
     type Id: Clone + Eq + Hash + Debug + Send + Sync + 'static;
 
-    /// Returns the user's unique identifier.
+    /// Returns the application-row identifier.
     #[must_use]
     fn id(&self) -> Self::Id;
-
-    /// Opaque value that binds sessions to a known password (or other secret
-    /// material) state.
-    ///
-    /// When a user's password changes, this value changes and every session
-    /// bound to the old value is rejected on next validation or login.
-    /// Implement this when credentials change outside
-    /// [`Auth::change_password`](crate::auth::Auth::change_password) (direct
-    /// store writes, admin resets, external providers): that verb revokes all
-    /// sessions explicitly, but out-of-band changes leave old sessions alive
-    /// until TTL expiry unless this binding catches them. Return `None` when
-    /// every credential change flows through `change_password` or the
-    /// application enforces binding through other means (e.g. store-side
-    /// checks or token versions).
-    #[must_use]
-    fn session_auth_hash(&self) -> Option<&str> {
-        return None;
-    }
 }
 
 /// Row type behind the zero-modeling quickstart.

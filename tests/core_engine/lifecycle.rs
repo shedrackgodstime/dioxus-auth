@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::{AuthEngine, MemoryStore, Session, SessionId, SessionStore};
+use dioxus_auth::{AuthEngine, AuthError, MemoryStore, Session, SessionId, SessionStore};
 
 use super::common::TestUser;
 use super::seeded_engine;
@@ -20,6 +20,100 @@ fn login_then_validate_roundtrip() {
 
     let validated = engine.validate_session(session.id()).unwrap().unwrap();
     assert_eq!(validated.auth_id, 1);
+}
+
+#[test]
+fn login_key_returns_the_app_key_and_wire_id() {
+    let engine = seeded_engine();
+
+    let (app_key, session) = engine.login_key("alice", "s3cret").unwrap();
+    assert_eq!(app_key, 1);
+    assert!(SessionId::is_valid_wire_format(session.as_str()));
+}
+
+#[test]
+fn validate_key_roundtrip_and_revoke() {
+    let engine = seeded_engine();
+
+    let (_, session) = engine.login("alice", "s3cret").unwrap();
+    assert_eq!(
+        engine.validate_key(session.id()).unwrap(),
+        Some(1),
+        "a live session resolves its application key"
+    );
+    engine.logout(session.id()).unwrap();
+    assert_eq!(
+        engine.validate_key(session.id()).unwrap(),
+        None,
+        "a revoked session resolves nothing"
+    );
+    assert_eq!(
+        engine.validate_key(&SessionId::generate()).unwrap(),
+        None,
+        "an unknown token resolves nothing"
+    );
+}
+
+#[test]
+fn login_user_resolves_through_a_caller_loader() {
+    use std::collections::HashMap;
+
+    let engine = seeded_engine();
+    let directory = HashMap::from([(1u64, String::from("alice"))]);
+
+    let (name, _) = engine
+        .login_user("alice", "s3cret", |key| {
+            return Ok(directory.get(key).cloned());
+        })
+        .expect("login with loader must succeed");
+    assert_eq!(name, "alice");
+
+    let missing = engine.login_user("alice", "s3cret", |_: &u64| {
+        return Ok(None::<String>);
+    });
+    assert_eq!(
+        missing.unwrap_err(),
+        AuthError::InvalidCredentials,
+        "unresolvable keys fail closed"
+    );
+}
+
+#[test]
+fn validate_user_sweeps_unresolvable_sessions_but_not_outages() {
+    let engine = seeded_engine();
+    let (_, session) = engine.login("alice", "s3cret").unwrap();
+    let storage = session.id().hash_for_storage();
+
+    let outage = engine.validate_user(session.id(), |_: &u64| {
+        return Err::<Option<String>, _>(AuthError::Internal(String::from("db down")));
+    });
+    assert!(
+        outage.is_err(),
+        "loader outages propagate instead of demoting"
+    );
+    assert!(
+        engine
+            .session_store()
+            .find_session(&storage)
+            .unwrap()
+            .is_some(),
+        "outages must not sweep"
+    );
+
+    let swept = engine
+        .validate_user(session.id(), |_: &u64| {
+            return Ok(None::<String>);
+        })
+        .expect("sweep must not error");
+    assert!(swept.is_none());
+    assert!(
+        engine
+            .session_store()
+            .find_session(&storage)
+            .unwrap()
+            .is_none(),
+        "unresolvable sessions are swept on the spot"
+    );
 }
 
 #[test]

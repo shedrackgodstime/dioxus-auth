@@ -92,6 +92,109 @@ where
         return Ok(Some(subject));
     }
 
+    /// Validates a raw wire session id, returning the application key.
+    ///
+    /// The key-returning restore primitive: session proof without
+    /// application resolution. Needs no `UserStore` and never touches app
+    /// tables. Missing or expired sessions, and subjects without a linked
+    /// key, all read as `Ok(None)` (fail closed); store outages propagate
+    /// so transient failures never demote.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, CredentialStore, DefaultStore, DefaultUserInput, SubjectStore};
+    /// # use std::sync::Arc;
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(DefaultStore::new());
+    /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
+    /// # let hash = engine.hasher().hash("s3cret")?;
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "email", "alice", &hash)?;
+    /// # let (_, session) = engine.login("alice", "s3cret")?;
+    /// let app_key = engine.validate_key(session.id())?;
+    /// assert_eq!(app_key, Some(1));
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a store error if a lookup or update fails.
+    #[must_use = "the application key must be used"]
+    pub fn validate_key(&self, session_id: &SessionId) -> Result<Option<C::AppRef>, AuthError> {
+        let subject = match self.validate_session(session_id) {
+            Ok(subject) => subject,
+            Err(error) => return Err(error),
+        };
+        let Some(subject) = subject else {
+            return Ok(None);
+        };
+        return Ok(subject.app_ref);
+    }
+
+    /// Validates a session and resolves the application model in one call.
+    ///
+    /// Composes [`validate_key`](Self::validate_key) with a caller-supplied
+    /// loader, same contract as [`login_user`](AuthEngine::login_user):
+    /// plain caller code, any return type, synchronous inside this call.
+    /// Missing sessions and unresolvable keys read as `Ok(None)`
+    /// (definitive rejection); loader outages propagate. A session whose
+    /// key no longer resolves is swept on the spot so zombies never
+    /// accumulate, while outage paths never delete.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, CredentialStore, DefaultStore, DefaultUserInput, SubjectStore};
+    /// # use std::collections::HashMap;
+    /// # use std::sync::Arc;
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(DefaultStore::new());
+    /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
+    /// # let hash = engine.hasher().hash("s3cret")?;
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "email", "alice", &hash)?;
+    /// # let (_, session) = engine.login("alice", "s3cret")?;
+    /// # let directory = HashMap::from([(1u64, String::from("alice"))]);
+    /// let name = engine.validate_user(session.id(), |key| {
+    ///     return Ok(directory.get(key).cloned());
+    /// })?;
+    /// assert_eq!(name, Some(String::from("alice")));
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a loader error as-is, or a store error if a lookup, touch,
+    /// or sweep fails.
+    #[must_use = "the resolved user must be used"]
+    pub fn validate_user<U>(
+        &self,
+        session_id: &SessionId,
+        loader: impl Fn(&C::AppRef) -> Result<Option<U>, AuthError>,
+    ) -> Result<Option<U>, AuthError> {
+        let app_key = match self.validate_key(session_id) {
+            Ok(key) => key,
+            Err(error) => return Err(error),
+        };
+        let Some(app_key) = app_key else {
+            return Ok(None);
+        };
+        let user = match loader(&app_key) {
+            Ok(user) => user,
+            Err(error) => return Err(error),
+        };
+        let Some(user) = user else {
+            // The key outlived its application row. Sweep the session so the
+            // dead link cannot linger past its TTL; outages above already
+            // returned before reaching here, so this delete never destroys
+            // evidence of a transient failure.
+            if let Err(error) = self.sessions.delete_session(&session_id.hash_for_storage()) {
+                return Err(error);
+            }
+            return Ok(None);
+        };
+        return Ok(Some(user));
+    }
+
     /// Whether a loaded, unexpired session must be dropped instead of accepted.
     ///
     /// Covers credential-version mismatch (e.g. after a secret rotation) and

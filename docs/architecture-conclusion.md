@@ -210,13 +210,27 @@ auth-space `sign_up_subject`; narrowed `AuthUser` (no `email`);
 `DefaultStore` and `MemoryStore` covering memory paths; Dioxus runtime
 and fullstack layers; conformance suites pinning the new traits.
 
-Honest gaps against this document: the SQLite reference is still
-physically R2-shaped (it has a subjects table); the R1 reference shape
-is decided but not yet migrated. No tx-scoped claim operation exists
-yet; provisioning still runs in store-owned transactions. Reads resolve
-through `UserStore`; key-returning primitives are specified, not yet
-exposed. No loader, no options type, no hash import, no `ensure_schema`,
-no adapters beyond the bundled stores.
+Honest gaps against this document: the tx-scoped `EmailClaims`
+primitive is implemented in the SQLite reference (caller-owned
+transaction, statements-only, idempotent re-claim, opt-in shared rate
+gate) with flow tests pinning atomicity, rollback, taken, unknown-key,
+multi-credential, and rate behavior. Key-returning reads are implemented
+at engine level (`login_key`, `validate_key`: no `UserStore` bound, no
+app-table access, fail-closed). Caller-loader composition is implemented
+(`login_user`, `validate_user`: plain `Fn`, any return type, sync inside
+the call; unresolvable keys fail closed, outages propagate, dead links
+swept on validate). Progressive signup control is implemented as one
+options struct (`SignupOptions` with explicit id override;
+`sign_up_email_with_options` beside the unchanged canonical verb; taken
+identifiers and taken ids share one error with identical work).
+Reference DDL is idempotent (`IF NOT EXISTS` throughout, byte-pinned to
+the README): reopening a file database preserves data and stays usable.
+Trust-based hash import is implemented (`import_email_credential` plus
+`attach_imported_email_credential` plus tx-side `claim_hash`; migration
+and admin only, no verification possible, no session minted, empty
+hashes rejected; pre-hashed secrets stay out of `SignupOptions` by
+design). No loader configuration object, no adapters beyond the
+bundled stores.
 
 Architecturally decided (settled, implementation pending or in flight):
 R1 as the reference physical representation; dev-owned-transaction

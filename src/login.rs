@@ -52,7 +52,7 @@ where
     /// # let store = Arc::new(DefaultStore::new());
     /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
     /// # let hash = engine.hasher().hash("s3cret")?;
-    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "alice", &hash)?;
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "email", "alice", &hash)?;
     /// let (subject, session) = engine.login("alice", "s3cret")?;
     /// assert_eq!(subject.auth_id, 1);
     /// # return Ok(());
@@ -86,7 +86,7 @@ where
     /// # let store = Arc::new(DefaultStore::new());
     /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
     /// # let hash = engine.hasher().hash("s3cret")?;
-    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "alice", &hash)?;
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "email", "alice", &hash)?;
     /// let options = LoginOptions::new().with_ip_address(Some("10.0.0.1"));
     /// let (subject, _) = engine.login_with_options("alice", "s3cret", options)?;
     /// assert_eq!(subject.auth_id, 1);
@@ -104,6 +104,106 @@ where
         options: LoginOptions<'_>,
     ) -> Result<AuthenticatedPair<C::AuthId, C::AppRef>, AuthError> {
         return self.do_login(identifier, password, options);
+    }
+
+    /// Authenticates by identifier and password, returning the app key.
+    ///
+    /// The key-returning read primitive: login proof without application
+    /// resolution. Needs no `UserStore` and never touches app tables; the
+    /// caller resolves the key through its own data layer. Subjects without
+    /// a linked key fail closed with `InvalidCredentials` (callers must
+    /// never receive a session paired with no key).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, CredentialStore, DefaultStore, DefaultUserInput, SubjectStore};
+    /// # use std::sync::Arc;
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(DefaultStore::new());
+    /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
+    /// # let hash = engine.hasher().hash("s3cret")?;
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "email", "alice", &hash)?;
+    /// let (app_key, session) = engine.login_key("alice", "s3cret")?;
+    /// assert_eq!(app_key, 1);
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns `AuthError::InvalidCredentials` for bad credentials or
+    /// unlinked subjects, `AuthError::RateLimited` if the identifier is
+    /// rate-limited, or a store or hasher error.
+    #[must_use = "the application key and session should be used"]
+    pub fn login_key(
+        &self,
+        identifier: &str,
+        password: &str,
+    ) -> Result<(C::AppRef, SessionId), AuthError> {
+        let (subject, session) = match self.login(identifier, password) {
+            Ok(pair) => pair,
+            Err(error) => return Err(error),
+        };
+        let Some(app_key) = subject.app_ref else {
+            return Err(AuthError::InvalidCredentials);
+        };
+        return Ok((app_key, session.id().clone()));
+    }
+
+    /// Authenticates and resolves the application model in one call.
+    ///
+    /// Composes [`login_key`](Self::login_key) with a caller-supplied
+    /// loader (`application key` → model). The loader is plain caller code:
+    /// any `Fn`, any return type, no traits, no subject vocabulary. It runs
+    /// synchronously inside this call; async data layers resolve through
+    /// their own blocking boundary before reaching here, never inside the
+    /// loader contract itself.
+    ///
+    /// Unresolvable keys fail closed with `InvalidCredentials`; store
+    /// outages inside the loader propagate instead of masquerading as bad
+    /// credentials.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, CredentialStore, DefaultStore, DefaultUserInput, SubjectStore};
+    /// # use std::collections::HashMap;
+    /// # use std::sync::Arc;
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// # let store = Arc::new(DefaultStore::new());
+    /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
+    /// # let hash = engine.hasher().hash("s3cret")?;
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "email", "alice", &hash)?;
+    /// # let directory = HashMap::from([(1u64, String::from("alice"))]);
+    /// let (name, _) = engine.login_user("alice", "s3cret", |key| {
+    ///     return Ok(directory.get(key).cloned());
+    /// })?;
+    /// assert_eq!(name, "alice");
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns `AuthError::InvalidCredentials` for bad credentials or
+    /// unresolvable keys, `AuthError::RateLimited` when limited, a loader
+    /// error as-is, or a store or hasher error.
+    #[must_use = "the resolved user and session should be used"]
+    pub fn login_user<U>(
+        &self,
+        identifier: &str,
+        password: &str,
+        loader: impl Fn(&C::AppRef) -> Result<Option<U>, AuthError>,
+    ) -> Result<(U, SessionId), AuthError> {
+        let (app_key, session_id) = match self.login_key(identifier, password) {
+            Ok(pair) => pair,
+            Err(error) => return Err(error),
+        };
+        let user = match loader(&app_key) {
+            Ok(Some(user)) => user,
+            Ok(None) => return Err(AuthError::InvalidCredentials),
+            Err(error) => return Err(error),
+        };
+        return Ok((user, session_id));
     }
 
     /// Applies the credential and IP rate gates.
@@ -254,7 +354,7 @@ where
         ip: Option<&str>,
     ) -> Result<AuthSubject<C::AuthId, C::AppRef>, AuthError> {
         let normalized = normalize_identifier(identifier);
-        let subject_entry = match self.store.find_credential(&normalized) {
+        let subject_entry = match self.store.find_credential("email", &normalized) {
             Ok(entry) => entry,
             Err(e) => return Err(e),
         };

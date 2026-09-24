@@ -16,7 +16,7 @@ use std::time::Duration;
 use common::TestUser;
 use dioxus_auth::{
     Argon2Hasher, Auth, AuthEngine, AuthError, AuthUser, DefaultUserInput, ErrorCode,
-    InMemoryRateLimiter, MemoryStore, PasswordHasher,
+    InMemoryRateLimiter, MemoryStore, PasswordHasher, SignupOptions,
 };
 use password::hash_password;
 
@@ -363,6 +363,127 @@ fn attach_adds_a_second_login_to_the_same_account() {
     assert_eq!(
         auth.attach_email_credential(&subject.auth_id, "alice@example.com", "pw")
             .expect_err("taken identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+    return;
+}
+
+#[test]
+fn signup_with_id_override_adopts_the_given_identity() {
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
+    let options = SignupOptions::new(TestUser::new(9, "alice")).with_id(77u64);
+    assert_eq!(options.id_override(), Some(&77));
+    let (user, session) = auth
+        .sign_up_email_with_options("alice", "s3cret", options)
+        .expect("override claim must succeed");
+    assert_eq!(user.id, 9, "the application model stays intact");
+    let subject = auth
+        .engine()
+        .validate_session(&session)
+        .expect("validation must succeed")
+        .expect("session must validate");
+    assert_eq!(subject.auth_id, 77, "the subject id is adopted, not minted");
+    return;
+}
+
+#[test]
+fn signup_with_taken_id_override_fails_without_writes() {
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
+    auth.sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
+        .expect("first sign-up must succeed");
+
+    let options = SignupOptions::new(TestUser::new(2, "mallory")).with_id(1u64);
+    assert_eq!(
+        auth.sign_up_email_with_options("mallory", "other", options)
+            .expect_err("taken id must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert!(
+        auth.sign_in_email("mallory", "other").is_err(),
+        "a rejected override must write nothing"
+    );
+    return;
+}
+
+#[test]
+fn import_accepts_a_prehashed_secret_and_logs_in() {
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
+    let hash = auth
+        .engine()
+        .hasher()
+        .hash("s3cret")
+        .expect("hash must succeed");
+
+    let user = auth
+        .import_email_credential(
+            "alice",
+            &hash,
+            SignupOptions::new(TestUser::new(1, "alice")),
+        )
+        .expect("import must succeed");
+    assert_eq!(user.id, 1);
+
+    let (same, _) = auth
+        .sign_in_email("alice", "s3cret")
+        .expect("original password must verify against the import");
+    assert_eq!(same.id, 1);
+    return;
+}
+
+#[test]
+fn import_rejects_taken_and_empty_hashes_without_writes() {
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
+    let hash = auth
+        .engine()
+        .hasher()
+        .hash("s3cret")
+        .expect("hash must succeed");
+    auth.sign_up_email("alice", "s3cret", TestUser::new(1, "alice"))
+        .expect("sign-up must succeed");
+
+    assert_eq!(
+        auth.import_email_credential(
+            "alice",
+            &hash,
+            SignupOptions::new(TestUser::new(2, "mallory")),
+        )
+        .expect_err("taken identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        auth.import_email_credential("bob", "", SignupOptions::new(TestUser::new(2, "bob")))
+            .expect_err("empty hash must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert!(
+        auth.sign_in_email("bob", "whatever").is_err(),
+        "rejected imports must write nothing"
+    );
+    return;
+}
+
+#[test]
+fn attach_imported_links_a_second_login_without_plaintext() {
+    let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
+    let (subject, _) = auth
+        .sign_up_subject("alice", "s3cret", TestUser::new(1, "alice"))
+        .expect("sign-up must succeed");
+    let hash = auth
+        .engine()
+        .hasher()
+        .hash("other-secret")
+        .expect("hash must succeed");
+
+    auth.attach_imported_email_credential(&subject.auth_id, "alice-2", &hash)
+        .expect("imported attach must succeed");
+    let (user, _) = auth
+        .sign_in_email("alice-2", "other-secret")
+        .expect("imported login must work");
+    assert_eq!(user.id, 1);
+
+    assert_eq!(
+        auth.attach_imported_email_credential(&404, "ghost", &hash)
+            .expect_err("unknown subject must fail"),
         AuthError::InvalidCredentials
     );
     return;

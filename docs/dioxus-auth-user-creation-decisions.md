@@ -197,9 +197,16 @@ session/association machinery.
 4. `AuthUser` fate (loader contract in outer layers vs dissolve into
    `app_ref` + app helpers).
 5. Auth-ID type and generation (counter vs random vs UUID).
-6. Options-channel shape (struct vs builder, extension without breakage).
-7. Hash-import semantics (verify-before-accept, session handling,
-   privilege requirements).
+6. Options-channel shape: IMPLEMENTED as one struct (`SignupOptions`
+   with explicit id override; canonical verb unchanged beside
+   `sign_up_email_with_options`; hash import stays a separate future
+   so the struct never becomes a grab-bag).
+7. Hash-import semantics: IMPLEMENTED as trust-based import
+   (`import_email_credential` + `attach_imported_email_credential` +
+   tx-side `claim_hash`; no verification possible without plaintext,
+   so migration/admin-only with staged test-logins; no session minted;
+   empty hashes rejected; pre-hashed secrets deliberately excluded
+   from `SignupOptions`).
 8. Adapter surface for developer-defined auth flows (what core exposes
    so custom methods reuse subject/session machinery).
 
