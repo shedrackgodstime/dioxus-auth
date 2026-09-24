@@ -90,7 +90,11 @@ fn set_app_link_to_the_same_ref_is_a_no_op_success() {
     let linked = store.set_app_link(&created.auth_id, &3).unwrap();
     assert!(linked);
     assert_eq!(
-        store.find_subject(&created.auth_id).unwrap().unwrap().app_ref,
+        store
+            .find_subject(&created.auth_id)
+            .unwrap()
+            .unwrap()
+            .app_ref,
         Some(3)
     );
 }

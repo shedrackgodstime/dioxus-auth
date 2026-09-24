@@ -1,11 +1,14 @@
 //! End-to-end proof that the reference store drives the engine: the same
 //! verbs the memory quickstart uses, over `SQLite`, plus the store-level
-//! behaviors (atomic provisioning, touch semantics) the engine depends on.
+//! behaviors (atomic provisioning, adoption, cascade, touch semantics) the
+//! engine depends on.
 //!
-//! Behavioral parity with `tests/conformance/` (which pins `MemoryStore`):
-//! the suites are not code-shared because seeding (`insert_user…`) is not
-//! part of the capability traits. Only engine-reachable behavior is shared.
-//! If the engine gains a store-visible behavior, it gets a test here too.
+//! R1 representation scope: this suite pins what the reference shape
+//! guarantees (app-key-keyed credentials and sessions, adoption without
+//! app-table writes, cascade on app-row delete, secret-derived binding).
+//! Shared trait semantics live in `tests/conformance/` (which pins
+//! `MemoryStore`); representation-specific behavior lives here. If the
+//! engine gains a store-visible behavior, it gets a test here too.
 //!
 //! Style note: like `src/lib.rs`, these tests use idiomatic tail expressions
 //! so the file stays clean under default lints when copied.
@@ -14,7 +17,7 @@ use std::sync::Arc;
 
 use dioxus_auth::{
     Auth, AuthEngine, AuthError, CredentialStore, DefaultUserInput, SessionId, SessionStore,
-    SubjectStore,
+    SubjectStore, UserStore,
 };
 use sqlite_reference::{AppUser, SCHEMA_SQL, SqliteAppSetup, SqliteStore};
 
@@ -195,6 +198,137 @@ fn attach_adds_a_second_login_and_rejects_taken_or_missing() {
             .expect_err("unknown user must fail"),
         AuthError::InvalidCredentials
     );
+}
+
+#[test]
+fn existing_app_rows_adopt_without_rewriting_them() {
+    let setup = Arc::new(SqliteStore::open_in_memory().expect("setup store must open"));
+    let engine = AuthEngine::builder(Arc::clone(&setup), Arc::clone(&setup))
+        .build()
+        .expect("engine construction must succeed");
+    setup
+        .provision_subject(
+            None,
+            user(1, "alice@example.com"),
+            "alice@example.com",
+            "hash",
+        )
+        .expect("seed claim must succeed");
+    let seeded = setup
+        .find_credential("alice@example.com")
+        .expect("lookup must succeed")
+        .expect("seed credential must exist");
+    setup
+        .delete_subject(&seeded.0.auth_id)
+        .expect("strip must succeed");
+    assert!(
+        setup.resolve(&1).expect("lookup must succeed").is_some(),
+        "stripping auth must leave the app row behind"
+    );
+
+    let adopted = setup
+        .provision_subject(
+            None,
+            SqliteAppSetup::Existing(1),
+            "alice-2@example.com",
+            &engine.hasher().hash("pw2").expect("hash must succeed"),
+        )
+        .expect("adopt must not error")
+        .expect("existing row must adopt");
+    assert_eq!(adopted.app_ref, Some(1));
+
+    let auth = Auth::from_engine(engine);
+    let (user, _) = auth
+        .sign_in_email("alice-2@example.com", "pw2")
+        .expect("adopted login must work");
+    assert_eq!(user.id, 1);
+}
+
+#[test]
+fn deleting_the_app_row_cascades_credentials_and_sessions() {
+    let path = std::env::temp_dir().join(format!("dioxus-auth-cascade-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let store = Arc::new(SqliteStore::open(&path).expect("file store must open"));
+    let auth = Auth::from_engine(
+        AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+            .build()
+            .expect("engine construction must succeed"),
+    );
+    auth.sign_up_email(
+        "alice@example.com",
+        "s3cret-password",
+        user(1, "alice@example.com"),
+    )
+    .expect("sign-up must succeed");
+    let (_, session) = auth
+        .sign_in_email("alice@example.com", "s3cret-password")
+        .expect("sign-in must succeed");
+
+    rusqlite::Connection::open(&path)
+        .expect("raw connection must open")
+        .execute("DELETE FROM users WHERE id = 1", [])
+        .expect("app-row delete must succeed");
+
+    assert!(
+        store
+            .find_credential("alice@example.com")
+            .expect("lookup must succeed")
+            .is_none(),
+        "credentials must cascade with the app row"
+    );
+    assert!(
+        auth.engine()
+            .validate_session(&session)
+            .expect("validation must succeed")
+            .is_none(),
+        "sessions must cascade with the app row"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn rotated_secrets_invalidate_old_sessions_lazily() {
+    let store = Arc::new(SqliteStore::open_in_memory().expect("in-memory store must open"));
+    let auth = Auth::from_engine(
+        AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
+            .build()
+            .expect("engine construction must succeed"),
+    );
+    auth.sign_up_email(
+        "alice@example.com",
+        "old-secret",
+        user(1, "alice@example.com"),
+    )
+    .expect("sign-up must succeed");
+    let (_, stale) = auth
+        .sign_in_email("alice@example.com", "old-secret")
+        .expect("sign-in must succeed");
+
+    let rotated = auth
+        .engine()
+        .hasher()
+        .hash("new-secret")
+        .expect("hash must succeed");
+    store
+        .rotate_secret(&1, &rotated)
+        .expect("rotation must succeed");
+
+    assert!(
+        auth.engine()
+            .validate_session(&stale)
+            .expect("validation must succeed")
+            .is_none(),
+        "sessions bound to the old secret must die on next use"
+    );
+    assert!(
+        store
+            .find_session(&stale.hash_for_storage())
+            .expect("lookup must succeed")
+            .is_none(),
+        "the lazy drop must remove the row"
+    );
+    auth.sign_in_email("alice@example.com", "new-secret")
+        .expect("the new secret must work");
 }
 
 #[test]

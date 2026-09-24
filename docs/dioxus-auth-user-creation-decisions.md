@@ -159,26 +159,23 @@ session/association machinery.
 
 ## Open investigations (downstream, in order)
 
-1. Store mapping of auth identity ↔ application identity: LEADING
-   CANDIDATE (not ratified), a subject table holding the association
-   (`subjects(auth_id PK, app_ref NULLABLE, created)`), with credential
-   and session rows carrying `auth_id` FKs and cascading on subject
-   deletion. `app_ref` lives on the association (one per subject), never
-   per credential row (copies could disagree and make identity
-   method-dependent); sessions may carry it as a drop-on-mismatch hint
-   only. Flow-walked over signup/login/validate/adopt/link/delete:
-   zero app-table writes on adoption, FK cascade for lifecycle,
-   uniform attach across all method families, nullable `app_ref` for
-   minimal signup. Precedent: better-auth's `account.userId`/`session.userId`
-   FKs with cascade and no link table (their user row doubles as app
-   container; ours stays auth-pure per §3). Rejected: per-credential
-   `app_ref` (correctness), session-carried mapping (lost at expiry),
-   auth-id app columns kept only as a documented single-table alternative.
-   Physical DDL still open. Residual resolved: the app→auth direction
-   is a single translation query (subject's `auth_id` for an `app_ref`,
-   backed by a unique NULL-excluding index), composed with the existing
-   idempotent deletes: no new atomicity class, no per-operation
-   sprawl. The composition is safe because every act degrades benignly
+1. Store mapping of auth identity ↔ application identity: RATIFIED
+   as R1 and implemented in the reference adapter (app key serves as
+   subject key; no subjects table; credentials and sessions keyed by
+   app key with cascading deletes; binding derived from the current
+   secret; proven by adoption, cascade, and lazy-binding flow tests).
+   The association is the equality itself, so per-credential copies
+   (method-dependent identity) and session-carried mappings (lost at
+   expiry) never arise; auth-id app columns stay a documented
+   single-table alternative. Precedent: better-auth's
+   `account.userId`/`session.userId` FKs with cascade and no link table
+   (their user row doubles as app container; ours keeps app rows
+   auth-column-free). The subjects-table variant (P1) is superseded as
+   the reference and kept only as the documented evolution path, with
+   explicit triggers (guest auth, merge flows). Residual resolved: the
+   app→auth direction is a single translation query composed with the
+   existing idempotent deletes: no new atomicity class, no
+   per-operation sprawl. The composition is safe because every act degrades benignly
    if the subject vanishes mid-flight (unknown-session logout,
    missing-session delete, and revoke-missing all succeed quietly;
    attach/change-password report `InvalidCredentials`). Admin delete,

@@ -5,10 +5,13 @@
 //! database. The schema in `README.md` is documentation you apply yourself,
 //! and this module is one honest implementation of it.
 //!
-//! Shape: authentication subjects live in `subjects` with the app link
-//! (`app_ref`) on the subject row, never on credential rows. Credentials
-//! (`accounts`) and sessions point at the subject and cascade on subject
-//! deletion. Your application rows (`users`) carry zero auth columns.
+//! Shape (R1): the application key serves as the subject key, so there is
+//! no subjects table. Credentials (`accounts`) and sessions point at the
+//! app key with cascading deletes; your application rows (`users`) carry
+//! zero auth columns, and adopting an existing row is a single credential
+//! insert. Session binding is derived from the current secret: rotation
+//! rewrites every credential row, so sessions bound to the old secret stop
+//! matching with no version column anywhere.
 //!
 //! [`SqliteStore`] implements [`SubjectStore`], [`CredentialStore`],
 //! [`SessionStore`], and [`UserStore`] over a single `rusqlite` connection
@@ -41,13 +44,7 @@ use dioxus_auth::{
 /// `sessions.created_at`, but the engine's absolute-TTL math
 /// (`created_at + ttl`, see `validate_session`) needs it persisted.
 /// Everything else follows the guide's column names.
-pub const SCHEMA_SQL: &str = "CREATE TABLE subjects (
-    auth_id INTEGER PRIMARY KEY,
-    app_ref INTEGER UNIQUE,
-    auth_hash TEXT,
-    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-);
-CREATE TABLE users (
+pub const SCHEMA_SQL: &str = "CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL,
     email_verified_at INTEGER,
@@ -57,12 +54,13 @@ CREATE TABLE users (
 CREATE TABLE accounts (
     provider TEXT NOT NULL DEFAULT 'email',
     provider_account_id TEXT NOT NULL PRIMARY KEY,
-    auth_id INTEGER NOT NULL REFERENCES subjects (auth_id) ON DELETE CASCADE,
+    app_key INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL
 );
+CREATE INDEX accounts_app_key ON accounts (app_key);
 CREATE TABLE sessions (
     id TEXT NOT NULL PRIMARY KEY,
-    auth_id INTEGER NOT NULL REFERENCES subjects (auth_id) ON DELETE CASCADE,
+    app_key INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     last_active_at INTEGER,
@@ -70,6 +68,7 @@ CREATE TABLE sessions (
     ip TEXT,
     user_agent TEXT
 );
+CREATE INDEX sessions_app_key ON sessions (app_key);
 CREATE TABLE verifications (
     id TEXT NOT NULL PRIMARY KEY,
     identifier TEXT NOT NULL,
@@ -81,15 +80,15 @@ CREATE TABLE verifications (
 
 /// Shared session column list for both reads.
 ///
-/// The by-id lookup and the per-subject listing derive from it, so the two
-/// reads cannot disagree on column order.
+/// The by-id lookup and the per-key listing derive from it, so the two reads
+/// cannot disagree on column order.
 const SESSION_COLUMNS: &str =
-    "id, auth_id, created_at, expires_at, last_active_at, auth_hash, ip, user_agent";
+    "id, app_key, created_at, expires_at, last_active_at, auth_hash, ip, user_agent";
 
 /// Application user for the reference deployment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppUser {
-    /// Stable row id (`users.id`).
+    /// Stable row id (`users.id`), also the subject key on this path.
     pub id: i64,
     /// Login identifier (`users.email`, engine-normalized upstream).
     pub email: String,
@@ -108,12 +107,14 @@ impl AuthUser for AppUser {
 /// Signup material for the reference store.
 ///
 /// Either links an existing application row or carries a full row the store
-/// persists alongside the subject, all inside one transaction.
+/// persists alongside the credential, all inside one transaction. In both
+/// cases the app key doubles as the subject key: no minting, no override
+/// machinery, no link states.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SqliteAppSetup {
     /// Link an existing `users` row by id (adoption).
     Existing(i64),
-    /// Persist a new `users` row with the subject.
+    /// Persist a new `users` row with the credential.
     New(AppUser),
 }
 
@@ -182,24 +183,14 @@ impl SqliteStore {
             .map_err(internal)
     }
 
-    /// Loads one subject row by auth id.
-    fn load_subject(
-        conn: &Connection,
-        auth_id: i64,
-    ) -> Result<Option<AuthSubject<i64, i64>>, AuthError> {
-        let mut statement = conn
-            .prepare("SELECT auth_id, app_ref, auth_hash FROM subjects WHERE auth_id = ?1")
-            .map_err(internal)?;
-        statement
-            .query_row([auth_id], |row| {
-                Ok(AuthSubject {
-                    auth_id: row.get(0)?,
-                    app_ref: row.get(1)?,
-                    auth_hash: row.get(2)?,
-                })
-            })
-            .optional()
-            .map_err(internal)
+    /// Whether an application row exists.
+    fn app_row_exists(tx: &rusqlite::Transaction<'_>, id: i64) -> Result<bool, AuthError> {
+        tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1)",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(internal)
     }
 
     /// Loads one session row by storage-form id.
@@ -214,26 +205,13 @@ impl SqliteStore {
             .optional()
             .map_err(internal)
     }
-
-    /// Mints a fresh subject id inside the provisioning transaction.
-    ///
-    /// `MAX+1` is safe here because provisioning holds the single
-    /// connection: no concurrent claim can interleave.
-    fn mint_auth_id(tx: &rusqlite::Transaction<'_>) -> Result<i64, AuthError> {
-        tx.query_row(
-            "SELECT COALESCE(MAX(auth_id), 0) + 1 FROM subjects",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(internal)
-    }
 }
 
-/// Maps one session row. Shared by the by-id lookup and the per-subject
-/// listing so the two reads cannot disagree on column order or NULL handling.
+/// Maps one session row. Shared by the by-id lookup and the per-key listing
+/// so the two reads cannot disagree on column order or NULL handling.
 fn row_to_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session<i64>> {
     let stored_id: String = row.get(0)?;
-    let auth_id: i64 = row.get(1)?;
+    let app_key: i64 = row.get(1)?;
     let created: i64 = row.get(2)?;
     let expires: i64 = row.get(3)?;
     let last_active: Option<i64> = row.get(4)?;
@@ -242,7 +220,7 @@ fn row_to_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session<i64>> {
     let user_agent: Option<String> = row.get(7)?;
     let mut session = Session::new(
         SessionId::new(stored_id),
-        auth_id,
+        app_key,
         timestamp(created)?,
         timestamp(expires)?,
     );
@@ -288,7 +266,9 @@ fn internal(error: impl std::fmt::Display) -> AuthError {
 
 /// Whether a driver failure is a uniqueness conflict.
 ///
-/// Distinguishes taken identifiers and ids from real outages.
+/// Distinguishes taken identifiers from real outages. Foreign-key failures
+/// never reach this check: app-row existence is verified explicitly first,
+/// so the only conflicts possible here are taken identifiers.
 fn is_conflict(error: &rusqlite::Error) -> bool {
     matches!(
         error,
@@ -304,11 +284,14 @@ impl SubjectStore for SqliteStore {
 
     fn provision_subject(
         &self,
-        id_override: Option<Self::AuthId>,
+        _id_override: Option<Self::AuthId>,
         app: Self::AppSetup,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        // R1 carries no separate auth identity: the app key serves, so there
+        // is nothing to mint and no override to honor. Keys arrive through
+        // `AppSetup` (a new row's id, or an existing row's).
         let mut conn = self.conn.lock();
         let tx = conn.transaction().map_err(internal)?;
         if tx
@@ -321,20 +304,9 @@ impl SubjectStore for SqliteStore {
         {
             return Ok(None);
         }
-        let auth_id = match id_override {
-            Some(id) => id,
-            None => Self::mint_auth_id(&tx)?,
-        };
-        let app_ref = match app {
+        let app_key = match app {
             SqliteAppSetup::Existing(app_id) => {
-                let exists: bool = tx
-                    .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1)",
-                        [app_id],
-                        |row| row.get(0),
-                    )
-                    .map_err(internal)?;
-                if !exists {
+                if !Self::app_row_exists(&tx, app_id)? {
                     return Err(AuthError::InvalidCredentials);
                 }
                 app_id
@@ -353,30 +325,21 @@ impl SubjectStore for SqliteStore {
             }
         };
         if let Err(error) = tx.execute(
-            "INSERT INTO subjects (auth_id, app_ref, auth_hash) VALUES (?1, ?2, ?3)",
-            params![auth_id, app_ref, secret_hash],
-        ) {
-            if is_conflict(&error) {
-                // Dropping `tx` without commit rolls back; a taken subject
-                // id must not leave the app row behind.
-                return Ok(None);
-            }
-            return Err(internal(error));
-        }
-        if let Err(error) = tx.execute(
-            "INSERT INTO accounts (provider, provider_account_id, auth_id, password_hash)
+            "INSERT INTO accounts (provider, provider_account_id, app_key, password_hash)
              VALUES ('email', ?1, ?2, ?3)",
-            params![identifier, auth_id, secret_hash],
+            params![identifier, app_key, secret_hash],
         ) {
             if is_conflict(&error) {
+                // Dropping `tx` without commit rolls back; a taken second row
+                // must not leave the first row behind.
                 return Ok(None);
             }
             return Err(internal(error));
         }
         tx.commit().map_err(internal)?;
         Ok(Some(AuthSubject {
-            auth_id,
-            app_ref: Some(app_ref),
+            auth_id: app_key,
+            app_ref: Some(app_key),
             auth_hash: Some(secret_hash.to_string()),
         }))
     }
@@ -385,8 +348,23 @@ impl SubjectStore for SqliteStore {
         &self,
         auth_id: &Self::AuthId,
     ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        // A subject exists exactly while it holds credentials: no rows, no
+        // subject. The binding reads back the row's own secret.
         let conn = self.conn.lock();
-        Self::load_subject(&conn, *auth_id)
+        conn.query_row(
+            "SELECT password_hash FROM accounts WHERE app_key = ?1 LIMIT 1",
+            [*auth_id],
+            |row| {
+                let hash: String = row.get(0)?;
+                Ok(AuthSubject {
+                    auth_id: *auth_id,
+                    app_ref: Some(*auth_id),
+                    auth_hash: Some(hash),
+                })
+            },
+        )
+        .optional()
+        .map_err(internal)
     }
 
     fn set_app_link(
@@ -394,43 +372,33 @@ impl SubjectStore for SqliteStore {
         auth_id: &Self::AuthId,
         app_ref: &Self::AppRef,
     ) -> Result<bool, AuthError> {
-        let conn = self.conn.lock();
-        let current: Option<Option<i64>> = conn
-            .query_row(
-                "SELECT app_ref FROM subjects WHERE auth_id = ?1",
-                [*auth_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(internal)?;
-        let Some(link) = current else {
-            return Err(AuthError::InvalidCredentials);
-        };
-        if link.is_some_and(|linked| linked != *app_ref) {
+        // Links are structural here (subject key equals app key), so there is
+        // nothing to mutate: same-key links confirm existence, cross-key
+        // links are unrepresentable and report false.
+        if auth_id != app_ref {
             return Ok(false);
         }
-        conn.execute(
-            "UPDATE subjects SET app_ref = ?1 WHERE auth_id = ?2",
-            params![app_ref, auth_id],
-        )
-        .map_err(internal)?;
+        let exists = self.find_subject(auth_id)?.is_some();
+        if !exists {
+            return Err(AuthError::InvalidCredentials);
+        }
         Ok(true)
     }
 
     fn find_auth_id(&self, app_ref: &Self::AppRef) -> Result<Option<Self::AuthId>, AuthError> {
-        let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT auth_id FROM subjects WHERE app_ref = ?1",
-            [*app_ref],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(internal)
+        // Trivially the same value under R1; the lookup still verifies the
+        // subject exists rather than echoing the input.
+        let found = self.find_subject(app_ref)?;
+        Ok(found.map(|subject| subject.auth_id))
     }
 
     fn delete_subject(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
+        // Application rows are the application's own cascade, never this
+        // call's: only auth rows go.
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM subjects WHERE auth_id = ?1", [*auth_id])
+        conn.execute("DELETE FROM accounts WHERE app_key = ?1", [*auth_id])
+            .map_err(internal)?;
+        conn.execute("DELETE FROM sessions WHERE app_key = ?1", [*auth_id])
             .map_err(internal)?;
         Ok(())
     }
@@ -444,19 +412,19 @@ impl CredentialStore for SqliteStore {
         let conn = self.conn.lock();
         let mut statement = conn
             .prepare(
-                "SELECT s.auth_id, s.app_ref, s.auth_hash, a.password_hash
-             FROM subjects s JOIN accounts a ON a.auth_id = s.auth_id
-             WHERE a.provider = 'email' AND a.provider_account_id = ?1",
+                "SELECT app_key, password_hash FROM accounts
+             WHERE provider = 'email' AND provider_account_id = ?1",
             )
             .map_err(internal)?;
         statement
             .query_row([identifier], |row| {
+                let app_key: i64 = row.get(0)?;
+                let hash: String = row.get(1)?;
                 let subject = AuthSubject {
-                    auth_id: row.get(0)?,
-                    app_ref: row.get(1)?,
-                    auth_hash: row.get(2)?,
+                    auth_id: app_key,
+                    app_ref: Some(app_key),
+                    auth_hash: Some(hash.clone()),
                 };
-                let hash: String = row.get(3)?;
                 Ok((subject, hash))
             })
             .optional()
@@ -471,18 +439,11 @@ impl CredentialStore for SqliteStore {
     ) -> Result<bool, AuthError> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction().map_err(internal)?;
-        let subject_exists: bool = tx
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM subjects WHERE auth_id = ?1)",
-                [*auth_id],
-                |row| row.get(0),
-            )
-            .map_err(internal)?;
-        if !subject_exists {
+        if !Self::app_row_exists(&tx, *auth_id)? {
             return Err(AuthError::InvalidCredentials);
         }
         if let Err(error) = tx.execute(
-            "INSERT INTO accounts (provider, provider_account_id, auth_id, password_hash)
+            "INSERT INTO accounts (provider, provider_account_id, app_key, password_hash)
              VALUES ('email', ?1, ?2, ?3)",
             params![identifier, auth_id, secret_hash],
         ) {
@@ -498,12 +459,7 @@ impl CredentialStore for SqliteStore {
     fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
         let conn = self.conn.lock();
         conn.execute(
-            "UPDATE accounts SET password_hash = ?1 WHERE auth_id = ?2",
-            params![new_hash, auth_id],
-        )
-        .map_err(internal)?;
-        conn.execute(
-            "UPDATE subjects SET auth_hash = ?1 WHERE auth_id = ?2",
+            "UPDATE accounts SET password_hash = ?1 WHERE app_key = ?2",
             params![new_hash, auth_id],
         )
         .map_err(internal)?;
@@ -521,7 +477,7 @@ impl SessionStore for SqliteStore {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR REPLACE INTO sessions
-             (id, auth_id, created_at, expires_at, last_active_at, auth_hash, ip, user_agent)
+             (id, app_key, created_at, expires_at, last_active_at, auth_hash, ip, user_agent)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 session.id().as_str(),
@@ -569,7 +525,7 @@ impl SessionStore for SqliteStore {
 
     fn delete_subject_sessions(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM sessions WHERE auth_id = ?1", [auth_id])
+        conn.execute("DELETE FROM sessions WHERE app_key = ?1", [auth_id])
             .map_err(internal)?;
         Ok(())
     }
@@ -581,7 +537,7 @@ impl SessionStore for SqliteStore {
         let conn = self.conn.lock();
         let mut statement = conn
             .prepare(&format!(
-                "SELECT {SESSION_COLUMNS} FROM sessions WHERE auth_id = ?1 ORDER BY rowid"
+                "SELECT {SESSION_COLUMNS} FROM sessions WHERE app_key = ?1 ORDER BY rowid"
             ))
             .map_err(internal)?;
         let rows = statement

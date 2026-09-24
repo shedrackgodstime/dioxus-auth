@@ -16,20 +16,15 @@ auth.sign_up_email("alice@example.com", "password", SqliteAppSetup::New(AppUser 
 
 ## Schema: apply this yourself
 
-`subjects` (auth identities with the app link) · `users` (application
-rows, zero auth columns) · `accounts` (credentials, one row per login
-method, pointing at the subject) · `sessions` (opaque server-side
-sessions, keyed by `sha256(raw token)`) · `verifications` (reserved for
-future magic-link flows; created now so the shape is complete, unused by
-email+password verbs).
+`users` (application rows, zero auth columns) · `accounts` (credentials,
+one row per login method, keyed by the application key) · `sessions`
+(opaque server-side sessions, keyed by `sha256(raw token)`, owned by the
+application key) · `verifications` (reserved for future magic-link
+flows; created now so the shape is complete, unused by email+password
+verbs). There is no subjects table: the application key serves as the
+subject key.
 
 ```sql
-CREATE TABLE subjects (
-    auth_id INTEGER PRIMARY KEY,
-    app_ref INTEGER UNIQUE,
-    auth_hash TEXT,
-    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-);
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL,
@@ -40,12 +35,13 @@ CREATE TABLE users (
 CREATE TABLE accounts (
     provider TEXT NOT NULL DEFAULT 'email',
     provider_account_id TEXT NOT NULL PRIMARY KEY,
-    auth_id INTEGER NOT NULL REFERENCES subjects (auth_id) ON DELETE CASCADE,
+    app_key INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL
 );
+CREATE INDEX accounts_app_key ON accounts (app_key);
 CREATE TABLE sessions (
     id TEXT NOT NULL PRIMARY KEY,
-    auth_id INTEGER NOT NULL REFERENCES subjects (auth_id) ON DELETE CASCADE,
+    app_key INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     last_active_at INTEGER,
@@ -53,6 +49,7 @@ CREATE TABLE sessions (
     ip TEXT,
     user_agent TEXT
 );
+CREATE INDEX sessions_app_key ON sessions (app_key);
 CREATE TABLE verifications (
     id TEXT NOT NULL PRIMARY KEY,
     identifier TEXT NOT NULL,
