@@ -11,17 +11,25 @@ use std::sync::Arc;
 
 let store = Arc::new(SqliteStore::open("app.db")?);
 let auth = Auth::new(store)?; // same verbs as the memory quickstart
-auth.sign_up_email("alice@example.com", "password", AppUser { ... })?;
+auth.sign_up_email("alice@example.com", "password", SqliteAppSetup::New(AppUser { ... }))?;
 ```
 
 ## Schema: apply this yourself
 
-`users` (identity) · `accounts` (credentials, one row per login method) ·
-`sessions` (opaque server-side sessions, keyed by `sha256(raw token)`) ·
-`verifications` (reserved for future magic-link flows; created now so the
-shape is complete, unused by email+password verbs).
+`subjects` (auth identities with the app link) · `users` (application
+rows, zero auth columns) · `accounts` (credentials, one row per login
+method, pointing at the subject) · `sessions` (opaque server-side
+sessions, keyed by `sha256(raw token)`) · `verifications` (reserved for
+future magic-link flows; created now so the shape is complete, unused by
+email+password verbs).
 
 ```sql
+CREATE TABLE subjects (
+    auth_id INTEGER PRIMARY KEY,
+    app_ref INTEGER UNIQUE,
+    auth_hash TEXT,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL,
@@ -32,12 +40,12 @@ CREATE TABLE users (
 CREATE TABLE accounts (
     provider TEXT NOT NULL DEFAULT 'email',
     provider_account_id TEXT NOT NULL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users (id),
+    auth_id INTEGER NOT NULL REFERENCES subjects (auth_id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL
 );
 CREATE TABLE sessions (
     id TEXT NOT NULL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users (id),
+    auth_id INTEGER NOT NULL REFERENCES subjects (auth_id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     last_active_at INTEGER,

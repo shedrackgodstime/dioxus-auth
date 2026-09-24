@@ -38,7 +38,7 @@ fn new_takes_the_store_by_value() {
 #[test]
 fn facade_delegates_to_engine_lifecycle() {
     let auth = Auth::new(MemoryStore::<TestUser>::new()).expect("facade must construct");
-    auth.engine().user_store().insert_user_with_password(
+    auth.engine().store().insert_user_with_password(
         TestUser::new(1, "alice"),
         "alice",
         hash_password("s3cret"),
@@ -47,7 +47,7 @@ fn facade_delegates_to_engine_lifecycle() {
         .engine()
         .login("alice", "s3cret")
         .expect("login through the facade engine must succeed");
-    assert_eq!(user.id(), 1);
+    assert_eq!(user.auth_id, 1);
     let current = auth
         .engine()
         .validate_session(session.id())
@@ -344,11 +344,11 @@ fn sign_up_taken_and_free_paths_cost_equal_argon2_work() {
 #[test]
 fn attach_adds_a_second_login_to_the_same_account() {
     let auth = Auth::memory().expect("quickstart must construct");
-    let (signed_up, _) = auth
-        .sign_up_email("alice@example.com", "pw", DefaultUserInput::new("alice"))
+    let (subject, _) = auth
+        .sign_up_subject("alice@example.com", "pw", DefaultUserInput::new("alice"))
         .expect("sign-up must succeed");
 
-    auth.attach_email_credential(&signed_up.id, "alice-2@example.com", "other")
+    auth.attach_email_credential(&subject.auth_id, "alice-2@example.com", "other")
         .expect("attach must succeed");
     let (user, _) = auth
         .sign_in_email("alice-2@example.com", "other")
@@ -361,7 +361,7 @@ fn attach_adds_a_second_login_to_the_same_account() {
         AuthError::InvalidCredentials
     );
     assert_eq!(
-        auth.attach_email_credential(&signed_up.id, "alice@example.com", "pw")
+        auth.attach_email_credential(&subject.auth_id, "alice@example.com", "pw")
             .expect_err("taken identifier must fail"),
         AuthError::InvalidCredentials
     );

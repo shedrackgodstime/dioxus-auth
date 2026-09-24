@@ -15,8 +15,8 @@ use std::sync::Arc;
 use super::common::TestUser;
 use super::password::hash_password;
 use dioxus_auth::{
-    Auth, AuthEngine, AuthError, MemoryStore, PasswordUserStore, Session, SessionId, SessionStore,
-    UserStore,
+    Auth, AuthEngine, AuthError, AuthSubject, CredentialStore, MemoryStore, Session, SessionId,
+    SessionStore, SubjectStore, UserStore,
 };
 
 /// A full store decorator failing only `save_session`.
@@ -25,54 +25,81 @@ struct FailingSaveStore {
     inner: MemoryStore<TestUser>,
 }
 
-impl UserStore for FailingSaveStore {
-    type Id = u64;
-    type User = TestUser;
+impl SubjectStore for FailingSaveStore {
+    type AuthId = u64;
+    type AppRef = u64;
+    type AppSetup = TestUser;
 
-    fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError> {
-        return self.inner.find_by_id(id);
+    fn provision_subject(
+        &self,
+        id_override: Option<Self::AuthId>,
+        app: Self::AppSetup,
+        identifier: &str,
+        secret_hash: &str,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        return self
+            .inner
+            .provision_subject(id_override, app, identifier, secret_hash);
+    }
+
+    fn find_subject(
+        &self,
+        auth_id: &Self::AuthId,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        return self.inner.find_subject(auth_id);
+    }
+
+    fn set_app_link(
+        &self,
+        auth_id: &Self::AuthId,
+        app_ref: &Self::AppRef,
+    ) -> Result<bool, AuthError> {
+        return self.inner.set_app_link(auth_id, app_ref);
+    }
+
+    fn find_auth_id(&self, app_ref: &Self::AppRef) -> Result<Option<Self::AuthId>, AuthError> {
+        return self.inner.find_auth_id(app_ref);
+    }
+
+    fn delete_subject(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
+        return self.inner.delete_subject(auth_id);
     }
 }
 
-impl PasswordUserStore for FailingSaveStore {
-    type NewUser = TestUser;
-
-    fn find_by_identifier(
+impl CredentialStore for FailingSaveStore {
+    fn find_credential(
         &self,
         identifier: &str,
-    ) -> Result<Option<(Self::User, String)>, AuthError> {
-        return self.inner.find_by_identifier(identifier);
+    ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
+        return self.inner.find_credential(identifier);
     }
 
-    fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError> {
-        return self.inner.update_password(id, new_hash);
-    }
-
-    fn attach_password_credential(
+    fn attach_credential(
         &self,
-        id: &Self::Id,
+        auth_id: &Self::AuthId,
         identifier: &str,
-        password_hash: &str,
+        secret_hash: &str,
     ) -> Result<bool, AuthError> {
         return self
             .inner
-            .attach_password_credential(id, identifier, password_hash);
+            .attach_credential(auth_id, identifier, secret_hash);
     }
 
-    fn provision_user_with_password(
-        &self,
-        input: Self::NewUser,
-        identifier: &str,
-        password_hash: &str,
-    ) -> Result<Option<Self::User>, AuthError> {
-        return self
-            .inner
-            .provision_user_with_password(input, identifier, password_hash);
+    fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
+        return self.inner.rotate_secret(auth_id, new_hash);
+    }
+}
+
+impl UserStore for FailingSaveStore {
+    type User = TestUser;
+
+    fn resolve(&self, app_ref: &Self::AppRef) -> Result<Option<Self::User>, AuthError> {
+        return self.inner.resolve(app_ref);
     }
 }
 
 impl SessionStore for FailingSaveStore {
-    type Id = u64;
+    type AuthId = u64;
 
     fn save_session(&self, _session: Session<u64>) -> Result<(), AuthError> {
         return Err(AuthError::Internal(String::from("store unavailable")));
@@ -97,69 +124,96 @@ impl SessionStore for FailingSaveStore {
             .touch_session_if_present(id, new_expiry, last_active);
     }
 
-    fn delete_user_sessions(&self, user_id: &u64) -> Result<(), AuthError> {
-        return self.inner.delete_user_sessions(user_id);
+    fn delete_subject_sessions(&self, auth_id: &u64) -> Result<(), AuthError> {
+        return self.inner.delete_subject_sessions(auth_id);
     }
 
-    fn list_user_sessions(&self, user_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
-        return self.inner.list_user_sessions(user_id);
+    fn list_subject_sessions(&self, auth_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
+        return self.inner.list_subject_sessions(auth_id);
     }
 }
 
-/// A full store decorator failing only `delete_user_sessions`.
+/// A full store decorator failing only `delete_subject_sessions`.
 #[derive(Debug)]
 struct FailingRevokeStore {
     inner: MemoryStore<TestUser>,
 }
 
-impl UserStore for FailingRevokeStore {
-    type Id = u64;
-    type User = TestUser;
+impl SubjectStore for FailingRevokeStore {
+    type AuthId = u64;
+    type AppRef = u64;
+    type AppSetup = TestUser;
 
-    fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError> {
-        return self.inner.find_by_id(id);
+    fn provision_subject(
+        &self,
+        id_override: Option<Self::AuthId>,
+        app: Self::AppSetup,
+        identifier: &str,
+        secret_hash: &str,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        return self
+            .inner
+            .provision_subject(id_override, app, identifier, secret_hash);
+    }
+
+    fn find_subject(
+        &self,
+        auth_id: &Self::AuthId,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        return self.inner.find_subject(auth_id);
+    }
+
+    fn set_app_link(
+        &self,
+        auth_id: &Self::AuthId,
+        app_ref: &Self::AppRef,
+    ) -> Result<bool, AuthError> {
+        return self.inner.set_app_link(auth_id, app_ref);
+    }
+
+    fn find_auth_id(&self, app_ref: &Self::AppRef) -> Result<Option<Self::AuthId>, AuthError> {
+        return self.inner.find_auth_id(app_ref);
+    }
+
+    fn delete_subject(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
+        return self.inner.delete_subject(auth_id);
     }
 }
 
-impl PasswordUserStore for FailingRevokeStore {
-    type NewUser = TestUser;
-
-    fn find_by_identifier(
+impl CredentialStore for FailingRevokeStore {
+    fn find_credential(
         &self,
         identifier: &str,
-    ) -> Result<Option<(Self::User, String)>, AuthError> {
-        return self.inner.find_by_identifier(identifier);
+    ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
+        return self.inner.find_credential(identifier);
     }
 
-    fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError> {
-        return self.inner.update_password(id, new_hash);
-    }
-
-    fn attach_password_credential(
+    fn attach_credential(
         &self,
-        id: &Self::Id,
+        auth_id: &Self::AuthId,
         identifier: &str,
-        password_hash: &str,
+        secret_hash: &str,
     ) -> Result<bool, AuthError> {
         return self
             .inner
-            .attach_password_credential(id, identifier, password_hash);
+            .attach_credential(auth_id, identifier, secret_hash);
     }
 
-    fn provision_user_with_password(
-        &self,
-        input: Self::NewUser,
-        identifier: &str,
-        password_hash: &str,
-    ) -> Result<Option<Self::User>, AuthError> {
-        return self
-            .inner
-            .provision_user_with_password(input, identifier, password_hash);
+    fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
+        return self.inner.rotate_secret(auth_id, new_hash);
+    }
+}
+
+impl UserStore for FailingRevokeStore {
+    type User = TestUser;
+
+    fn resolve(&self, app_ref: &Self::AppRef) -> Result<Option<Self::User>, AuthError> {
+        return self.inner.resolve(app_ref);
     }
 }
 
 impl SessionStore for FailingRevokeStore {
-    type Id = u64;
+    type AuthId = u64;
 
     fn save_session(&self, session: Session<u64>) -> Result<(), AuthError> {
         return self.inner.save_session(session);
@@ -184,12 +238,12 @@ impl SessionStore for FailingRevokeStore {
             .touch_session_if_present(id, new_expiry, last_active);
     }
 
-    fn delete_user_sessions(&self, _user_id: &u64) -> Result<(), AuthError> {
+    fn delete_subject_sessions(&self, _auth_id: &u64) -> Result<(), AuthError> {
         return Err(AuthError::Internal(String::from("store unavailable")));
     }
 
-    fn list_user_sessions(&self, user_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
-        return self.inner.list_user_sessions(user_id);
+    fn list_subject_sessions(&self, auth_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
+        return self.inner.list_subject_sessions(auth_id);
     }
 }
 
@@ -213,7 +267,7 @@ fn login_save_failure_keeps_old_sessions_and_reports_the_error() {
 
     assert_eq!(
         store
-            .list_user_sessions(&1)
+            .list_subject_sessions(&1)
             .expect("listing must succeed")
             .len(),
         1,

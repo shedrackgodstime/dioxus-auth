@@ -13,16 +13,17 @@
 use std::sync::Arc;
 
 use dioxus_auth::{
-    Auth, AuthEngine, AuthError, DefaultUserInput, PasswordUserStore, SessionId, SessionStore,
+    Auth, AuthEngine, AuthError, CredentialStore, DefaultUserInput, SessionId, SessionStore,
+    SubjectStore,
 };
-use sqlite_reference::{AppUser, SCHEMA_SQL, SqliteStore};
+use sqlite_reference::{AppUser, SCHEMA_SQL, SqliteAppSetup, SqliteStore};
 
-fn user(id: i64, email: &str) -> AppUser {
-    AppUser {
+fn user(id: i64, email: &str) -> SqliteAppSetup {
+    SqliteAppSetup::New(AppUser {
         id,
         email: String::from(email),
         name: String::from(email),
-    }
+    })
 }
 
 fn auth() -> Auth<SqliteStore> {
@@ -64,7 +65,7 @@ fn sign_up_sign_in_validate_and_sign_out_roundtrip() {
         .engine()
         .validate_session(&session)
         .expect("validation must succeed");
-    assert_eq!(validated.expect("session must validate").id, 1);
+    assert_eq!(validated.expect("session must validate").auth_id, 1);
 
     auth.sign_out(&session).expect("sign-out must succeed");
     assert!(
@@ -142,19 +143,24 @@ fn change_password_rotates_the_credential_and_revokes_sessions() {
 fn provision_rejects_duplicate_ids_without_side_effects() {
     let store = SqliteStore::open_in_memory().expect("in-memory store must open");
     store
-        .provision_user_with_password(user(1, "alice@example.com"), "alice@example.com", "hash")
+        .provision_subject(
+            None,
+            user(1, "alice@example.com"),
+            "alice@example.com",
+            "hash",
+        )
         .expect("first claim must succeed");
 
     assert!(
         store
-            .provision_user_with_password(user(1, "bob@example.com"), "bob@example.com", "hash")
+            .provision_subject(None, user(1, "bob@example.com"), "bob@example.com", "hash")
             .expect("provisioning must succeed")
             .is_none(),
-        "a taken user id must be rejected"
+        "a taken app id must be rejected"
     );
     assert!(
         store
-            .find_by_identifier("bob@example.com")
+            .find_credential("bob@example.com")
             .expect("lookup must succeed")
             .is_none(),
         "a rejected claim must write nothing"
@@ -164,14 +170,15 @@ fn provision_rejects_duplicate_ids_without_side_effects() {
 #[test]
 fn attach_adds_a_second_login_and_rejects_taken_or_missing() {
     let auth = auth();
-    auth.sign_up_email(
-        "alice@example.com",
-        "s3cret-password",
-        user(1, "alice@example.com"),
-    )
-    .expect("sign-up must succeed");
+    let (subject, _) = auth
+        .sign_up_subject(
+            "alice@example.com",
+            "s3cret-password",
+            user(1, "alice@example.com"),
+        )
+        .expect("sign-up must succeed");
 
-    auth.attach_email_credential(&1, "alice-2@example.com", "other-secret")
+    auth.attach_email_credential(&subject.auth_id, "alice-2@example.com", "other-secret")
         .expect("attach must succeed");
     let (user, _) = auth
         .sign_in_email("alice-2@example.com", "other-secret")
@@ -179,7 +186,7 @@ fn attach_adds_a_second_login_and_rejects_taken_or_missing() {
     assert_eq!(user.id, 1);
 
     assert!(
-        auth.attach_email_credential(&1, "alice@example.com", "pw")
+        auth.attach_email_credential(&subject.auth_id, "alice@example.com", "pw")
             .is_err(),
         "a taken identifier must be rejected"
     );
@@ -231,10 +238,10 @@ fn touch_missing_sessions_is_a_noop_and_single_active_rotates() {
     );
 }
 
-/// Graduation across the real boundary: the memory quickstart (`DefaultUser`)
-/// and the own-DB store (`AppUser`) answer identically, with the same verbs
-/// and the same error codes. Written out on both sides: the facades have
-/// different store types, so the parity is literal.
+/// Graduation across the real boundary: the memory quickstart (name-only
+/// input) and the own-DB store (`AppUser`) answer identically, with the same
+/// verbs and the same error codes. Written out on both sides: the facades
+/// have different store types, so the parity is literal.
 #[test]
 fn graduation_from_memory_quickstart_preserves_behavior() {
     let quick = Auth::memory().expect("quickstart must construct");

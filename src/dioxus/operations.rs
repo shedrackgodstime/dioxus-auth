@@ -7,14 +7,22 @@ use crate::auth::Auth;
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::status::SessionId;
-use crate::store::{PasswordUserStore, SessionStore, UserStore};
+use crate::store::session::SessionStore;
+use crate::store::user::{CredentialStore, SubjectStore, UserStore};
 use crate::user::AuthUser;
 
 /// Erased authorization operations used by the runtime layer.
 ///
 /// The runtime is generic over the application user type only; the concrete
-/// user/session store generics are hidden behind this trait object so hooks
-/// and components never leak `MemoryStore<…>`-style types.
+/// store generics are hidden behind this trait object so hooks and components
+/// never leak store types.
+///
+/// The engine authenticates subjects; this layer resolves them to application
+/// users through [`UserStore`]. Resolution failures close differently per
+/// verb: login treats an unresolvable subject as bad credentials (fail
+/// closed), while validation treats it as no session (definitive rejection
+/// demotes to guest instead of erroring the tree). Store outages propagate
+/// in both, so transient failures never demote.
 ///
 /// Single-spelling rule: credential verification lives in exactly one place,
 /// [`AuthEngine::login`](crate::engine::AuthEngine::login) and its helpers.
@@ -46,24 +54,71 @@ pub trait AuthOperations<T: AuthUser>: Send + Sync {
     fn validate(&self, session_id: &SessionId) -> Result<Option<T>, AuthError>;
 }
 
-impl<U, S> AuthOperations<U::User> for AuthEngine<U, S>
+impl<C, S> AuthOperations<C::User> for AuthEngine<C, S>
 where
-    U: PasswordUserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore + UserStore,
+    S: SessionStore<AuthId = <C as SubjectStore>::AuthId>,
 {
-    fn login(&self, identifier: &str, password: &str) -> Result<(U::User, SessionId), AuthError> {
-        return match Self::login(self, identifier, password) {
-            Ok((user, session)) => Ok((user, session.id().clone())),
-            Err(e) => Err(e),
+    fn login(&self, identifier: &str, password: &str) -> Result<(C::User, SessionId), AuthError> {
+        let (subject, session) = match Self::login(self, identifier, password) {
+            Ok((subject, session)) => (subject, session),
+            Err(e) => return Err(e),
         };
+        let user = match Self::resolve_user(self, &subject) {
+            Ok(user) => user,
+            Err(e) => return Err(e),
+        };
+        return Ok((user, session.id().clone()));
     }
 
     fn logout(&self, session_id: &SessionId) -> Result<(), AuthError> {
         return Self::logout(self, session_id);
     }
 
-    fn validate(&self, session_id: &SessionId) -> Result<Option<U::User>, AuthError> {
-        return Self::validate_session(self, session_id);
+    fn validate(&self, session_id: &SessionId) -> Result<Option<C::User>, AuthError> {
+        let subject = match Self::validate_session(self, session_id) {
+            Ok(subject) => subject,
+            Err(e) => return Err(e),
+        };
+        let Some(subject) = subject else {
+            return Ok(None);
+        };
+        let Some(app_ref) = subject.app_ref.as_ref() else {
+            return Ok(None);
+        };
+        let user = match self.store.resolve(app_ref) {
+            Ok(user) => user,
+            Err(e) => return Err(e),
+        };
+        return Ok(user);
+    }
+}
+
+impl<C, S> AuthEngine<C, S>
+where
+    C: CredentialStore + UserStore,
+    S: SessionStore<AuthId = <C as SubjectStore>::AuthId>,
+{
+    /// Resolves an authenticated subject to its application user.
+    ///
+    /// Shared by the login path above; validation inlines its own variant
+    /// because unresolvable subjects read as no-session there instead of an
+    /// error. A subject without resolvable app data fails closed: callers
+    /// must never receive a session paired with no user. Store outages
+    /// propagate instead of masquerading as bad credentials.
+    fn resolve_user(
+        &self,
+        subject: &crate::store::AuthSubject<C::AuthId, C::AppRef>,
+    ) -> Result<C::User, AuthError> {
+        let Some(app_ref) = subject.app_ref.as_ref() else {
+            return Err(AuthError::InvalidCredentials);
+        };
+        let user = match self.store.resolve(app_ref) {
+            Ok(Some(user)) => user,
+            Ok(None) => return Err(AuthError::InvalidCredentials),
+            Err(error) => return Err(error),
+        };
+        return Ok(user);
     }
 }
 
@@ -109,12 +164,12 @@ impl<T: AuthUser> PartialEq for AuthEngineHandle<T> {
 
 impl<T: AuthUser> Eq for AuthEngineHandle<T> {}
 
-impl<U, S> From<Arc<AuthEngine<U, S>>> for AuthEngineHandle<U::User>
+impl<C, S> From<Arc<AuthEngine<C, S>>> for AuthEngineHandle<C::User>
 where
-    U: PasswordUserStore + 'static,
-    S: SessionStore<Id = U::Id> + 'static,
+    C: CredentialStore + UserStore + 'static,
+    S: SessionStore<AuthId = <C as SubjectStore>::AuthId> + 'static,
 {
-    fn from(engine: Arc<AuthEngine<U, S>>) -> Self {
+    fn from(engine: Arc<AuthEngine<C, S>>) -> Self {
         return Self(engine);
     }
 }
@@ -127,7 +182,7 @@ where
 /// `Auth::into()` keeps that bridge to a single word.
 impl<D> From<Auth<D>> for AuthEngineHandle<D::User>
 where
-    D: PasswordUserStore + SessionStore<Id = <D as UserStore>::Id> + 'static,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore + 'static,
 {
     fn from(auth: Auth<D>) -> Self {
         // Coerce the concrete engine Arc to the erased trait-object Arc,

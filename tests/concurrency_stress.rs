@@ -18,8 +18,8 @@ use std::time::Duration;
 
 use common::TestUser;
 use dioxus_auth::{
-    Auth, AuthEngine, AuthError, ErrorCode, MemoryStore, PasswordUserStore, Session, SessionId,
-    SessionStore,
+    Auth, AuthEngine, AuthError, AuthSubject, CredentialStore, ErrorCode, MemoryStore, Session,
+    SessionId, SessionStore,
 };
 use identity_hasher::IdentityHasher;
 use parking_lot::Mutex;
@@ -74,7 +74,7 @@ impl Default for ChoreographedStore {
 }
 
 impl SessionStore for ChoreographedStore {
-    type Id = u64;
+    type AuthId = u64;
 
     fn save_session(&self, session: Session<u64>) -> Result<(), AuthError> {
         return self.inner.save_session(session);
@@ -110,12 +110,12 @@ impl SessionStore for ChoreographedStore {
             .touch_session_if_present(id, new_expiry, last_active);
     }
 
-    fn delete_user_sessions(&self, user_id: &u64) -> Result<(), AuthError> {
-        return self.inner.delete_user_sessions(user_id);
+    fn delete_subject_sessions(&self, auth_id: &u64) -> Result<(), AuthError> {
+        return self.inner.delete_subject_sessions(auth_id);
     }
 
-    fn list_user_sessions(&self, user_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
-        return self.inner.list_user_sessions(user_id);
+    fn list_subject_sessions(&self, auth_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
+        return self.inner.list_subject_sessions(auth_id);
     }
 }
 
@@ -166,7 +166,7 @@ fn parked_validation_outcome(
     engine: &Arc<AuthEngine<MemoryStore<TestUser>, ChoreographedStore>>,
     session_id: &SessionId,
     disrupt: impl FnOnce(),
-) -> Option<TestUser> {
+) -> Option<AuthSubject<u64, u64>> {
     let validate_engine = Arc::clone(engine);
     let validate_id = session_id.clone();
     let handle = std::thread::spawn(move || {
@@ -209,21 +209,21 @@ fn rotate_concurrent_with_validate_keeps_old_session_dead() {
 
     let validated = parked_validation_outcome(&engine, old_session.id(), || {
         let (user, _new_session) = engine.login("alice", "pw").unwrap();
-        assert_eq!(user.id, 1);
+        assert_eq!(user.auth_id, 1);
     });
     assert!(validated.is_some());
     let store = engine.session_store();
     assert!(store.find_session(&old_storage_id).unwrap().is_none());
     assert!(engine.validate_session(old_session.id()).unwrap().is_none());
     let new_storage_id = store
-        .list_user_sessions(&1)
+        .list_subject_sessions(&1)
         .unwrap()
         .first()
         .expect("the rotated session must exist")
         .id()
         .clone();
     assert!(store.find_session(&new_storage_id).unwrap().is_some());
-    assert_eq!(store.list_user_sessions(&1).unwrap().len(), 1);
+    assert_eq!(store.list_subject_sessions(&1).unwrap().len(), 1);
 }
 
 #[test]
@@ -324,7 +324,7 @@ fn concurrent_logins_under_single_active_leave_exactly_one_session() {
 
     let survivors = engine
         .session_store()
-        .list_user_sessions(&1)
+        .list_subject_sessions(&1)
         .expect("listing must not fail");
     assert_eq!(
         survivors.len(),
@@ -385,12 +385,13 @@ fn concurrent_sign_ups_claim_one_identifier_once() {
 
     let stored = auth
         .engine()
-        .user_store()
-        .find_by_identifier(IDENTIFIER)
+        .store()
+        .find_credential(IDENTIFIER)
         .expect("lookup must not fail")
         .expect("the winner must be stored");
     assert_eq!(
-        stored.0.id, winners[0].0.id,
+        stored.0.app_ref,
+        Some(winners[0].0.id),
         "the stored account must be the winner's"
     );
     return;

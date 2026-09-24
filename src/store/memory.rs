@@ -1,6 +1,27 @@
-//! Default in-memory store implementing all storage capability traits.
+//! Default in-memory subject, credential, session, and application store.
+//!
+//! The prototype resolver: bundles subject infrastructure with an
+//! application model for local development and tests. Signup takes the
+//! finished user (caller-built, as before); the store mints the subject id
+//! (or adopts an override), links the user's own id as the app key, and
+//! returns exactly what it persisted.
+//!
+//! For zero-modeling quickstart (name-only input, generated app rows), see
+//! [`DefaultStore`](crate::store::DefaultStore) behind
+//! [`Auth::memory`](crate::auth::Auth::memory).
+//!
+//! Sessions are keyed by their storage-form id (`sha256(raw wire token)`).
+//! The engine is responsible for passing the storage form.
+//!
+//! Lookups are linear scans over `Vec`s and expired sessions drop lazily on
+//! use. Prototype-only: everything dies with the process.
+//!
+//! `Debug` is **manual and redacted**: a derived impl would render credential
+//! hashes, login identifiers, and full user rows. Counts preserve
+//! debuggability without leaking store secrets.
 
 use std::fmt::{self, Debug};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use parking_lot::RwLock;
 
@@ -8,37 +29,35 @@ use crate::error::AuthError;
 use crate::session::Session;
 use crate::status::SessionId;
 use crate::store::session::SessionStore;
-use crate::store::user::{PasswordUserStore, UserStore};
+use crate::store::user::{AuthSubject, CredentialStore, SubjectStore, UserStore};
 use crate::user::AuthUser;
 
-/// In-memory [`UserStore`], [`PasswordUserStore`], and [`SessionStore`].
+/// First minted subject id.
+const FIRST_AUTH_ID: u64 = 1;
+
+/// In-memory prototype store: subjects, credentials, sessions, and users.
 ///
-/// Sessions are keyed by their storage-form id (`sha256(raw wire token)`).
-/// The engine is responsible for passing the storage form.
-///
-/// Lookups are linear scans over `Vec`s, appropriate for the default
-/// single-process development store. Expired sessions are dropped lazily on
-/// use, never by a background task, so this store is unsuitable for
-/// long-lived deployments without external cleanup.
-/// `Clone` neither blocks nor panics on a
-/// poisoned lock: it falls back to an empty store (see `cloned_or_empty`).
-///
-/// `Debug` is **manual and redacted**: a derived impl would render credential
-/// hashes, login identifiers, and full user rows. Counts preserve
-/// debuggability without leaking store secrets.
+/// One connection-equivalent behind locks: the identifier claim, the id
+/// mint, and all writes land as one indivisible step under a single guard
+/// order (`credentials`, `subjects`, then `users`), so racing signups
+/// serialize instead of interleaving.
 pub struct MemoryStore<User: AuthUser> {
+    subjects: RwLock<Vec<AuthSubject<u64, User::Id>>>,
+    credentials: RwLock<Vec<(String, u64, String)>>,
     users: RwLock<Vec<User>>,
-    credentials: RwLock<Vec<(String, User::Id, String)>>,
-    sessions: RwLock<Vec<Session<User::Id>>>,
+    sessions: RwLock<Vec<Session<u64>>>,
+    next_id: AtomicU64,
 }
 
 impl<User: AuthUser> Debug for MemoryStore<User> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f
             .debug_struct("MemoryStore")
-            .field("users", &self.users.read().len())
+            .field("subjects", &self.subjects.read().len())
             .field("credentials", &self.credentials.read().len())
+            .field("users", &self.users.read().len())
             .field("sessions", &self.sessions.read().len())
+            .field("next_id", &self.next_id.load(Ordering::Relaxed))
             .finish();
     }
 }
@@ -46,9 +65,11 @@ impl<User: AuthUser> Debug for MemoryStore<User> {
 impl<User: AuthUser> Default for MemoryStore<User> {
     fn default() -> Self {
         return Self {
-            users: RwLock::new(Vec::new()),
+            subjects: RwLock::new(Vec::new()),
             credentials: RwLock::new(Vec::new()),
+            users: RwLock::new(Vec::new()),
             sessions: RwLock::new(Vec::new()),
+            next_id: AtomicU64::new(FIRST_AUTH_ID),
         };
     }
 }
@@ -56,17 +77,13 @@ impl<User: AuthUser> Default for MemoryStore<User> {
 impl<User: AuthUser + Clone> Clone for MemoryStore<User> {
     fn clone(&self) -> Self {
         return Self {
-            users: RwLock::new(cloned_or_empty(&self.users)),
-            credentials: RwLock::new(cloned_or_empty(&self.credentials)),
-            sessions: RwLock::new(cloned_or_empty(&self.sessions)),
+            subjects: RwLock::new(self.subjects.read().clone()),
+            credentials: RwLock::new(self.credentials.read().clone()),
+            users: RwLock::new(self.users.read().clone()),
+            sessions: RwLock::new(self.sessions.read().clone()),
+            next_id: AtomicU64::new(self.next_id.load(Ordering::Relaxed)),
         };
     }
-}
-
-fn cloned_or_empty<T: Clone>(lock: &RwLock<Vec<T>>) -> Vec<T> {
-    return lock
-        .try_read()
-        .map_or_else(Vec::new, |guard| return guard.clone());
 }
 
 /// Replaces the first entry matching the incoming value, or pushes it.
@@ -87,9 +104,41 @@ impl<User: AuthUser> MemoryStore<User> {
     pub fn new() -> Self {
         return Self::default();
     }
+}
+
+impl<User> MemoryStore<User>
+where
+    User: AuthUser<Id = u64>,
+{
+    /// Advances the subject mint past a seeded id.
+    ///
+    /// Seeded rows alias their subject id to the user id, so the counter
+    /// must skip past them; otherwise a later mint would collide with a
+    /// seeded row and fail a claim that should succeed.
+    fn skip_minted_ids(&self, id: u64) {
+        self.next_id
+            .fetch_max(id.saturating_add(1), Ordering::Relaxed);
+    }
 
     /// Inserts or updates a user without credentials.
+    ///
+    /// Test and seeding helper only: it bypasses the atomic signup claim,
+    /// so registration flows must go through the store traits instead. Plants
+    /// a matching subject row aliased to the user id with no version binding,
+    /// so seeded rows validate like never-rotated subjects.
     pub fn insert_user(&self, user: User) {
+        self.skip_minted_ids(user.id());
+        let subject = AuthSubject {
+            auth_id: user.id(),
+            app_ref: Some(user.id()),
+            auth_hash: None,
+        };
+        {
+            let mut subjects = self.subjects.write();
+            replace_or_push(&mut subjects, subject, |current, incoming| {
+                return current.auth_id == incoming.auth_id;
+            });
+        }
         let mut users = self.users.write();
         replace_or_push(&mut users, user, |current, incoming| {
             return current.id() == incoming.id();
@@ -98,16 +147,10 @@ impl<User: AuthUser> MemoryStore<User> {
 
     /// Inserts or updates a user with login identifier and hashed password.
     ///
-    /// Replaces the credential of an existing identifier. For registration,
-    /// where a taken identifier must be rejected without disturbing the
-    /// existing account, use
-    /// [`provision_user_with_password`](PasswordUserStore::provision_user_with_password).
-    ///
-    /// No aliasing checks: pairing an identifier that belongs to user A with
-    /// a user object carrying user B's id re-points the identifier at B while
-    /// B's old identifier still resolves to B. Callers maintain one
-    /// identifier per user row; this is a development store, not a
-    /// constraint-enforcing database.
+    /// Test and seeding helper only: it replaces the credential of an
+    /// existing identifier without the taken-checks of provisioning. For
+    /// registration, where a taken identifier must be rejected, use the
+    /// store traits.
     pub fn insert_user_with_password(
         &self,
         user: User,
@@ -129,73 +172,158 @@ impl<User: AuthUser> MemoryStore<User> {
     }
 }
 
-impl<User: AuthUser + Clone> UserStore for MemoryStore<User> {
-    type Id = User::Id;
-    type User = User;
+impl<User: AuthUser + Clone> SubjectStore for MemoryStore<User> {
+    type AuthId = u64;
+    type AppRef = User::Id;
+    type AppSetup = User;
 
-    fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError> {
-        let user = {
-            let users = self.users.read();
-            users.iter().find(|u| return &u.id() == id).cloned()
+    // reason: the guard must stay held across the identifier check, the id
+    // mint, and all three pushes; releasing it earlier would split the claim.
+    #[expect(clippy::significant_drop_tightening)]
+    fn provision_subject(
+        &self,
+        id_override: Option<Self::AuthId>,
+        app: Self::AppSetup,
+        identifier: &str,
+        secret_hash: &str,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        let mut credentials = self.credentials.write();
+        if credentials
+            .iter()
+            .any(|(ident, _, _)| return ident == identifier)
+        {
+            return Ok(None);
+        }
+        let mut subjects = self.subjects.write();
+        let auth_id =
+            id_override.unwrap_or_else(|| return self.next_id.fetch_add(1, Ordering::Relaxed));
+        if subjects.iter().any(|s| return s.auth_id == auth_id) {
+            return Ok(None);
+        }
+        let mut users = self.users.write();
+        let app_id = app.id();
+        if users.iter().any(|existing| return existing.id() == app_id) {
+            return Ok(None);
+        }
+        credentials.push((identifier.to_string(), auth_id, secret_hash.to_string()));
+        users.push(app);
+        let subject = AuthSubject {
+            auth_id,
+            app_ref: Some(app_id),
+            auth_hash: Some(secret_hash.to_string()),
         };
-        return Ok(user);
+        subjects.push(subject.clone());
+        return Ok(Some(subject));
+    }
+
+    fn find_subject(
+        &self,
+        auth_id: &Self::AuthId,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        let subject = {
+            let subjects = self.subjects.read();
+            subjects
+                .iter()
+                .find(|s| return &s.auth_id == auth_id)
+                .cloned()
+        };
+        return Ok(subject);
+    }
+
+    // reason: the guard must stay held across the existence check and the
+    // link write; releasing it earlier would let a racing delete strand the
+    // link on a missing subject.
+    #[expect(clippy::significant_drop_tightening)]
+    fn set_app_link(
+        &self,
+        auth_id: &Self::AuthId,
+        app_ref: &Self::AppRef,
+    ) -> Result<bool, AuthError> {
+        {
+            let mut subjects = self.subjects.write();
+            let Some(subject) = subjects.iter_mut().find(|s| return &s.auth_id == auth_id) else {
+                return Err(AuthError::InvalidCredentials);
+            };
+            if subject
+                .app_ref
+                .as_ref()
+                .is_some_and(|linked| return linked != app_ref)
+            {
+                return Ok(false);
+            }
+            subject.app_ref = Some(app_ref.clone());
+        }
+        return Ok(true);
+    }
+
+    fn find_auth_id(&self, app_ref: &Self::AppRef) -> Result<Option<Self::AuthId>, AuthError> {
+        let auth_id = {
+            let subjects = self.subjects.read();
+            subjects
+                .iter()
+                .find(|s| return s.app_ref.as_ref() == Some(app_ref))
+                .map(|s| return s.auth_id)
+        };
+        return Ok(auth_id);
+    }
+
+    fn delete_subject(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
+        {
+            let mut subjects = self.subjects.write();
+            subjects.retain(|s| return &s.auth_id != auth_id);
+        }
+        {
+            let mut credentials = self.credentials.write();
+            credentials.retain(|(_, id, _)| return id != auth_id);
+        }
+        {
+            let mut sessions = self.sessions.write();
+            sessions.retain(|s| return s.auth_id() != auth_id);
+        }
+        return Ok(());
     }
 }
 
-impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
-    type NewUser = User;
-
-    fn find_by_identifier(
+impl<User: AuthUser + Clone> CredentialStore for MemoryStore<User> {
+    fn find_credential(
         &self,
         identifier: &str,
-    ) -> Result<Option<(Self::User, String)>, AuthError> {
+    ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
         let credential = {
             let credentials = self.credentials.read();
             credentials
                 .iter()
                 .find(|(ident, _, _)| return ident == identifier)
-                .map(|(_, user_id, hash)| return (user_id.clone(), hash.clone()))
+                .map(|(_, auth_id, hash)| return (*auth_id, hash.clone()))
         };
-        let (user_id, password_hash) = match credential {
+        let (auth_id, secret_hash) = match credential {
             Some(credential) => credential,
             None => return Ok(None),
         };
         let found = {
-            let users = self.users.read();
-            users.iter().find(|u| return u.id() == user_id).cloned()
+            let subjects = self.subjects.read();
+            subjects
+                .iter()
+                .find(|s| return s.auth_id == auth_id)
+                .cloned()
         };
-        let user = match found {
-            Some(user) => user,
+        let subject = match found {
+            Some(subject) => subject,
             None => return Ok(None),
         };
-        return Ok(Some((user, password_hash)));
-    }
-
-    fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError> {
-        {
-            let mut credentials = self.credentials.write();
-            for (_, user_id, hash) in credentials.iter_mut() {
-                if user_id == id {
-                    *hash = new_hash.to_string();
-                }
-            }
-        }
-        return Ok(());
+        return Ok(Some((subject, secret_hash)));
     }
 
     // reason: the guard must stay held across the identifier check, the
     // existence check, and the push; releasing it earlier would split the
     // claim and let a racing provisioner steal the identifier in between.
     #[expect(clippy::significant_drop_tightening)]
-    fn attach_password_credential(
+    fn attach_credential(
         &self,
-        id: &Self::Id,
+        auth_id: &Self::AuthId,
         identifier: &str,
-        password_hash: &str,
+        secret_hash: &str,
     ) -> Result<bool, AuthError> {
-        // One guard order, both tables: `credentials` before `users`, matching
-        // provisioning, so a racing provisioner and a racing attach cannot
-        // deadlock or interleave a check past a write.
         let mut credentials = self.credentials.write();
         if credentials
             .iter()
@@ -204,57 +332,41 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             return Ok(false);
         }
         let known = {
-            let users = self.users.read();
-            users.iter().any(|existing| return existing.id() == *id)
+            let subjects = self.subjects.read();
+            subjects.iter().any(|s| return &s.auth_id == auth_id)
         };
         if !known {
             return Err(AuthError::InvalidCredentials);
         }
-        credentials.push((
-            identifier.to_string(),
-            id.clone(),
-            password_hash.to_string(),
-        ));
+        credentials.push((identifier.to_string(), *auth_id, secret_hash.to_string()));
         return Ok(true);
     }
 
-    // reason: the guard must stay held across the identifier check, id check,
-    // and both pushes; releasing it earlier would split the claim.
-    #[expect(clippy::significant_drop_tightening)]
-    fn provision_user_with_password(
-        &self,
-        input: Self::NewUser,
-        identifier: &str,
-        password_hash: &str,
-    ) -> Result<Option<Self::User>, AuthError> {
-        // One guard order, both tables: `credentials` before `users`, held
-        // across the identifier check, the id check, and both pushes, so the
-        // claim is one indivisible step. A racing provisioner blocks on the
-        // guard, then observes the identifier or the id row as taken. The
-        // guards must span the returns. That span is the indivisibility this
-        // method exists to provide.
-        let mut credentials = self.credentials.write();
-        if credentials
-            .iter()
-            .any(|(ident, _, _)| return ident == identifier)
+    fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
         {
-            return Ok(None);
+            let mut credentials = self.credentials.write();
+            for (_, id, hash) in credentials.iter_mut() {
+                if id == auth_id {
+                    *hash = new_hash.to_string();
+                }
+            }
         }
-        let mut users = self.users.write();
-        let id = input.id();
-        if users.iter().any(|existing| return existing.id() == id) {
-            return Ok(None);
+        {
+            let mut subjects = self.subjects.write();
+            for subject in subjects.iter_mut() {
+                if &subject.auth_id == auth_id {
+                    subject.auth_hash = Some(new_hash.to_string());
+                }
+            }
         }
-        credentials.push((identifier.to_string(), id, password_hash.to_string()));
-        users.push(input.clone());
-        return Ok(Some(input));
+        return Ok(());
     }
 }
 
 impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
-    type Id = User::Id;
+    type AuthId = u64;
 
-    fn save_session(&self, session: Session<Self::Id>) -> Result<(), AuthError> {
+    fn save_session(&self, session: Session<Self::AuthId>) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
             replace_or_push(&mut sessions, session, |current, incoming| {
@@ -264,7 +376,7 @@ impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
         return Ok(());
     }
 
-    fn find_session(&self, id: &SessionId) -> Result<Option<Session<Self::Id>>, AuthError> {
+    fn find_session(&self, id: &SessionId) -> Result<Option<Session<Self::AuthId>>, AuthError> {
         let session = {
             let sessions = self.sessions.read();
             sessions.iter().find(|s| return s.id() == id).cloned()
@@ -298,23 +410,38 @@ impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
         return Ok(());
     }
 
-    fn delete_user_sessions(&self, user_id: &Self::Id) -> Result<(), AuthError> {
+    fn delete_subject_sessions(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            sessions.retain(|s| return s.user_id() != user_id);
+            sessions.retain(|s| return s.auth_id() != auth_id);
         }
         return Ok(());
     }
 
-    fn list_user_sessions(&self, user_id: &Self::Id) -> Result<Vec<Session<Self::Id>>, AuthError> {
+    fn list_subject_sessions(
+        &self,
+        auth_id: &Self::AuthId,
+    ) -> Result<Vec<Session<Self::AuthId>>, AuthError> {
         let sessions = {
             let sessions = self.sessions.read();
             sessions
                 .iter()
-                .filter(|s| return s.user_id() == user_id)
+                .filter(|s| return s.auth_id() == auth_id)
                 .cloned()
                 .collect()
         };
         return Ok(sessions);
+    }
+}
+
+impl<User: AuthUser + Clone> UserStore for MemoryStore<User> {
+    type User = User;
+
+    fn resolve(&self, app_ref: &Self::AppRef) -> Result<Option<Self::User>, AuthError> {
+        let user = {
+            let users = self.users.read();
+            users.iter().find(|u| return &u.id() == app_ref).cloned()
+        };
+        return Ok(user);
     }
 }

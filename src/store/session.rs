@@ -1,4 +1,9 @@
 //! Session storage capability trait.
+//!
+//! Sessions scope to the authentication subject and are keyed by the
+//! **storage form**: `sha256(raw wire token)`. The engine hashes wire
+//! tokens before calling this trait, so the store only ever sees hashed
+//! ids and a leaked store yields no session-hijackable secrets.
 
 use std::fmt::Debug;
 
@@ -8,27 +13,25 @@ use crate::status::SessionId;
 
 /// Storage interface for session persistence and lifecycle.
 ///
-/// Sessions are keyed by the **storage form**: `sha256(raw wire token)`.
-/// The engine hashes wire tokens before calling this trait, so the store
-/// only ever sees hashed ids and a leaked store yields no session-hijackable
-/// secrets.
+/// Subject-scoped throughout: listing and revocation take the
+/// authentication subject id, never an application key.
 pub trait SessionStore: Debug + Send + Sync {
-    /// The user identifier type.
-    type Id: Clone + Eq + Debug + Send + Sync + 'static;
+    /// The authentication subject identifier type.
+    type AuthId: Clone + Eq + Debug + Send + Sync + 'static;
 
     /// Saves a newly created or updated session.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "a failed save must be handled"]
-    fn save_session(&self, session: Session<Self::Id>) -> Result<(), AuthError>;
+    fn save_session(&self, session: Session<Self::AuthId>) -> Result<(), AuthError>;
 
     /// Finds a session by its storage-form id.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "the session must be used"]
-    fn find_session(&self, id: &SessionId) -> Result<Option<Session<Self::Id>>, AuthError>;
+    fn find_session(&self, id: &SessionId) -> Result<Option<Session<Self::AuthId>>, AuthError>;
 
     /// Deletes a session by its storage-form id.
     ///
@@ -52,17 +55,20 @@ pub trait SessionStore: Debug + Send + Sync {
         last_active: u64,
     ) -> Result<(), AuthError>;
 
-    /// Deletes all sessions belonging to a user.
+    /// Deletes all sessions belonging to a subject.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "a failed revoke must be handled"]
-    fn delete_user_sessions(&self, user_id: &Self::Id) -> Result<(), AuthError>;
+    fn delete_subject_sessions(&self, auth_id: &Self::AuthId) -> Result<(), AuthError>;
 
-    /// Lists all sessions belonging to a user.
+    /// Lists all sessions belonging to a subject.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "the session list must be used"]
-    fn list_user_sessions(&self, user_id: &Self::Id) -> Result<Vec<Session<Self::Id>>, AuthError>;
+    fn list_subject_sessions(
+        &self,
+        auth_id: &Self::AuthId,
+    ) -> Result<Vec<Session<Self::AuthId>>, AuthError>;
 }

@@ -1,23 +1,24 @@
 //! Authentication hook firing.
 
-use crate::engine::{AuthEngine, UserCallback};
-use crate::store::{SessionStore, UserStore};
+use crate::engine::{AuthEngine, SubjectCallback};
+use crate::store::session::SessionStore;
+use crate::store::user::{AuthSubject, CredentialStore};
 
-impl<U, S> AuthEngine<U, S>
+impl<C, S> AuthEngine<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
-    pub(crate) fn fire_on_sign_in(&self, user: &U::User) {
-        fire_hook(self.on_sign_in.as_ref(), user);
+    pub(crate) fn fire_on_sign_in(&self, subject: &AuthSubject<C::AuthId, C::AppRef>) {
+        fire_hook(self.on_sign_in.as_ref(), subject);
     }
 
-    pub(crate) fn fire_on_sign_out(&self, user: &U::User) {
-        fire_hook(self.on_sign_out.as_ref(), user);
+    pub(crate) fn fire_on_sign_out(&self, subject: &AuthSubject<C::AuthId, C::AppRef>) {
+        fire_hook(self.on_sign_out.as_ref(), subject);
     }
 
-    pub(crate) fn fire_on_session_validated(&self, user: &U::User) {
-        fire_hook(self.on_session_validated.as_ref(), user);
+    pub(crate) fn fire_on_session_validated(&self, subject: &AuthSubject<C::AuthId, C::AppRef>) {
+        fire_hook(self.on_session_validated.as_ref(), subject);
     }
 }
 
@@ -33,8 +34,11 @@ where
 /// # Panics
 /// Propagates any panic raised by `hook`; panics in hooks are programming
 /// errors and must stop the program rather than be caught.
-pub fn fire_hook<U>(hook: Option<&UserCallback<U>>, user: &U) {
+pub fn fire_hook<AuthId, AppRef>(
+    hook: Option<&SubjectCallback<AuthId, AppRef>>,
+    subject: &AuthSubject<AuthId, AppRef>,
+) {
     if let Some(hook) = hook {
-        hook(user);
+        hook(subject);
     }
 }

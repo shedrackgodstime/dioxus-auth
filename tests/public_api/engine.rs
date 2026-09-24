@@ -10,38 +10,9 @@ use super::common::TestUser;
 use super::identity_hasher::IdentityHasher;
 use super::password::hash_password;
 use dioxus_auth::{
-    AuthEngine, AuthError, AuthStatus, AuthUser, LoginOptions, MemoryStore, PasswordUserStore,
-    Session, SessionId, SessionStore, UserStore,
+    AuthEngine, AuthError, AuthStatus, CredentialStore, LoginOptions, MemoryStore, Session,
+    SessionId, SessionStore, SubjectStore, UserStore,
 };
-
-#[derive(Debug, Clone)]
-struct VersionedUser {
-    id: u64,
-    version: String,
-}
-
-impl AuthUser for VersionedUser {
-    type Id = u64;
-
-    fn id(&self) -> Self::Id {
-        return self.id;
-    }
-
-    fn session_auth_hash(&self) -> Option<&str> {
-        return Some(&self.version);
-    }
-}
-
-impl VersionedUser {
-    /// Creates a versioned test user.
-    #[must_use]
-    fn new(id: u64, version: impl Into<String>) -> Self {
-        return Self {
-            id,
-            version: version.into(),
-        };
-    }
-}
 
 fn seeded_login_engine() -> AuthEngine<MemoryStore<TestUser>, MemoryStore<TestUser>> {
     let store = MemoryStore::<TestUser>::new();
@@ -116,8 +87,8 @@ fn login_with_options_records_ip_and_user_agent() {
         .with_ip_address(Some("203.0.113.7"))
         .with_user_agent(Some("dioxus-test/1.0"));
 
-    let (user, session) = engine.login_with_options("alice", "pw", options).unwrap();
-    assert_eq!(user.id, 1);
+    let (subject, session) = engine.login_with_options("alice", "pw", options).unwrap();
+    assert_eq!(subject.auth_id, 1);
     assert_eq!(session.ip_address(), Some("203.0.113.7"));
     assert_eq!(session.user_agent(), Some("dioxus-test/1.0"));
 
@@ -142,16 +113,19 @@ fn custom_hasher_override_is_used_for_verification() {
         .expect("engine construction must succeed");
 
     assert!(engine.hasher().verify("x", "x").unwrap());
-    let (user, _) = engine.login("alice", "correct").unwrap();
-    assert_eq!(user.id, 1);
+    let (subject, _) = engine.login("alice", "correct").unwrap();
+    assert_eq!(subject.auth_id, 1);
     let result = engine.login("alice", "wrong");
     assert_eq!(result.unwrap_err(), AuthError::InvalidCredentials);
 }
 
 #[test]
 fn login_rotates_sessions_bound_to_a_previous_credential_version() {
-    let store = MemoryStore::<VersionedUser>::new();
-    store.insert_user_with_password(VersionedUser::new(1, "v1"), "alice", String::from("pw"));
+    let store = MemoryStore::<TestUser>::new();
+    let created = store
+        .provision_subject(None, TestUser::new(1, "alice"), "alice", "pw")
+        .unwrap()
+        .expect("claim must succeed");
     let store = Arc::new(store);
     let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
         .hasher(IdentityHasher)
@@ -159,9 +133,9 @@ fn login_rotates_sessions_bound_to_a_previous_credential_version() {
         .expect("engine construction must succeed");
 
     let (_, first) = engine.login("alice", "pw").unwrap();
-    store.insert_user(VersionedUser::new(1, "v2"));
+    store.rotate_secret(&created.auth_id, "pw2").unwrap();
 
-    let (_, second) = engine.login("alice", "pw").unwrap();
+    let (_, second) = engine.login("alice", "pw2").unwrap();
 
     let first_storage = first.id().hash_for_storage();
     let second_storage = second.id().hash_for_storage();
@@ -177,14 +151,14 @@ fn memory_store_clone_is_independent() {
     store.save_session(session.clone()).unwrap();
 
     let clone = store.clone();
-    assert!(clone.find_by_identifier("alice").unwrap().is_some());
+    assert!(clone.find_credential("alice").unwrap().is_some());
     assert!(clone.find_session(session.id()).unwrap().is_some());
 
     clone.insert_user(TestUser::new(2, "bob"));
     clone.delete_session(session.id()).unwrap();
 
-    assert!(store.find_by_id(&2).unwrap().is_none());
-    assert!(clone.find_by_id(&2).unwrap().is_some());
+    assert!(store.resolve(&2).unwrap().is_none());
+    assert!(clone.resolve(&2).unwrap().is_some());
     assert!(store.find_session(session.id()).unwrap().is_some());
     assert!(clone.find_session(session.id()).unwrap().is_none());
 }

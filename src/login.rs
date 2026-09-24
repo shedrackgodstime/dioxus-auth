@@ -1,11 +1,11 @@
 //! Login operation implementation.
 
-use crate::engine::{AuthEngine, LoginOptions};
+use crate::engine::{AuthEngine, AuthenticatedPair, LoginOptions};
 use crate::error::AuthError;
 use crate::session::Session;
 use crate::status::SessionId;
-use crate::store::{PasswordUserStore, SessionStore};
-use crate::user::AuthUser;
+use crate::store::session::SessionStore;
+use crate::store::user::{AuthSubject, CredentialStore};
 
 /// Limiter key for one caller IP, if the caller supplied it.
 ///
@@ -29,37 +29,32 @@ pub fn normalize_identifier(identifier: &str) -> String {
     return identifier.trim().to_lowercase();
 }
 
-impl<U, S> AuthEngine<U, S>
+impl<C, S> AuthEngine<C, S>
 where
-    U: PasswordUserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
-    /// Authenticates a user by identifier and plaintext password.
+    /// Authenticates a subject by identifier and plaintext password.
     ///
-    /// Constant-time defense: unknown-user login runs one Argon2 verification
-    /// against the dummy hash, so miss and hit take indistinguishable time.
+    /// Constant-time defense: unknown-identifier login runs one Argon2
+    /// verification against the dummy hash, so miss and hit take
+    /// indistinguishable time.
     ///
-    /// Returns the authenticated user and the **raw wire session** (the id is
-    /// sendable to the client; the store only ever sees its hash).
+    /// Returns the authenticated subject and the **raw wire session** (the id
+    /// is sendable to the client; the store only ever sees its hash).
     ///
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{AuthEngine, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{AuthEngine, CredentialStore, DefaultStore, DefaultUserInput, SubjectStore};
     /// # use std::sync::Arc;
-    /// # #[derive(Debug, Clone)]
-    /// # struct User { id: u64, name: String }
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return self.id; }
-    /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// # let store = Arc::new(MemoryStore::<User>::new());
+    /// # let store = Arc::new(DefaultStore::new());
     /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
     /// # let hash = engine.hasher().hash("s3cret")?;
-    /// # store.insert_user_with_password(User { id: 1, name: String::from("alice") }, "alice", hash);
-    /// let (user, session) = engine.login("alice", "s3cret")?;
-    /// assert_eq!(user.id(), 1);
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "alice", &hash)?;
+    /// let (subject, session) = engine.login("alice", "s3cret")?;
+    /// assert_eq!(subject.auth_id, 1);
     /// # return Ok(());
     /// # }
     /// ```
@@ -68,16 +63,16 @@ where
     /// Returns `AuthError::InvalidCredentials` for bad credentials,
     /// `AuthError::RateLimited` if the identifier is rate-limited, or a store
     /// or hasher error.
-    #[must_use = "the session and authenticated user should be used"]
+    #[must_use = "the session and authenticated subject should be used"]
     pub fn login(
         &self,
         identifier: &str,
         password: &str,
-    ) -> Result<(U::User, Session<U::Id>), AuthError> {
+    ) -> Result<AuthenticatedPair<C::AuthId, C::AppRef>, AuthError> {
         return self.do_login(identifier, password, LoginOptions::default());
     }
 
-    /// Authenticates a user with optional session metadata (IP, user agent).
+    /// Authenticates a subject with optional session metadata (IP, user agent).
     ///
     /// Metadata rides on the minted session for attribution; the IP also
     /// feeds the per-IP rate-limit dimension.
@@ -85,35 +80,29 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{AuthEngine, AuthUser, LoginOptions, MemoryStore};
+    /// # use dioxus_auth::{AuthEngine, CredentialStore, DefaultStore, DefaultUserInput, LoginOptions, SubjectStore};
     /// # use std::sync::Arc;
-    /// # #[derive(Debug, Clone)]
-    /// # struct User { id: u64, name: String }
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return self.id; }
-    /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// # let store = Arc::new(MemoryStore::<User>::new());
+    /// # let store = Arc::new(DefaultStore::new());
     /// # let engine = AuthEngine::new(Arc::clone(&store), Arc::clone(&store))?;
     /// # let hash = engine.hasher().hash("s3cret")?;
-    /// # store.insert_user_with_password(User { id: 1, name: String::from("alice") }, "alice", hash);
+    /// # store.provision_subject(None, DefaultUserInput::new("alice"), "alice", &hash)?;
     /// let options = LoginOptions::new().with_ip_address(Some("10.0.0.1"));
-    /// let (user, _) = engine.login_with_options("alice", "s3cret", options)?;
-    /// assert_eq!(user.id(), 1);
+    /// let (subject, _) = engine.login_with_options("alice", "s3cret", options)?;
+    /// assert_eq!(subject.auth_id, 1);
     /// # return Ok(());
     /// # }
     /// ```
     ///
     /// # Errors
     /// See [`AuthEngine::login`].
-    #[must_use = "the authenticated user and session should be used"]
+    #[must_use = "the authenticated subject and session should be used"]
     pub fn login_with_options(
         &self,
         identifier: &str,
         password: &str,
         options: LoginOptions<'_>,
-    ) -> Result<(U::User, Session<U::Id>), AuthError> {
+    ) -> Result<AuthenticatedPair<C::AuthId, C::AppRef>, AuthError> {
         return self.do_login(identifier, password, options);
     }
 
@@ -177,12 +166,12 @@ where
         identifier: &str,
         password: &str,
         ip: Option<&str>,
-    ) -> Result<U::User, AuthError> {
+    ) -> Result<AuthSubject<C::AuthId, C::AppRef>, AuthError> {
         match self.check_rate_limit(identifier, ip) {
             Ok(()) => {}
             Err(e) => return Err(e),
         }
-        return self.authenticate_user(identifier, password, ip);
+        return self.authenticate_subject(identifier, password, ip);
     }
 
     /// Runs the verified login: checks, session minting, rotation, and save.
@@ -191,16 +180,16 @@ where
         identifier: &str,
         password: &str,
         options: LoginOptions<'_>,
-    ) -> Result<(U::User, Session<U::Id>), AuthError> {
-        let user = match self.verify_password(identifier, password, options.ip_address()) {
-            Ok(user) => user,
+    ) -> Result<AuthenticatedPair<C::AuthId, C::AppRef>, AuthError> {
+        let subject = match self.verify_password(identifier, password, options.ip_address()) {
+            Ok(subject) => subject,
             Err(e) => return Err(e),
         };
 
         let now = (self.now)();
         let expires_at = now + self.session_ttl_secs;
-        let user_id = user.id();
-        let auth_hash = user.session_auth_hash().map(str::to_string);
+        let auth_id = subject.auth_id.clone();
+        let auth_hash = subject.auth_hash.clone();
 
         // reason: the guard is scoped to save + rotation only. Holding it
         // across the sign-in hook below would deadlock hooks that call back
@@ -210,7 +199,7 @@ where
         let raw_id = SessionId::generate();
         let storage_id = raw_id.hash_for_storage();
         let storage_session = Self::apply_session_options(
-            Session::new(storage_id.clone(), user_id.clone(), now, expires_at)
+            Session::new(storage_id.clone(), auth_id.clone(), now, expires_at)
                 .with_last_active(now),
             auth_hash.as_deref(),
             &options,
@@ -227,21 +216,21 @@ where
                 Ok(()) => {}
                 Err(e) => return Err(e),
             }
-            match self.rotate_stale_sessions(&user_id, auth_hash.as_deref(), &storage_id) {
+            match self.rotate_stale_sessions(&auth_id, auth_hash.as_deref(), &storage_id) {
                 Ok(()) => {}
                 Err(e) => return Err(e),
             }
         }
 
         let wire_session = Self::apply_session_options(
-            Session::new(raw_id, user_id, now, expires_at).with_last_active(now),
+            Session::new(raw_id, auth_id, now, expires_at).with_last_active(now),
             auth_hash.as_deref(),
             &options,
         );
 
-        self.fire_on_sign_in(&user);
+        self.fire_on_sign_in(&subject);
         self.record_rate_limit_success(identifier, options.ip_address());
-        return Ok((user, wire_session));
+        return Ok((subject, wire_session));
     }
 
     /// Runs one verifier pass against the dummy hash.
@@ -253,23 +242,24 @@ where
         let _burned = self.hasher.verify(password, &self.dummy_hash).is_ok();
     }
 
-    /// Resolves and verifies the user for an identifier/password pair.
+    /// Resolves and verifies the subject for an identifier/password pair.
     ///
-    /// Constant-time defense: unknown-user login runs one Argon2 verification
-    /// against the dummy hash, so miss and hit take indistinguishable time.
-    fn authenticate_user(
+    /// Constant-time defense: unknown-identifier login runs one Argon2
+    /// verification against the dummy hash, so miss and hit take
+    /// indistinguishable time.
+    fn authenticate_subject(
         &self,
         identifier: &str,
         password: &str,
         ip: Option<&str>,
-    ) -> Result<U::User, AuthError> {
+    ) -> Result<AuthSubject<C::AuthId, C::AppRef>, AuthError> {
         let normalized = normalize_identifier(identifier);
-        let user_entry = match self.users.find_by_identifier(&normalized) {
+        let subject_entry = match self.store.find_credential(&normalized) {
             Ok(entry) => entry,
             Err(e) => return Err(e),
         };
 
-        let (user, password_hash) = if let Some(entry) = user_entry {
+        let (subject, secret_hash) = if let Some(entry) = subject_entry {
             entry
         } else {
             self.record_rate_limit_failure(identifier, ip);
@@ -284,15 +274,12 @@ where
         // collapses it to a miss here; the hasher's `Err` channel stays
         // available to direct callers (account setup, admin tooling) where no
         // oracle exists.
-        let is_valid = self
-            .hasher
-            .verify(password, &password_hash)
-            .unwrap_or(false);
+        let is_valid = self.hasher.verify(password, &secret_hash).unwrap_or(false);
         if !is_valid {
             self.record_rate_limit_failure(identifier, ip);
             return Err(AuthError::InvalidCredentials);
         }
-        return Ok(user);
+        return Ok(subject);
     }
 
     /// Deletes sessions superseded by the current credential state, sparing
@@ -306,12 +293,12 @@ where
     /// window: rotation must never reap the session it just made room for.
     fn rotate_stale_sessions(
         &self,
-        user_id: &U::Id,
+        auth_id: &C::AuthId,
         current_hash: Option<&str>,
         spare: &SessionId,
     ) -> Result<(), AuthError> {
         if self.single_active_session {
-            let sessions = match self.sessions.list_user_sessions(user_id) {
+            let sessions = match self.sessions.list_subject_sessions(auth_id) {
                 Ok(sessions) => sessions,
                 Err(e) => return Err(e),
             };
@@ -327,7 +314,7 @@ where
         let Some(current_hash) = current_hash else {
             return Ok(());
         };
-        let sessions = match self.sessions.list_user_sessions(user_id) {
+        let sessions = match self.sessions.list_subject_sessions(auth_id) {
             Ok(sessions) => sessions,
             Err(e) => return Err(e),
         };
@@ -348,10 +335,10 @@ where
 
     /// Attaches the credential version and request metadata to a session.
     fn apply_session_options(
-        session: Session<U::Id>,
+        session: Session<C::AuthId>,
         auth_hash: Option<&str>,
         options: &LoginOptions<'_>,
-    ) -> Session<U::Id> {
+    ) -> Session<C::AuthId> {
         let mut session = session;
         if let Some(auth) = auth_hash {
             session = session.with_auth_hash(auth);

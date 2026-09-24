@@ -4,12 +4,13 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::engine::{AuthEngine, UserCallback, now_unix};
+use crate::engine::{AuthEngine, SubjectCallback, now_unix};
 use crate::error::AuthError;
 use crate::hash::Argon2Hasher;
 use crate::rate_limit::RateLimiter;
 use crate::security::PasswordHasher;
-use crate::store::{SessionStore, UserStore};
+use crate::store::session::SessionStore;
+use crate::store::user::CredentialStore;
 
 /// Constant plaintext used to pre-compute the timing-defense dummy hash.
 ///
@@ -27,28 +28,28 @@ const DEFAULT_SESSION_TTL_SECS: u64 = 60 * 60 * 24 * 7;
 /// it does not clone the inner stores or hasher.
 #[derive(Clone)]
 #[must_use = "call `.build()` to construct the engine"]
-pub struct AuthEngineBuilder<U, S>
+pub struct AuthEngineBuilder<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
-    users: Arc<U>,
+    store: Arc<C>,
     sessions: Arc<S>,
     hasher: Option<Arc<dyn PasswordHasher>>,
     session_ttl_secs: u64,
     idle_timeout_secs: Option<u64>,
     single_active_session: bool,
-    on_sign_in: Option<UserCallback<U::User>>,
-    on_sign_out: Option<UserCallback<U::User>>,
-    on_session_validated: Option<UserCallback<U::User>>,
+    on_sign_in: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    on_sign_out: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    on_session_validated: Option<SubjectCallback<C::AuthId, C::AppRef>>,
     rate_limiter: Option<Arc<dyn RateLimiter>>,
     now: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
-impl<U, S> fmt::Debug for AuthEngineBuilder<U, S>
+impl<C, S> fmt::Debug for AuthEngineBuilder<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // reason: the clock is a closure; it is irrelevant for debugging and is
@@ -64,20 +65,20 @@ where
     }
 }
 
-impl<U, S> AuthEngineBuilder<U, S>
+impl<C, S> AuthEngineBuilder<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
-    /// Creates a new builder with the given user and session stores.
+    /// Creates a new builder with the given auth and session stores.
     ///
     /// Custom setups reach this through
     /// [`AuthEngine::builder`](crate::engine::AuthEngine::builder), the
     /// documented entry point. Never call it directly.
     #[must_use = "a builder must eventually be built"]
-    pub(super) fn new(users: Arc<U>, sessions: Arc<S>) -> Self {
+    pub(super) fn new(store: Arc<C>, sessions: Arc<S>) -> Self {
         return Self {
-            users,
+            store,
             sessions,
             hasher: None,
             session_ttl_secs: DEFAULT_SESSION_TTL_SECS,
@@ -146,7 +147,7 @@ where
         return self;
     }
 
-    /// Enforces single active session per user on login.
+    /// Enforces single active session per subject on login.
     ///
     /// Process-local exactness: concurrent logins serialize through the
     /// engine's login lock, so exactly one session survives per login race.
@@ -161,21 +162,30 @@ where
 
     /// Hook called on successful sign-in.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
-    pub fn on_sign_in(mut self, hook: impl Fn(&U::User) + Send + Sync + 'static) -> Self {
+    pub fn on_sign_in(
+        mut self,
+        hook: impl Fn(&crate::store::AuthSubject<C::AuthId, C::AppRef>) + Send + Sync + 'static,
+    ) -> Self {
         self.on_sign_in = Some(Arc::new(hook));
         return self;
     }
 
     /// Hook called on sign-out.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
-    pub fn on_sign_out(mut self, hook: impl Fn(&U::User) + Send + Sync + 'static) -> Self {
+    pub fn on_sign_out(
+        mut self,
+        hook: impl Fn(&crate::store::AuthSubject<C::AuthId, C::AppRef>) + Send + Sync + 'static,
+    ) -> Self {
         self.on_sign_out = Some(Arc::new(hook));
         return self;
     }
 
     /// Hook called after successful session validation.
     #[must_use = "chained builder configuration is discarded if not fed into `.build()`"]
-    pub fn on_session_validated(mut self, hook: impl Fn(&U::User) + Send + Sync + 'static) -> Self {
+    pub fn on_session_validated(
+        mut self,
+        hook: impl Fn(&crate::store::AuthSubject<C::AuthId, C::AppRef>) + Send + Sync + 'static,
+    ) -> Self {
         self.on_session_validated = Some(Arc::new(hook));
         return self;
     }
@@ -202,16 +212,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{AuthEngine, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{AuthEngine, DefaultStore};
     /// # use std::sync::Arc;
-    /// # #[derive(Debug, Clone)]
-    /// # struct User;
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return 1; }
-    /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// # let store = Arc::new(MemoryStore::<User>::new());
+    /// # let store = Arc::new(DefaultStore::new());
     /// let engine = AuthEngine::builder(Arc::clone(&store), store)
     ///     .session_ttl_secs(3600)
     ///     .build()?;
@@ -225,7 +229,7 @@ where
     /// A zero session TTL or idle timeout also fails with `AuthError::Internal`:
     /// a zero lifetime mints instantly-dead sessions, which is never intended.
     #[must_use = "the constructed engine must be used"]
-    pub fn build(self) -> Result<AuthEngine<U, S>, AuthError> {
+    pub fn build(self) -> Result<AuthEngine<C, S>, AuthError> {
         if self.session_ttl_secs == 0 {
             return Err(AuthError::Internal(String::from(
                 "session TTL must be non-zero",
@@ -244,7 +248,7 @@ where
             Err(e) => return Err(e),
         };
         return Ok(AuthEngine {
-            users: self.users,
+            store: self.store,
             sessions: self.sessions,
             hasher,
             session_ttl_secs: self.session_ttl_secs,

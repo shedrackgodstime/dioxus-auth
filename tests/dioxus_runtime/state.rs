@@ -270,7 +270,7 @@ fn facade_and_runtime_twins_produce_identical_results() {
             .validate_session(session)
             .expect("validation must succeed")
             .expect("both sessions must validate");
-        assert_eq!(validated, facade_user);
+        assert_eq!(validated.app_ref, Some(facade_user.id));
     }
 
     assert_eq!(

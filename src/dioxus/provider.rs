@@ -7,7 +7,7 @@ use ::dioxus::prelude::{Element, Props, component, rsx, use_context_provider, us
 use crate::auth::Auth;
 use crate::error::ErrorCode;
 use crate::status::{AuthStatus, SessionId};
-use crate::store::{PasswordUserStore, SessionStore, UserStore};
+use crate::store::{CredentialStore, SessionStore, SubjectStore, UserStore};
 use crate::token::MemoryTokenStorage;
 
 use super::context::{AuthContext, AuthSignals};
@@ -35,16 +35,10 @@ use super::storage::TokenStorageHandle;
 ///
 /// ```no_run
 /// use dioxus::prelude::*;
-/// use dioxus_auth::{AuthProvider, Auth, MemoryStore};
+/// use dioxus_auth::{AuthProvider, Auth};
 ///
-/// # #[derive(Debug, Clone, PartialEq)]
-/// # struct User { id: u64, name: String }
-/// # impl dioxus_auth::AuthUser for User {
-/// #     type Id = u64;
-/// #     fn id(&self) -> u64 { return self.id; }
-/// # }
 /// # fn App() -> Element {
-/// #     let auth = match Auth::new(MemoryStore::<User>::new()) {
+/// #     let auth = match Auth::memory() {
 /// #         Ok(auth) => auth,
 /// #         Err(_) => return rsx! { "auth unavailable" },
 /// #     };
@@ -61,7 +55,7 @@ use super::storage::TokenStorageHandle;
 #[component]
 pub fn AuthProvider<D>(auth: Auth<D>, children: Element) -> Element
 where
-    D: PasswordUserStore + SessionStore<Id = <D as UserStore>::Id> + 'static,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore + 'static,
 {
     let engine: AuthEngineHandle<D::User> = auth
         .erased_engine

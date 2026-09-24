@@ -12,4 +12,6 @@ pub(crate) mod user;
 pub use default::DefaultStore;
 pub use memory::MemoryStore;
 pub use session::SessionStore;
-pub use user::{PasswordUserStore, UserStore};
+pub use user::{
+    AuthSubject, CredentialStore, StoredCredential, SubjectClaim, SubjectStore, UserStore,
+};

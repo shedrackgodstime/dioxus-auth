@@ -11,13 +11,13 @@ use super::common::TestUser;
 use super::password::hash_password;
 use dioxus_auth::{
     AuthEngine, AuthError, InMemoryRateLimiter, LoginOptions, MemoryStore, SessionId, SessionStore,
-    UserStore,
+    SubjectStore,
 };
 
 use super::seeded_engine;
 
 #[test]
-fn revoke_all_user_sessions_invalidates_every_active_session() {
+fn revoke_all_subject_sessions_invalidates_every_active_session() {
     let engine = seeded_engine();
 
     let (_, first) = engine.login("alice", "s3cret").unwrap();
@@ -25,7 +25,7 @@ fn revoke_all_user_sessions_invalidates_every_active_session() {
     assert!(engine.validate_session(first.id()).unwrap().is_some());
     assert!(engine.validate_session(second.id()).unwrap().is_some());
 
-    engine.revoke_all_user_sessions(&1).unwrap();
+    engine.revoke_all_subject_sessions(&1).unwrap();
 
     assert!(engine.validate_session(first.id()).unwrap().is_none());
     assert!(engine.validate_session(second.id()).unwrap().is_none());
@@ -118,7 +118,7 @@ fn engine_getters_expose_configured_defaults() {
     assert_eq!(engine.session_ttl_secs(), 7 * 24 * 60 * 60);
     assert_eq!(engine.idle_timeout_secs(), None);
     assert!(!engine.single_active_session());
-    assert!(engine.user_store().find_by_id(&1).unwrap().is_some());
+    assert!(engine.store().find_subject(&1).unwrap().is_some());
     assert!(
         engine
             .session_store()

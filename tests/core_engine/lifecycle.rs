@@ -16,10 +16,10 @@ fn login_then_validate_roundtrip() {
     let engine = seeded_engine();
 
     let (user, session) = engine.login("alice", "s3cret").unwrap();
-    assert_eq!(user.id, 1);
+    assert_eq!(user.auth_id, 1);
 
     let validated = engine.validate_session(session.id()).unwrap().unwrap();
-    assert_eq!(validated.id, 1);
+    assert_eq!(validated.auth_id, 1);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn login_after_sign_out_revives_the_account() {
     engine.logout(session.id()).unwrap();
 
     let (user, new_session) = engine.login("alice", "s3cret").unwrap();
-    assert_eq!(user.id, 1);
+    assert_eq!(user.auth_id, 1);
     assert_ne!(session.id().as_str(), new_session.id().as_str());
     assert!(engine.validate_session(new_session.id()).unwrap().is_some());
 }
@@ -103,7 +103,7 @@ fn successful_validation_keeps_the_session_active() {
     engine.validate_session(session.id()).unwrap();
     let validated = engine.validate_session(session.id()).unwrap().unwrap();
 
-    assert_eq!(validated.id, 1);
+    assert_eq!(validated.auth_id, 1);
 }
 
 /// Logging out a session whose user row is already gone must still delete the
@@ -141,7 +141,9 @@ fn list_and_revoke_all_cover_every_session() {
     let (_, first) = engine.login("alice", "s3cret").expect("login must succeed");
     let (_, second) = engine.login("alice", "s3cret").expect("login must succeed");
 
-    let listed = engine.list_user_sessions(&1).expect("listing must succeed");
+    let listed = engine
+        .list_subject_sessions(&1)
+        .expect("listing must succeed");
     assert_eq!(listed.len(), 2);
     // The store holds storage-form ids (`sha256` of the wire tokens).
     assert!(
@@ -156,11 +158,11 @@ fn list_and_revoke_all_cover_every_session() {
     );
 
     engine
-        .revoke_all_user_sessions(&1)
+        .revoke_all_subject_sessions(&1)
         .expect("revocation must succeed");
     assert!(
         engine
-            .list_user_sessions(&1)
+            .list_subject_sessions(&1)
             .expect("listing must succeed")
             .is_empty()
     );

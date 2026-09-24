@@ -31,8 +31,8 @@ fn sign_in_hook_is_fired_on_successful_login() {
     let fired = Arc::new(AtomicBool::new(false));
     let fired_flag = Arc::clone(&fired);
     let engine = hook_engine(|builder| {
-        return builder.on_sign_in(move |user| {
-            assert_eq!(user.id, 1);
+        return builder.on_sign_in(move |subject| {
+            assert_eq!(subject.auth_id, 1);
             fired_flag.store(true, Ordering::SeqCst);
         });
     });

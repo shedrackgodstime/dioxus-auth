@@ -72,7 +72,7 @@ async fn require_auth_layer_rejects_guests_and_accepts_valid_sessions() {
 struct FailingSessionStore;
 
 impl SessionStore for FailingSessionStore {
-    type Id = u64;
+    type AuthId = u64;
 
     fn save_session(&self, _session: Session<u64>) -> Result<(), AuthError> {
         return Err(AuthError::Internal(String::from("store unavailable")));
@@ -95,11 +95,11 @@ impl SessionStore for FailingSessionStore {
         return Err(AuthError::Internal(String::from("store unavailable")));
     }
 
-    fn delete_user_sessions(&self, _user_id: &u64) -> Result<(), AuthError> {
+    fn delete_subject_sessions(&self, _auth_id: &u64) -> Result<(), AuthError> {
         return Err(AuthError::Internal(String::from("store unavailable")));
     }
 
-    fn list_user_sessions(&self, _user_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
+    fn list_subject_sessions(&self, _auth_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
         return Err(AuthError::Internal(String::from("store unavailable")));
     }
 }
@@ -195,7 +195,7 @@ async fn require_auth_layer_allows_safe_reads_without_origin() {
 struct RateLimitedSessionStore;
 
 impl SessionStore for RateLimitedSessionStore {
-    type Id = u64;
+    type AuthId = u64;
 
     fn save_session(&self, _session: Session<u64>) -> Result<(), AuthError> {
         return Err(AuthError::RateLimited);
@@ -218,11 +218,11 @@ impl SessionStore for RateLimitedSessionStore {
         return Err(AuthError::RateLimited);
     }
 
-    fn delete_user_sessions(&self, _user_id: &u64) -> Result<(), AuthError> {
+    fn delete_subject_sessions(&self, _auth_id: &u64) -> Result<(), AuthError> {
         return Err(AuthError::RateLimited);
     }
 
-    fn list_user_sessions(&self, _user_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
+    fn list_subject_sessions(&self, _auth_id: &u64) -> Result<Vec<Session<u64>>, AuthError> {
         return Err(AuthError::RateLimited);
     }
 }

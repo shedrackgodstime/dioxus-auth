@@ -4,19 +4,20 @@ use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::session::Session;
 use crate::status::SessionId;
-use crate::store::{SessionStore, UserStore};
+use crate::store::session::SessionStore;
+use crate::store::user::CredentialStore;
 
-impl<U, S> AuthEngine<U, S>
+impl<C, S> AuthEngine<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
     /// Invalidates and revokes an active session (logout).
     ///
     /// The `session_id` is the raw wire token; the engine hashes it before
     /// touching the store. Malformed wire tokens are a cheap no-op rejection.
-    /// The session row is deleted even when its user row is already gone, so
-    /// deleting a user never strands orphan sessions behind.
+    /// The session row is deleted even when its subject row is already gone, so
+    /// deleting a subject never strands orphan sessions behind.
     ///
     /// # Errors
     /// Returns a store error if the lookup or deletion fails.
@@ -27,16 +28,16 @@ where
             Ok(None) => return Ok(()),
             Err(e) => return Err(e),
         };
-        let user = match self.users.find_by_id(session.user_id()) {
-            Ok(user) => user,
+        let subject = match self.store.find_subject(session.auth_id()) {
+            Ok(subject) => subject,
             Err(e) => return Err(e),
         };
         match self.sessions.delete_session(session.id()) {
             Ok(()) => {}
             Err(e) => return Err(e),
         }
-        if let Some(user) = user {
-            self.fire_on_sign_out(&user);
+        if let Some(subject) = subject {
+            self.fire_on_sign_out(&subject);
         }
         return Ok(());
     }
@@ -70,7 +71,7 @@ where
     fn find_wire_session(
         &self,
         session_id: &SessionId,
-    ) -> Result<Option<Session<U::Id>>, AuthError> {
+    ) -> Result<Option<Session<C::AuthId>>, AuthError> {
         if !SessionId::is_valid_wire_format(session_id.as_str()) {
             return Ok(None);
         }
@@ -78,26 +79,29 @@ where
         return self.sessions.find_session(&storage_id);
     }
 
-    /// Lists all sessions belonging to a user.
+    /// Lists all sessions belonging to a subject.
     ///
     /// The read half of multi-session management ("log out other devices"):
     /// list here, revoke one session with [`revoke_session`](Self::revoke_session)
-    /// or all of them with [`revoke_all_user_sessions`](Self::revoke_all_user_sessions).
+    /// or all of them with [`revoke_all_subject_sessions`](Self::revoke_all_subject_sessions).
     /// Order is store-defined; compare by id, never by position.
     ///
     /// # Errors
     /// Returns a store error if the listing fails.
     #[must_use = "the session list must be used"]
-    pub fn list_user_sessions(&self, user_id: &U::Id) -> Result<Vec<Session<U::Id>>, AuthError> {
-        return self.sessions.list_user_sessions(user_id);
+    pub fn list_subject_sessions(
+        &self,
+        auth_id: &C::AuthId,
+    ) -> Result<Vec<Session<C::AuthId>>, AuthError> {
+        return self.sessions.list_subject_sessions(auth_id);
     }
 
-    /// Revokes all sessions belonging to a user.
+    /// Revokes all sessions belonging to a subject.
     ///
     /// # Errors
     /// Returns a store error if the deletion fails.
     #[must_use = "session revocation should not be silently ignored"]
-    pub fn revoke_all_user_sessions(&self, user_id: &U::Id) -> Result<(), AuthError> {
-        return self.sessions.delete_user_sessions(user_id);
+    pub fn revoke_all_subject_sessions(&self, auth_id: &C::AuthId) -> Result<(), AuthError> {
+        return self.sessions.delete_subject_sessions(auth_id);
     }
 }

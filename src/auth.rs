@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
-use crate::store::{DefaultStore, SessionStore, UserStore};
+use crate::store::{CredentialStore, DefaultStore, SessionStore, SubjectStore, UserStore};
 
 /// Entry point for authentication.
 ///
@@ -20,7 +20,7 @@ use crate::store::{DefaultStore, SessionStore, UserStore};
 /// the inner `Arc`; it never clones the stores.
 pub struct Auth<D>
 where
-    D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore,
 {
     pub(crate) engine: Arc<AuthEngine<D, D>>,
     #[cfg(feature = "dioxus")]
@@ -31,7 +31,7 @@ where
 
 impl<D> Clone for Auth<D>
 where
-    D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore,
 {
     fn clone(&self) -> Self {
         return Self {
@@ -46,7 +46,7 @@ where
 
 impl<D> fmt::Debug for Auth<D>
 where
-    D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f.debug_tuple("Auth").field(&self.engine).finish();
@@ -55,7 +55,7 @@ where
 
 impl<D> PartialEq for Auth<D>
 where
-    D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore,
 {
     fn eq(&self, other: &Self) -> bool {
         // The facade shares its engine through the inner `Arc`; `Arc` identity
@@ -66,7 +66,7 @@ where
 
 impl<D> Auth<D>
 where
-    D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore,
 {
     /// Accesses the underlying engine.
     #[must_use]
@@ -85,15 +85,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
-    /// # #[derive(Debug, Clone)]
-    /// # struct User;
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return 1; }
-    /// # }
+    /// # use dioxus_auth::{Auth, DefaultStore};
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let auth = Auth::new(MemoryStore::<User>::new())?;
+    /// let auth = Auth::new(DefaultStore::new())?;
     /// assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
     /// # return Ok(());
     /// # }
@@ -128,16 +122,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{Auth, AuthEngine, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{Auth, AuthEngine, DefaultStore};
     /// # use std::sync::Arc;
-    /// # #[derive(Debug, Clone)]
-    /// # struct User;
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return 1; }
-    /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// # let db = Arc::new(MemoryStore::<User>::new());
+    /// # let db = Arc::new(DefaultStore::new());
     /// let engine = AuthEngine::builder(Arc::clone(&db), db).build()?;
     /// let auth = Auth::from_engine(engine);
     /// assert_eq!(auth.engine().session_ttl_secs(), 60 * 60 * 24 * 7);
@@ -159,7 +147,7 @@ where
 #[cfg(feature = "dioxus")]
 impl<D> Auth<D>
 where
-    D: UserStore + SessionStore<Id = <D as UserStore>::Id>,
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore,
 {
     /// Attaches a pre-seeded token storage for provider restore.
     ///
@@ -189,7 +177,7 @@ where
     #[must_use = "the constructed facade must be used"]
     pub fn from_erased(handle: crate::dioxus::AuthEngineHandle<D::User>) -> Result<Self, AuthError>
     where
-        D: Default,
+        D: UserStore + Default,
     {
         let placeholder = match Self::placeholder_engine() {
             Ok(engine) => engine,

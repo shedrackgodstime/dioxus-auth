@@ -9,7 +9,9 @@ use crate::builder::AuthEngineBuilder;
 use crate::error::AuthError;
 use crate::rate_limit::RateLimiter;
 use crate::security::PasswordHasher;
-use crate::store::{SessionStore, UserStore};
+use crate::session::Session;
+use crate::store::session::SessionStore;
+use crate::store::user::{AuthSubject, CredentialStore};
 
 /// Options for [`AuthEngine::login_with_options`].
 ///
@@ -57,16 +59,21 @@ impl<'a> LoginOptions<'a> {
         return self;
     }
 }
+/// Arc-wrapped subject callback set by the builder.
+pub type SubjectCallback<AuthId, AppRef> = Arc<dyn Fn(&AuthSubject<AuthId, AppRef>) + Send + Sync>;
 
-/// Arc-wrapped user callback set by the builder.
-pub type UserCallback<U> = Arc<dyn Fn(&U) + Send + Sync>;
+/// An authenticated subject paired with its freshly minted session.
+///
+/// The engine's login-shaped return: who was proven plus the session that
+/// proves it on the wire.
+pub type AuthenticatedPair<AuthId, AppRef> = (AuthSubject<AuthId, AppRef>, Session<AuthId>);
 
 /// Renders the six store/hasher/config fields shared by [`AuthEngine`] and
 /// [`AuthEngineBuilder`](crate::builder::AuthEngineBuilder) debug output.
 macro_rules! shared_auth_debug_fields {
     ($debug:expr, $target:expr) => {
         $debug
-            .field("users", &$target.users)
+            .field("store", &$target.store)
             .field("sessions", &$target.sessions)
             .field("hasher", &$target.hasher)
             .field("session_ttl_secs", &$target.session_ttl_secs)
@@ -81,28 +88,29 @@ pub(crate) use shared_auth_debug_fields;
 ///
 /// Encapsulates credential verification with timing-attack mitigation,
 /// CSPRNG session generation, session validation, expiration checks, and
-/// session revocation.
+/// session revocation. Works on auth-space subjects throughout: the
+/// application model never enters.
 ///
 /// Method implementations are split across the `login`, `logout`, `validate`,
 /// and `hooks` modules and attached here as inherent methods.
 ///
 /// `Clone` clones the shared `Arc` handles and copies the plain scalar fields;
-/// it does not clone the inner user/session stores or hasher.
+/// it does not clone the inner stores or hasher.
 #[derive(Clone)]
-pub struct AuthEngine<U, S>
+pub struct AuthEngine<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
-    pub(crate) users: Arc<U>,
+    pub(crate) store: Arc<C>,
     pub(crate) sessions: Arc<S>,
     pub(crate) hasher: Arc<dyn PasswordHasher>,
     pub(crate) session_ttl_secs: u64,
     pub(crate) idle_timeout_secs: Option<u64>,
     pub(crate) single_active_session: bool,
-    pub(crate) on_sign_in: Option<UserCallback<U::User>>,
-    pub(crate) on_sign_out: Option<UserCallback<U::User>>,
-    pub(crate) on_session_validated: Option<UserCallback<U::User>>,
+    pub(crate) on_sign_in: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    pub(crate) on_sign_out: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    pub(crate) on_session_validated: Option<SubjectCallback<C::AuthId, C::AppRef>>,
     pub(crate) rate_limiter: Option<Arc<dyn RateLimiter>>,
     /// Pre-computed Argon2-encoded hash of a constant dummy password.
     ///
@@ -125,10 +133,10 @@ where
     pub(crate) login_lock: Arc<Mutex<()>>,
 }
 
-impl<U, S> fmt::Debug for AuthEngine<U, S>
+impl<C, S> fmt::Debug for AuthEngine<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // reason: the dummy hash is a constant and the clock is a closure; both
@@ -146,10 +154,10 @@ where
     }
 }
 
-impl<U, S> AuthEngine<U, S>
+impl<C, S> AuthEngine<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
     /// Creates a new [`AuthEngine`] with the default Argon2id hasher and
     /// 7-day session TTL.
@@ -157,16 +165,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{AuthEngine, AuthUser, MemoryStore};
+    /// # use dioxus_auth::{AuthEngine, DefaultStore};
     /// # use std::sync::Arc;
-    /// # #[derive(Debug, Clone)]
-    /// # struct User;
-    /// # impl AuthUser for User {
-    /// #     type Id = u64;
-    /// #     fn id(&self) -> u64 { return 1; }
-    /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
-    /// let store = Arc::new(MemoryStore::<User>::new());
+    /// let store = Arc::new(DefaultStore::new());
     /// let engine = AuthEngine::new(Arc::clone(&store), store)?;
     /// assert_eq!(engine.session_ttl_secs(), 60 * 60 * 24 * 7);
     /// # return Ok(());
@@ -177,20 +179,20 @@ where
     /// Returns `AuthError` if the default hasher cannot pre-compute the
     /// timing-defense dummy hash.
     #[must_use = "the constructed engine must be used"]
-    pub fn new(users: Arc<U>, sessions: Arc<S>) -> Result<Self, AuthError> {
-        return Self::builder(users, sessions).build();
+    pub fn new(store: Arc<C>, sessions: Arc<S>) -> Result<Self, AuthError> {
+        return Self::builder(store, sessions).build();
     }
 
     /// Starts configuring an [`AuthEngine`] via [`AuthEngineBuilder`].
     #[must_use = "builder configuration must be completed with `.build()`"]
-    pub fn builder(users: Arc<U>, sessions: Arc<S>) -> AuthEngineBuilder<U, S> {
-        return AuthEngineBuilder::new(users, sessions);
+    pub fn builder(store: Arc<C>, sessions: Arc<S>) -> AuthEngineBuilder<C, S> {
+        return AuthEngineBuilder::new(store, sessions);
     }
 
-    /// Accesses the underlying user store.
+    /// Accesses the underlying auth store.
     #[must_use]
-    pub fn user_store(&self) -> &U {
-        return &self.users;
+    pub fn store(&self) -> &C {
+        return &self.store;
     }
 
     /// Accesses the underlying session store.

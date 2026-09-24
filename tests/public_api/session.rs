@@ -54,7 +54,7 @@ fn session_record_accessors_and_expiry() {
         .with_ip_address("127.0.0.1")
         .with_user_agent("test-agent");
 
-    assert_eq!(session.user_id(), &1);
+    assert_eq!(session.auth_id(), &1);
     assert_eq!(session.created_at_unix(), 1000);
     assert_eq!(session.expires_at_unix(), 2000);
     assert_eq!(session.last_active_at_unix(), Some(1500));

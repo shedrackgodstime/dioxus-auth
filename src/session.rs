@@ -1,4 +1,7 @@
 //! Server-side session record.
+//!
+//! Sessions scope to the authentication subject: the record names an
+//! `auth_id`, never an application row.
 
 use std::fmt;
 
@@ -11,9 +14,9 @@ use crate::status::{REDACTED, SessionId};
 /// otherwise dump a hijackable credential plus the user's password hash.
 /// Field access stays available through the getters.
 #[derive(Clone, Eq, PartialEq)]
-pub struct Session<Id> {
+pub struct Session<AuthId> {
     id: SessionId,
-    user_id: Id,
+    auth_id: AuthId,
     created_at_unix: u64,
     expires_at_unix: u64,
     last_active_at_unix: Option<u64>,
@@ -22,12 +25,12 @@ pub struct Session<Id> {
     user_agent: Option<String>,
 }
 
-impl<Id: fmt::Debug> fmt::Debug for Session<Id> {
+impl<AuthId: fmt::Debug> fmt::Debug for Session<AuthId> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f
             .debug_struct("Session")
             .field("id", &REDACTED)
-            .field("user_id", &self.user_id)
+            .field("auth_id", &self.auth_id)
             .field("created_at_unix", &self.created_at_unix)
             .field("expires_at_unix", &self.expires_at_unix)
             .field("last_active_at_unix", &self.last_active_at_unix)
@@ -41,7 +44,7 @@ impl<Id: fmt::Debug> fmt::Debug for Session<Id> {
     }
 }
 
-impl<Id> Session<Id> {
+impl<AuthId> Session<AuthId> {
     /// Creates a new session record.
     ///
     /// # Examples
@@ -49,20 +52,20 @@ impl<Id> Session<Id> {
     /// ```
     /// # use dioxus_auth::{Session, SessionId};
     /// let session = Session::new(SessionId::generate(), 7u64, 1000, 2000);
-    /// assert_eq!(session.user_id(), &7);
+    /// assert_eq!(session.auth_id(), &7);
     /// assert!(!session.is_expired_at(1999));
     /// assert!(session.is_expired_at(2000));
     /// ```
     #[must_use]
     pub const fn new(
         id: SessionId,
-        user_id: Id,
+        auth_id: AuthId,
         created_at_unix: u64,
         expires_at_unix: u64,
     ) -> Self {
         return Self {
             id,
-            user_id,
+            auth_id,
             created_at_unix,
             expires_at_unix,
             last_active_at_unix: None,
@@ -106,10 +109,10 @@ impl<Id> Session<Id> {
         return &self.id;
     }
 
-    /// User identifier.
+    /// Authentication subject identifier.
     #[must_use]
-    pub const fn user_id(&self) -> &Id {
-        return &self.user_id;
+    pub const fn auth_id(&self) -> &AuthId {
+        return &self.auth_id;
     }
 
     /// Creation timestamp (seconds since UNIX epoch).

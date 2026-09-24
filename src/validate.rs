@@ -4,13 +4,13 @@ use crate::engine::AuthEngine;
 use crate::error::AuthError;
 use crate::session::Session;
 use crate::status::SessionId;
-use crate::store::{SessionStore, UserStore};
-use crate::user::AuthUser;
+use crate::store::session::SessionStore;
+use crate::store::user::{AuthSubject, CredentialStore, SubjectClaim};
 
-impl<U, S> AuthEngine<U, S>
+impl<C, S> AuthEngine<C, S>
 where
-    U: UserStore,
-    S: SessionStore<Id = U::Id>,
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
 {
     /// Validates an incoming raw wire session id.
     ///
@@ -21,8 +21,8 @@ where
     /// rejects) are a cheap rejection before any hashing or lookup.
     ///
     /// Checks that the session exists, is not expired, loads the corresponding
-    /// user, and ensures the `auth_hash` has not been invalidated (e.g. by a
-    /// password change). Idle timeout and sliding TTL are applied on success.
+    /// subject, and ensures the `auth_hash` has not been invalidated (e.g. by
+    /// a secret rotation). Idle timeout and sliding TTL are applied on success.
     ///
     /// Expiry is wall-clock: a clock that moves backwards can re-validate a
     /// session whose expiry passed unobserved. Expired sessions are deleted
@@ -32,8 +32,11 @@ where
     ///
     /// # Errors
     /// Returns a store error if a lookup or update fails.
-    #[must_use = "the validated user must be used"]
-    pub fn validate_session(&self, session_id: &SessionId) -> Result<Option<U::User>, AuthError> {
+    #[must_use = "the validated subject must be used"]
+    pub fn validate_session(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<SubjectClaim<C::AuthId, C::AppRef>, AuthError> {
         if !SessionId::is_valid_wire_format(session_id.as_str()) {
             return Ok(None);
         }
@@ -53,8 +56,8 @@ where
             return Ok(None);
         }
 
-        let user = match self.users.find_by_id(session.user_id()) {
-            Ok(Some(user)) => user,
+        let subject = match self.store.find_subject(session.auth_id()) {
+            Ok(Some(subject)) => subject,
             Ok(None) => {
                 if let Err(e) = self.drop_session(&storage_id) {
                     return Err(e);
@@ -64,7 +67,7 @@ where
             Err(e) => return Err(e),
         };
 
-        if self.session_is_invalidated(&session, &user, now) {
+        if self.session_is_invalidated(&session, &subject, now) {
             if let Err(e) = self.drop_session(&storage_id) {
                 return Err(e);
             }
@@ -85,18 +88,23 @@ where
             }
         }
 
-        self.fire_on_session_validated(&user);
-        return Ok(Some(user));
+        self.fire_on_session_validated(&subject);
+        return Ok(Some(subject));
     }
 
     /// Whether a loaded, unexpired session must be dropped instead of accepted.
     ///
-    /// Covers credential-version mismatch (e.g. after a password change) and
-    /// idle-timeout breach. Expiry is checked inline so a missing user is
+    /// Covers credential-version mismatch (e.g. after a secret rotation) and
+    /// idle-timeout breach. Expiry is checked inline so a missing subject is
     /// never looked up for an already-dead session.
-    fn session_is_invalidated(&self, session: &Session<U::Id>, user: &U::User, now: u64) -> bool {
+    fn session_is_invalidated(
+        &self,
+        session: &Session<C::AuthId>,
+        subject: &AuthSubject<C::AuthId, C::AppRef>,
+        now: u64,
+    ) -> bool {
         if let (Some(current_hash), Some(session_hash)) =
-            (user.session_auth_hash(), session.auth_hash())
+            (subject.auth_hash.as_deref(), session.auth_hash())
         {
             if current_hash != session_hash {
                 return true;

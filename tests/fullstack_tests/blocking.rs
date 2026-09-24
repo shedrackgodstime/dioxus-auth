@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::thread::ThreadId;
 
 use dioxus_auth::{
-    AuthEngine, AuthEngineHandle, AuthError, CookieConfig, MemoryStore, PasswordUserStore,
-    ServerAuthConfig, SessionId, UserStore,
+    AuthEngine, AuthEngineHandle, AuthError, AuthSubject, CookieConfig, CredentialStore,
+    MemoryStore, ServerAuthConfig, SessionId, SubjectStore, UserStore,
 };
 use parking_lot::Mutex;
 
@@ -53,51 +53,78 @@ impl ProbingUserStore {
     }
 }
 
-impl UserStore for ProbingUserStore {
-    type Id = u64;
-    type User = TestUser;
+impl SubjectStore for ProbingUserStore {
+    type AuthId = u64;
+    type AppRef = u64;
+    type AppSetup = TestUser;
 
-    fn find_by_id(&self, id: &u64) -> Result<Option<TestUser>, AuthError> {
-        self.record_lookup_thread();
-        return self.inner.find_by_id(id);
+    fn provision_subject(
+        &self,
+        id_override: Option<Self::AuthId>,
+        app: Self::AppSetup,
+        identifier: &str,
+        secret_hash: &str,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        return self
+            .inner
+            .provision_subject(id_override, app, identifier, secret_hash);
+    }
+
+    fn find_subject(
+        &self,
+        auth_id: &Self::AuthId,
+    ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
+        return self.inner.find_subject(auth_id);
+    }
+
+    fn set_app_link(
+        &self,
+        auth_id: &Self::AuthId,
+        app_ref: &Self::AppRef,
+    ) -> Result<bool, AuthError> {
+        return self.inner.set_app_link(auth_id, app_ref);
+    }
+
+    fn find_auth_id(&self, app_ref: &Self::AppRef) -> Result<Option<Self::AuthId>, AuthError> {
+        return self.inner.find_auth_id(app_ref);
+    }
+
+    fn delete_subject(&self, auth_id: &Self::AuthId) -> Result<(), AuthError> {
+        return self.inner.delete_subject(auth_id);
     }
 }
 
-impl PasswordUserStore for ProbingUserStore {
-    type NewUser = TestUser;
-
-    fn find_by_identifier(
+impl CredentialStore for ProbingUserStore {
+    fn find_credential(
         &self,
         identifier: &str,
-    ) -> Result<Option<(TestUser, String)>, AuthError> {
+    ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
         self.record_lookup_thread();
-        return self.inner.find_by_identifier(identifier);
+        return self.inner.find_credential(identifier);
     }
 
-    fn update_password(&self, id: &u64, new_hash: &str) -> Result<(), AuthError> {
-        return self.inner.update_password(id, new_hash);
-    }
-
-    fn attach_password_credential(
+    fn attach_credential(
         &self,
-        id: &u64,
+        auth_id: &Self::AuthId,
         identifier: &str,
-        password_hash: &str,
+        secret_hash: &str,
     ) -> Result<bool, AuthError> {
         return self
             .inner
-            .attach_password_credential(id, identifier, password_hash);
+            .attach_credential(auth_id, identifier, secret_hash);
     }
 
-    fn provision_user_with_password(
-        &self,
-        input: TestUser,
-        identifier: &str,
-        password_hash: &str,
-    ) -> Result<Option<TestUser>, AuthError> {
-        return self
-            .inner
-            .provision_user_with_password(input, identifier, password_hash);
+    fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
+        return self.inner.rotate_secret(auth_id, new_hash);
+    }
+}
+
+impl UserStore for ProbingUserStore {
+    type User = TestUser;
+
+    fn resolve(&self, app_ref: &Self::AppRef) -> Result<Option<TestUser>, AuthError> {
+        self.record_lookup_thread();
+        return self.inner.resolve(app_ref);
     }
 }
 

@@ -146,21 +146,57 @@ session/association machinery.
 ## Where the implemented work stands
 
 - `AuthUser::email()` cut: stands, needed under any variant.
-- Create/attach split (`provision` + `attach_password_credential`,
-  `sign_up_email` + `attach_email_credential`): stands, adoption,
-  second logins, SSO-link, and the migration target from §7.
-- `provision → NewUser → Option<User>` + `DefaultStore`: the mechanism
-  stands, repositioned as one override path (custom stores that
-  mint/adopt identity), not the model. Build nothing further on it until
-  the mapping investigation lands.
+- Create/attach split (`provision` + `attach`, `sign_up_email` +
+  `attach_email_credential`): stands, adoption, second logins, SSO-link,
+  and the migration target from §7.
+- Subject remodel: IMPLEMENTED (uncommitted, full gate green on all
+  feature combos). Engine is auth-pure over `AuthSubject`; `UserStore`
+  survives as the app-side resolver called by facade and runtime layers
+  only; `Session.user_id` is now `auth_id`; `update_password` is now
+  `rotate_secret`; `MemoryStore` keeps its prototype-resolver role;
+  new facade verb `sign_up_subject` returns auth-space material for
+  attach/migration flows. `NewUser` evolved into link-aware `AppSetup`.
 
 ## Open investigations (downstream, in order)
 
-1. Store mapping of auth identity ↔ application identity (physical home,
-   atomicity, existing-DB adoption patterns).
+1. Store mapping of auth identity ↔ application identity: LEADING
+   CANDIDATE (not ratified), a subject table holding the association
+   (`subjects(auth_id PK, app_ref NULLABLE, created)`), with credential
+   and session rows carrying `auth_id` FKs and cascading on subject
+   deletion. `app_ref` lives on the association (one per subject), never
+   per credential row (copies could disagree and make identity
+   method-dependent); sessions may carry it as a drop-on-mismatch hint
+   only. Flow-walked over signup/login/validate/adopt/link/delete:
+   zero app-table writes on adoption, FK cascade for lifecycle,
+   uniform attach across all method families, nullable `app_ref` for
+   minimal signup. Precedent: better-auth's `account.userId`/`session.userId`
+   FKs with cascade and no link table (their user row doubles as app
+   container; ours stays auth-pure per §3). Rejected: per-credential
+   `app_ref` (correctness), session-carried mapping (lost at expiry),
+   auth-id app columns kept only as a documented single-table alternative.
+   Physical DDL still open. Residual resolved: the app→auth direction
+   is a single translation query (subject's `auth_id` for an `app_ref`,
+   backed by a unique NULL-excluding index), composed with the existing
+   idempotent deletes: no new atomicity class, no per-operation
+   sprawl. The composition is safe because every act degrades benignly
+   if the subject vanishes mid-flight (unknown-session logout,
+   missing-session delete, and revoke-missing all succeed quietly;
+   attach/change-password report `InvalidCredentials`). Admin delete,
+   sign-out-everywhere, self-deletion, and admin-side attach all flow
+   through translate-then-act; like attach, translation is privileged
+   (authorize first). The `app_ref` carrier type (string vs generic)
+   stays open with items 4 and 5.
 2. Bidirectional lifecycle queries (subject deletion cascades, session
    revocation from the app side).
-3. Exact trait signatures for the subject/credential/association surface.
+3. Exact trait signatures: IMPLEMENTED (uncommitted, gate green).
+   As recorded, plus: `NewUser` became link-aware `AppSetup` (per-store
+   signup material); new aliases `SubjectClaim`, `StoredCredential`,
+   `AuthenticatedPair` carry the long auth-space types; `MemoryStore`
+   keeps its prototype-resolver role (passthrough `AppSetup = User`,
+   aliased seed subjects); new facade verb `sign_up_subject` returns
+   auth-space material for attach/migration flows; resolve failures
+   fail closed (`InvalidCredentials`) while store outages propagate.
+   Method tag deferred past v0.1.
 4. `AuthUser` fate (loader contract in outer layers vs dissolve into
    `app_ref` + app helpers).
 5. Auth-ID type and generation (counter vs random vs UUID).

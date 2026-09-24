@@ -118,7 +118,10 @@ pub use crate::session::Session;
 pub use crate::status::{AuthStatus, SessionId};
 
 #[doc(inline)]
-pub use crate::store::{DefaultStore, MemoryStore, PasswordUserStore, SessionStore, UserStore};
+pub use crate::store::{
+    AuthSubject, CredentialStore, DefaultStore, MemoryStore, SessionStore, StoredCredential,
+    SubjectClaim, SubjectStore, UserStore,
+};
 
 #[doc(inline)]
 pub use crate::token::MemoryTokenStorage;

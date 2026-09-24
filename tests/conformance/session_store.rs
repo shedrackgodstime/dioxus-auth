@@ -10,9 +10,9 @@ mod common;
 use common::TestUser;
 use dioxus_auth::{MemoryStore, Session, SessionId, SessionStore};
 
-fn storage_session(user_id: u64, created_at: u64, expires_at: u64) -> Session<u64> {
+fn storage_session(auth_id: u64, created_at: u64, expires_at: u64) -> Session<u64> {
     let storage_id = SessionId::generate().hash_for_storage();
-    return Session::new(storage_id, user_id, created_at, expires_at);
+    return Session::new(storage_id, auth_id, created_at, expires_at);
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn save_then_find_roundtrip() {
 
     let found = store.find_session(&id).unwrap();
     assert!(found.is_some());
-    assert_eq!(found.unwrap().user_id(), &5);
+    assert_eq!(found.unwrap().auth_id(), &5);
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn delete_session_removes_it() {
 }
 
 #[test]
-fn delete_user_sessions_removes_only_that_user() {
+fn delete_subject_sessions_removes_only_that_subject() {
     let store = MemoryStore::<TestUser>::new();
     let alice = TestUser::new(1, "alice");
     let bob = TestUser::new(2, "bob");
@@ -58,16 +58,16 @@ fn delete_user_sessions_removes_only_that_user() {
     store.save_session(alice_session).unwrap();
     store.save_session(bob_session).unwrap();
 
-    store.delete_user_sessions(&alice.id).unwrap();
+    store.delete_subject_sessions(&alice.id).unwrap();
 
-    assert_eq!(store.list_user_sessions(&alice.id).unwrap().len(), 0);
-    let bob_sessions = store.list_user_sessions(&bob.id).unwrap();
+    assert_eq!(store.list_subject_sessions(&alice.id).unwrap().len(), 0);
+    let bob_sessions = store.list_subject_sessions(&bob.id).unwrap();
     assert_eq!(bob_sessions.len(), 1);
-    assert_eq!(bob_sessions[0].user_id(), &bob.id);
+    assert_eq!(bob_sessions[0].auth_id(), &bob.id);
 }
 
 #[test]
-fn list_user_sessions_returns_matching_sessions_only() {
+fn list_subject_sessions_returns_matching_sessions_only() {
     let store = MemoryStore::<TestUser>::new();
     let alice = TestUser::new(1, "alice");
     let bob = TestUser::new(2, "bob");
@@ -81,7 +81,7 @@ fn list_user_sessions_returns_matching_sessions_only() {
         .save_session(storage_session(bob.id, 1000, 1200))
         .unwrap();
 
-    let alice_sessions = store.list_user_sessions(&alice.id).unwrap();
+    let alice_sessions = store.list_subject_sessions(&alice.id).unwrap();
     assert_eq!(alice_sessions.len(), 2);
 }
 
