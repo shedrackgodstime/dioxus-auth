@@ -46,13 +46,13 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
     }
 }
 
-/// The built-in user for the zero-modeling quickstart.
+/// Row type behind the zero-modeling quickstart.
 ///
-/// `DefaultUser` is deliberately the minimal app-user shape (`id`, `email`,
-/// `name`): graduating to your own user type is a rename (plus added fields)
-/// and a one-line constructor swap, with zero session migration. Sessions
-/// are opaque and user-type-agnostic. The `email` and `name` fields are plain
-/// application data; authentication reads only the `id`.
+/// This is plumbing, not a model to grow: [`Auth::memory`](crate::auth::Auth::memory)
+/// hands these back from signup/sign-in, and graduating means bringing your
+/// own user type plus your own store: nothing here renames or migrates.
+/// Sessions are opaque and user-type-agnostic; authentication reads only the
+/// `id`, and `email`/`name` are plain carried data.
 ///
 /// Memory-backed deployments are non-durable by definition: everything dies
 /// with the process. Memory is for prototyping.
@@ -64,21 +64,6 @@ pub struct DefaultUser {
     pub email: String,
     /// Display name.
     pub name: String,
-}
-
-impl DefaultUser {
-    /// Creates a default user.
-    ///
-    /// Prefer this over struct-literal construction: future fields will
-    /// arrive here first, keeping this call compiling across releases.
-    #[must_use]
-    pub fn new(id: u64, email: impl Into<String>, name: impl Into<String>) -> Self {
-        return Self {
-            id,
-            email: email.into(),
-            name: name.into(),
-        };
-    }
 }
 
 impl AuthUser for DefaultUser {

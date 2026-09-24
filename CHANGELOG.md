@@ -35,6 +35,11 @@ identifier and returns the persisted row. Beginners never construct an id.
 `MemoryStore<DefaultUser>` still works with caller-built users for anyone
 already on it.
 
+Breaking (pre-1.0, quickstart cleanup): removed `DefaultUser::new()` (no
+callers; the struct is store plumbing constructed only by `DefaultStore`)
+and reframed the type as a row type, not a model to grow. Graduation is
+bring-your-own `AppUser` plus your own store.
+
 Gate 1 (M1 vertical) on the 1e surface:
 
 - `Auth` facade: `new(store)` by value, zero-modeling `memory()` over

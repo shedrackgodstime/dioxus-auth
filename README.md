@@ -40,7 +40,8 @@ identifier state is never observable.
 
 ## Graduating (memory → your database)
 
-1. Rename `DefaultUser` to your own `AppUser` and add your fields.
+1. Define your own `AppUser` with your fields (nothing renames or
+   migrates; the quickstart types stay behind).
 2. Swap `Auth::memory()` for `Auth::new(your_store)` (for example
    `examples/sqlite-reference`) and implement `AuthUser` (one method:
    `id`).
