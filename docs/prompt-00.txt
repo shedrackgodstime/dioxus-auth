@@ -1,0 +1,653 @@
+dioxus-auth, Deep Investigation: User Creation & Developer Control
+
+We already investigated the repository and established the basic facts.
+
+Do not modify code. Do not implement anything. Do not propose a final API yet.
+
+This investigation is much narrower than the previous one.
+
+We are specifically trying to answer:
+
+«How should dioxus-auth balance library-owned defaults with developer-owned user data and identity, so that beginners can start immediately without forcing advanced developers into the library's model?»
+
+Ignore unrelated areas of the codebase unless they directly affect this question.
+
+Do not spend time re-investigating session security, cookies, rate limiting, verification flows, Dioxus components, or unrelated authentication features. Only inspect them if they directly constrain user creation or persistence.
+
+---
+
+1. The problem we are investigating
+
+The current API is roughly:
+
+auth.sign_up_email(
+    "alice@example.com",
+    "password",
+    AppUser {
+        id: 1,
+        email: String::from("alice@example.com"),
+        name: String::from("alice"),
+    },
+)?;
+
+This feels too low-level.
+
+A developer who simply wants:
+
+«"Create my first authenticated user"»
+
+currently has to think about:
+
+- what the user ID should be
+- who generates it
+- why the ID is needed
+- why email is passed twice
+- why the complete "User" must be constructed before signup
+- which fields belong to authentication
+- which fields belong to the application
+
+We want to investigate whether the API can instead provide a default path where dioxus-auth handles the boring parts, while still allowing developers to take control when necessary.
+
+---
+
+2. Core philosophy
+
+Do not interpret "developer control" as:
+
+«"The developer must manually configure everything."»
+
+That is exactly the problem we are questioning.
+
+Instead investigate whether the architecture can provide:
+
+DEFAULT
+────────────────────────────
+dioxus-auth handles common decisions
+developer writes very little
+identity can be generated automatically
+common user creation just works
+
+
+CONTROLLED
+────────────────────────────
+developer supplies custom User model
+developer owns database
+developer controls custom fields
+developer can control identity strategy
+
+
+FULL CONTROL
+────────────────────────────
+developer can replace/customize the underlying store
+developer can use existing schema
+developer can use existing IDs
+developer can integrate external identity systems
+
+The important question is whether these can be different levels of control over the same auth system.
+
+We do NOT want:
+
+BeginnerAuth
+AdvancedAuth
+CustomAuth
+
+unless the codebase gives a compelling reason.
+
+---
+
+3. Investigate the USER object boundary
+
+This is the most important part.
+
+The current API accepts:
+
+User
+
+during signup.
+
+Investigate whether that is actually the correct abstraction.
+
+Compare these concepts:
+
+User
+
+versus:
+
+NewUser
+SignupInput
+UserMetadata
+UserCreationInput
+
+We are NOT choosing a name yet.
+
+The question is:
+
+«Does signup actually need an already-existing "User", or does it need information from which the store can create a "User"?»
+
+Trace the code and answer precisely.
+
+---
+
+4. What does dioxus-auth actually need from User?
+
+We already know "AuthUser" currently exposes:
+
+id()
+email()
+session_auth_hash()
+
+Investigate every usage again, but ONLY in relation to signup/user creation.
+
+Determine:
+
+During signup
+
+What information does the engine actually need from "User"?
+
+During signin
+
+What information does it need?
+
+During session validation
+
+What information does it need?
+
+During session ownership
+
+What information does it need?
+
+Then answer:
+
+«Is the complete application "User" object actually an authentication input, or is it primarily a persistence/application object that happens to be passed through the auth API?»
+
+This distinction matters.
+
+---
+
+5. Investigate ID ownership deeply
+
+This is the central design question.
+
+Current situation:
+
+Application
+    ↓
+creates User
+    ↓
+chooses ID
+    ↓
+passes User to dioxus-auth
+
+We want to investigate alternatives:
+
+A
+
+Application chooses ID
+
+B
+
+dioxus-auth chooses ID
+
+C
+
+Store/database chooses ID
+
+D
+
+Default dioxus-auth path chooses ID,
+custom stores can choose differently
+
+Do not rank them yet.
+
+For each, answer:
+
+- Can the current traits support it?
+- What must change?
+- Who ultimately knows the generated ID?
+- How does the newly created "User" get returned?
+- Can it work with "u64"?
+- Can it work with UUID?
+- Can it work with database-generated IDs?
+- Can it work with an existing user table?
+- Can an advanced developer still supply their own ID?
+- Can a store/database generate it?
+- Does the engine need the ID before persistence, or can it receive it afterward?
+
+---
+
+6. Investigate the "NewUser → User" boundary
+
+Suppose the API became conceptually:
+
+auth.sign_up_email(
+    "alice@example.com",
+    "password",
+    NewUser {
+        name: "alice",
+    },
+)?;
+
+Investigate what would have to happen internally:
+
+NewUser
+   ↓
+store
+   ↓
+ID generated
+   ↓
+User created
+   ↓
+credential created
+   ↓
+User returned
+
+Determine:
+
+1. Which layer should construct "User"?
+2. Which layer should generate its ID?
+3. Does the store already have enough information to do this?
+4. What trait would be needed?
+5. Should the store return "User"?
+6. Could the library construct "User" instead?
+7. If the library constructs it, how does it preserve arbitrary application fields?
+8. If the store constructs it, how does the library remain ergonomic?
+
+This is investigation only.
+
+---
+
+7. Custom application fields
+
+Consider:
+
+struct AppUser {
+    id: Uuid,
+    email: String,
+    name: String,
+    avatar: String,
+    role: Role,
+    organization_id: Uuid,
+}
+
+The library should NOT need to understand:
+
+name
+avatar
+role
+organization_id
+
+Investigate how a future signup API could allow these fields without forcing the library to understand the application's entire User model.
+
+Compare conceptually:
+
+NewUser {
+    name,
+    avatar,
+    role,
+    organization_id,
+}
+
+versus:
+
+UserMetadata {
+    ...
+}
+
+versus a store-specific creation type.
+
+Again: do not choose yet.
+
+Determine the abstraction tradeoffs.
+
+---
+
+8. The duplicated email problem
+
+Current API:
+
+auth.sign_up_email(
+    "alice@example.com",
+    "password",
+    AppUser {
+        email: "alice@example.com",
+        ...
+    },
+)?;
+
+The investigation already found that these two values are not even checked against each other.
+
+We need to understand the intended ownership.
+
+Investigate these possibilities:
+
+Option A
+
+Email is only a signup/login identifier.
+
+The User doesn't need "email()" at all.
+
+Option B
+
+Email belongs to the User, and signup derives the identifier from it.
+
+Option C
+
+The auth identifier is generic, and email is simply one possible user field.
+
+Option D
+
+Keep both because they represent different concepts.
+
+For each, explain what the existing code implies.
+
+Pay particular attention to the fact that ".email()" has no meaningful engine usage today.
+
+Do not decide whether it should be removed yet.
+
+---
+
+9. "DefaultUser" needs special attention
+
+Investigate why "DefaultUser" exists and what purpose it serves.
+
+Ask:
+
+«Is "DefaultUser" actually a good abstraction for the beginner path, or is it compensating for the fact that the library currently cannot create users itself?»
+
+Consider the difference between:
+
+DefaultUser {
+    id: 1,
+    email: ...,
+    name: ...
+}
+
+and a genuinely minimal default experience where the developer doesn't have to think about identity construction.
+
+We want to know whether "DefaultUser" is:
+
+- a useful permanent concept
+- a memory-store convenience
+- an example-only type
+- an artifact of the current trait design
+- something that should disappear from the primary quickstart
+
+---
+
+10. Existing database / existing User model
+
+Now examine the opposite scenario.
+
+A developer already has:
+
+users
+────────────────────
+id
+email
+name
+avatar
+...
+
+They don't want dioxus-auth to create another user model.
+
+They want:
+
+their User
+their database
+their IDs
+their schema
++
+dioxus-auth
+
+Investigate how close the current architecture is to supporting this cleanly.
+
+Specifically:
+
+- Can the store map existing rows into "AuthUser"?
+- Can authentication attach credentials to existing users?
+- Can an existing database-generated ID be used?
+- Can the store create the user?
+- Can the store adopt an existing user?
+- Does the current "provision_user_with_password" API make this awkward?
+- Is "create user" and "attach authentication credential to existing user" actually the same operation?
+
+This last question is important.
+
+---
+
+11. Create vs attach
+
+Investigate whether signup is currently conflating two operations:
+
+Create a new application user
+
+and:
+
+Create authentication credentials for a user
+
+The current method does both together.
+
+Ask whether the architecture would be cleaner if these were conceptually separable.
+
+For example:
+
+create user
+     +
+attach email/password credential
+
+versus:
+
+sign up
+     =
+create user + credential
+
+Do not automatically split them.
+
+Determine whether the existing store architecture already suggests one direction.
+
+---
+
+12. Storage abstraction
+
+Keep this part narrow.
+
+We already know the traits do not require four SQL tables.
+
+Now investigate only this question:
+
+«If the developer owns the database, how much should dioxus-auth care about the physical representation of users and credentials?»
+
+Test conceptual implementations such as:
+
+One table
+
+users + credentials
+
+users + credentials + sessions
+
+existing application tables
+
+document/KV store
+
+Determine whether the current trait boundaries genuinely permit these.
+
+Do NOT spend time debating performance or database optimization unless it directly affects the abstraction boundary.
+
+The question is ownership, not database architecture.
+
+---
+
+13. The three developer experiences
+
+Evaluate only this specific problem against three scenarios.
+
+Beginner
+
+They want:
+
+cargo add dioxus-auth
+↓
+minimal setup
+↓
+signup
+↓
+authenticated user
+
+They should not have to invent an ID.
+
+They should not have to understand the persistence architecture.
+
+---
+
+Normal developer
+
+They want:
+
+my User
+my database
+my fields
+my IDs
++
+dioxus-auth
+
+They should not have to surrender ownership.
+
+---
+
+Advanced developer
+
+They want:
+
+complete control
+
+They should be able to customize identity generation, persistence, schema, and integration where the architecture reasonably allows it.
+
+---
+
+14. Compare possible ownership models
+
+Produce a focused comparison of these models:
+
+Model 1
+
+Application owns User + ID
+dioxus-auth owns authentication
+
+Model 2
+
+dioxus-auth owns User + ID by default
+application can customize
+
+Model 3
+
+Store owns User creation + ID
+dioxus-auth orchestrates authentication
+
+Model 4
+
+Default store/library owns creation
+custom stores own creation
+
+For each, explain:
+
+- beginner experience
+- developer ownership
+- custom fields
+- custom IDs
+- database-generated IDs
+- existing users
+- existing databases
+- trait complexity
+- conceptual complexity
+- whether it can remain one auth system
+
+Do not produce a winner.
+
+---
+
+15. Important distinction: API flexibility vs conceptual flexibility
+
+We are NOT simply trying to make the API accept more arguments.
+
+A flexible API can still be conceptually terrible.
+
+Investigate:
+
+«What is the smallest set of concepts a beginner should have to understand to create an authenticated user?»
+
+Compare that with:
+
+«What is the maximum control an advanced developer should be able to obtain?»
+
+Then investigate whether the same underlying architecture can support both without exposing the advanced concepts in the beginner path.
+
+---
+
+16. Final output
+
+Produce ONLY these sections:
+
+A. What we know for certain
+
+Only code-observed facts.
+
+B. The actual architectural seam
+
+Identify exactly where the current design forces application-owned identity/user construction.
+
+C. What the library actually needs
+
+Distinguish authentication requirements from application-user requirements.
+
+D. Possible ownership models
+
+Compare the models above without choosing one.
+
+E. API shapes worth exploring
+
+Show 3–5 conceptual API shapes.
+
+Do not implement them.
+
+F. Questions we must answer before choosing
+
+Only questions directly relevant to:
+
+- User creation
+- ID generation
+- User vs NewUser
+- email ownership
+- custom fields
+- existing users
+- store ownership
+- default vs advanced control
+
+G. Your architectural observations
+
+You may point out tensions or suspicious boundaries in the current design, but clearly label them as observations/inferences rather than facts.
+
+---
+
+Hard constraint
+
+Do NOT drift into:
+
+- session security
+- cookies
+- CSRF
+- rate limiting
+- verification tokens
+- OAuth implementation
+- Dioxus UI
+- route guards
+- deployment
+- performance
+- documentation polish
+
+unless one of those directly affects user creation, identity ownership, or storage ownership.
+
+We are deliberately narrowing the investigation.
+
+The question we are trying to answer is:
+
+«Who should be responsible for creating the application user and its identity during signup, and how can dioxus-auth make the default experience effortless without taking ownership away from developers who need control?»

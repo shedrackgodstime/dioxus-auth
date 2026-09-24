@@ -1,0 +1,733 @@
+dioxus-auth, Signup & Storage Architecture Investigation
+
+We are considering a redesign of the developer experience and ownership boundaries in "dioxus-auth".
+
+Do not modify code. Do not implement anything. Do not create a migration. Do not commit changes.
+
+This is a codebase investigation and architecture research task.
+
+The goal is to understand the existing architecture deeply enough to make informed design decisions about:
+
+1. user creation and user ID generation
+2. signup API design
+3. developer control vs library defaults
+4. custom user types and arbitrary user fields
+5. database/schema ownership
+6. storage abstraction boundaries
+7. whether the current API is unnecessarily rigid
+8. whether we can provide an extremely simple default path without taking control away from advanced users
+
+Do not jump to a preferred solution. First establish what the code actually does.
+
+---
+
+Context
+
+The current public API looks approximately like:
+
+auth.sign_up_email(
+    "alice@example.com",
+    "password",
+    AppUser {
+        id: 1,
+        email: String::from("alice@example.com"),
+        name: String::from("alice"),
+    },
+)?;
+
+This means the application currently constructs the complete user object, including its ID, before calling signup.
+
+That raises an important UX/design question:
+
+«Should a developer really have to define/generate a user ID at this level just to create an account?»
+
+A more beginner-friendly API might conceptually look like:
+
+auth.sign_up_email(
+    "alice@example.com",
+    "password",
+    UserMetadata {
+        name: "alice",
+    },
+)?;
+
+with the library/store creating the actual persistent user identity.
+
+But we do not know yet whether that is architecturally appropriate.
+
+We also want to preserve developer ownership and flexibility.
+
+The intended design direction is roughly:
+
+«Developers should own their data and retain full control when they need it, while "dioxus-auth" should own the common path and provide sensible defaults so a developer can get authentication working with minimal effort.»
+
+We need to determine whether the current architecture can support that philosophy cleanly.
+
+---
+
+Important principle
+
+Do not assume that the reference SQLite schema is mandatory.
+
+Investigate whether the core library actually requires:
+
+- four tables
+- a "users" table
+- an "accounts" table
+- a "sessions" table
+- a "verifications" table
+- a particular SQL database
+- a particular physical schema
+
+or whether these are simply one implementation of the storage traits.
+
+We are interested in the distinction between:
+
+WHAT dioxus-auth REQUIRES
+
+and:
+
+WHAT THE REFERENCE IMPLEMENTATION CHOOSES
+
+This distinction is extremely important.
+
+---
+
+Investigation 1, Trace signup completely
+
+Trace:
+
+Auth::sign_up_email(...)
+
+from the public API all the way down to persistence.
+
+Identify:
+
+- every function called
+- every trait involved
+- every store involved
+- where the user is created
+- where the ID comes from
+- where the email is normalized
+- where credentials are created
+- where the password is hashed
+- where the user is persisted
+- where the account/credential relationship is persisted
+- what gets returned
+- where errors can occur
+
+Produce a call-flow diagram.
+
+For example:
+
+sign_up_email
+    ↓
+...
+    ↓
+...
+    ↓
+UserStore
+    ↓
+PasswordUserStore
+    ↓
+...
+
+Use the actual names from the codebase.
+
+Do not infer missing steps.
+
+---
+
+Investigation 2, Why does the caller have to provide the ID?
+
+Find the exact architectural reason that this currently requires:
+
+AppUser {
+    id: ...,
+    ...
+}
+
+Answer:
+
+1. Where is "AuthUser::Id" defined?
+2. Who is responsible for generating it?
+3. Does the store know the concrete user type?
+4. Does the auth engine know how to construct the user's concrete type?
+5. Can the library create an "AppUser" today?
+6. Can the library mutate/set "AppUser.id" today?
+7. Can the store generate the ID?
+8. Can the store return a newly-created user?
+9. Is the current API deliberately designed this way, or is it simply a consequence of the current trait design?
+
+Find the exact code proving each answer.
+
+---
+
+Investigation 3, Identify the true ownership boundaries
+
+Create a table like:
+
+Responsibility| Current owner| Could library own it?| Could store own it?| Why?
+User ID generation| ?| ?| ?| ?
+User construction| ?| ?| ?| ?
+Email normalization| ?| ?| ?| ?
+Password hashing| ?| ?| ?| ?
+Credential persistence| ?| ?| ?| ?
+Session generation| ?| ?| ?| ?
+Session persistence| ?| ?| ?| ?
+Custom user fields| ?| ?| ?| ?
+Database schema| ?| ?| ?| ?
+
+We want to discover the cleanest abstraction boundary rather than assume one.
+
+---
+
+Investigation 4, Study AuthUser deeply
+
+Read the entire "AuthUser" implementation and all important consumers.
+
+Determine:
+
+- Why does it require "id()"?
+- Why does it require "email()"?
+- Is "email()" actually required for all authentication methods?
+- Where is "AuthUser::Id" used?
+- Is it used only for sessions?
+- Is it used for persistence?
+- Is it used for account lookup?
+- Is it used for authorization?
+- Is it serialized anywhere?
+- Is the concrete user type ever constructed by the library?
+
+Find every meaningful use.
+
+Then answer:
+
+«What is the minimum information dioxus-auth actually needs to represent an authenticated user?»
+
+Do not redesign yet.
+
+---
+
+Investigation 5, Custom user fields
+
+Investigate how arbitrary application-specific user data currently works.
+
+Example:
+
+struct AppUser {
+    id: Uuid,
+    email: String,
+    name: String,
+    avatar_url: String,
+    role: Role,
+    organization_id: Uuid,
+    created_at: DateTime<Utc>,
+    ...
+}
+
+Determine:
+
+- Which fields does dioxus-auth actually care about?
+- Which fields are purely application-owned?
+- Does auth ever need to construct the full "AppUser"?
+- Could signup accept a smaller "input" type while the store constructs the actual "AppUser"?
+- What would the store need to know to accomplish that?
+- What would the trait need to change?
+
+Pay special attention to the difference between:
+
+User identity / persistence model
+
+and:
+
+Signup input / user metadata
+
+They may not need to be the same object.
+
+---
+
+Investigation 6, Signup API alternatives
+
+Without implementing anything, model at least these possible API families.
+
+Option A, Current model
+
+auth.sign_up_email(
+    email,
+    password,
+    AppUser {
+        id,
+        ...
+    },
+)
+
+Option B, Metadata/input model
+
+auth.sign_up_email(
+    email,
+    password,
+    UserMetadata {
+        ...
+    },
+)
+
+Option C, Library-generated ID
+
+Conceptually:
+
+auth.sign_up_email(
+    email,
+    password,
+    UserMetadata {
+        ...
+    },
+)
+
+where the library/store generates the ID.
+
+Option D, Store-generated user
+
+Conceptually:
+
+auth.sign_up_email(
+    email,
+    password,
+    NewUser {
+        ...
+    },
+)
+
+where the store owns creation and identity generation.
+
+Option E, Configurable identity generation
+
+Conceptually:
+
+Auth::builder(store)
+    .user_id_generator(...)
+
+or equivalent.
+
+Do not assume these exact APIs are good.
+
+For each option, determine:
+
+- What traits would need to change?
+- What existing implementations would break?
+- Can "MemoryStore" support it?
+- Can a SQL store support it?
+- Can a developer use an existing users table?
+- Can developers use UUIDs?
+- Can developers use integer IDs?
+- Can developers use database-generated IDs?
+- Can developers use application-generated IDs?
+- Can developers use external identity systems?
+- Does it preserve arbitrary custom user fields?
+- Does it complicate the library?
+- Does it improve beginner DX?
+- Does it preserve advanced control?
+
+---
+
+Investigation 7, Three developer personas
+
+Evaluate the architecture against these three users.
+
+A. Beginner
+
+They want:
+
+«"I need email/password authentication in my Dioxus app. I don't want to design an identity system first."»
+
+They should ideally be able to get started extremely quickly.
+
+They should not need to understand:
+
+- primary-key strategy
+- UUID generation
+- credential tables
+- session tables
+- authentication schema design
+
+unless they choose to.
+
+---
+
+B. Normal application developer
+
+They already have:
+
+struct AppUser {
+    id: Uuid,
+    email: String,
+    name: String,
+    ...
+}
+
+and an existing database.
+
+They want dioxus-auth to integrate with their application rather than dictate their data model.
+
+---
+
+C. Advanced developer
+
+They want maximum control.
+
+They may want:
+
+- custom IDs
+- database-generated IDs
+- existing users table
+- existing database
+- custom schema
+- custom session persistence
+- custom account persistence
+- custom credential storage
+- custom metadata
+- unusual deployment architecture
+
+Determine whether the current trait architecture actually permits this.
+
+---
+
+Investigation 8, Storage/schema ownership
+
+Inspect:
+
+- "UserStore"
+- "PasswordUserStore"
+- "SessionStore"
+- every related trait
+- "MemoryStore"
+- SQLite reference implementation
+- schema SQL
+- all tests around storage
+
+Determine exactly what the auth engine assumes.
+
+Then answer:
+
+«Could a developer implement the entire auth system using one physical table?»
+
+For example:
+
+users
+──────────────────────────────
+id
+email
+password_hash
+name
+sessions_jsonb
+...
+
+Or perhaps:
+
+users
+──────────────────────────────
+id
+email
+password_hash
+...
+
+with sessions stored elsewhere.
+
+Or even a completely different persistence model.
+
+Determine whether this is actually supported by the traits.
+
+Do not judge whether one-table storage is "good" or "bad" yet.
+
+First determine whether the abstraction permits it.
+
+---
+
+Investigation 9, Physical schema vs logical model
+
+Separate these concepts:
+
+Logical concepts:
+- user
+- credential/account
+- session
+- verification
+
+from:
+
+Physical storage:
+- table
+- row
+- JSON
+- JSONB
+- document
+- key/value
+- external service
+- etc.
+
+Determine whether dioxus-auth currently accidentally leaks the reference implementation's physical schema into its public conceptual model.
+
+This is important because the goal is:
+
+«You own the database, users, and data.»
+
+If that statement is true, determine how strongly the API actually respects it.
+
+---
+
+Investigation 10, Session requirements
+
+Study session semantics carefully.
+
+Determine the minimum guarantees required from a session store:
+
+- session lookup
+- expiration
+- idle timeout
+- rotation
+- logout
+- single-active-session
+- concurrent login behavior
+- session invalidation
+- credential binding
+- metadata
+- IP/user-agent attribution
+
+Then determine whether these guarantees fundamentally require separate session rows/tables, or whether they can be implemented over other physical storage models.
+
+Do not assume JSON/JSONB is sufficient or insufficient.
+
+Show the actual concurrency and atomicity requirements.
+
+---
+
+Investigation 11, Reference schema
+
+Inspect the SQLite reference schema.
+
+Categorize every table as:
+
+Required for current email/password functionality
+
+or:
+
+Future/extensibility
+
+or:
+
+Reference implementation convenience
+
+Explain the reasoning from the code.
+
+Specifically investigate:
+
+- "users"
+- "accounts"
+- "sessions"
+- "verifications"
+
+Determine which are actually touched by v0.1.0 email/password signup/signin/signout.
+
+---
+
+Investigation 12, Migration and compatibility cost
+
+For each plausible redesign, identify:
+
+- breaking trait changes
+- breaking method changes
+- existing store implementations affected
+- examples affected
+- tests affected
+- documentation affected
+- whether migration can be additive
+- whether the change should happen before v0.1.0
+
+Remember that the project is not published yet, so we have significantly more freedom to change the API than a mature crate would.
+
+Do not artificially preserve an API merely because it exists in the current working tree.
+
+---
+
+Investigation 13, Find hidden assumptions
+
+Search the entire codebase for assumptions about:
+
+- user IDs
+- user construction
+- user persistence
+- email uniqueness
+- account uniqueness
+- session ownership
+- concrete user types
+- database tables
+- credential storage
+- session storage
+- ID generation
+- "AuthUser"
+- "UserStore"
+- "PasswordUserStore"
+- "SessionStore"
+
+Report assumptions that are not explicitly encoded in traits.
+
+These hidden assumptions may be more important than the public API.
+
+---
+
+Investigation 14, Current API friction
+
+Evaluate the current quickstart from the perspective of a beginner.
+
+Current conceptual flow:
+
+let auth = Auth::memory()?;
+
+auth.sign_up_email(
+    "alice@example.com",
+    "password",
+    DefaultUser {
+        id: 1,
+        email: String::from("alice@example.com"),
+        name: String::from("alice"),
+    },
+)?;
+
+Identify every piece of knowledge the beginner must possess before understanding this code.
+
+Especially:
+
+- Why does the user need an ID?
+- Who generates it?
+- Why does the user object contain the email if email is already an argument?
+- Why is password outside the user?
+- What is "DefaultUser"?
+- What fields are mandatory?
+- Which fields belong to auth versus the application?
+- Why does the library need the complete user object?
+
+Do not merely say "it's verbose."
+
+Identify the conceptual friction.
+
+---
+
+Investigation 15, Desired product philosophy
+
+Assess whether the current architecture supports this philosophy:
+
+«Easy by default, controllable when needed.»
+
+More specifically:
+
+Beginner path
+
+minimal setup
+↓
+sensible defaults
+↓
+generated identity
+↓
+working authentication
+
+Application path
+
+custom User
+custom database
+custom fields
+
+Advanced path
+
+custom identity
+custom persistence
+custom schema
+custom auth infrastructure
+
+Ideally these should all be the same authentication system, not separate abstractions.
+
+Determine whether that is achievable with the existing architecture.
+
+---
+
+Output requirements
+
+Do NOT provide implementation code.
+
+Produce a research report with these sections:
+
+1. Executive findings
+
+The most important discoveries from the actual codebase.
+
+2. Current architecture
+
+Show the actual flow and trait relationships.
+
+Include diagrams where useful.
+
+3. User creation and ID ownership
+
+Explain precisely why the current API requires the developer to supply an ID.
+
+4. Storage ownership
+
+Explain exactly what the library requires versus what the reference SQLite implementation chooses.
+
+5. Current API friction
+
+Identify the actual beginner-DX problems.
+
+6. Design constraints
+
+List the constraints any future API must satisfy.
+
+7. Possible architectural directions
+
+Present several alternatives without selecting one.
+
+For each:
+
+- API shape
+- trait changes
+- ownership model
+- beginner DX
+- advanced control
+- compatibility
+- complexity
+- risks
+
+8. Open questions
+
+List questions that the codebase cannot answer and that require an explicit product/design decision.
+
+9. Recommended next investigations
+
+Not a final design.
+
+Only identify what we need to investigate before making the design decision.
+
+---
+
+Important rules
+
+1. Do not modify files.
+2. Do not implement anything.
+3. Do not choose a solution prematurely.
+4. Do not assume the four-table schema is mandatory.
+5. Do not assume one-table storage is appropriate either.
+6. Do not treat the current API as sacred.
+7. Do not optimize for backward compatibility with an unpublished v0.1.0.
+8. Trace claims back to actual code.
+9. Distinguish facts, architectural implications, and design opinions.
+10. When something is uncertain, say exactly what is uncertain.
+11. Prefer concrete references to files, traits, functions, and tests.
+12. Search the whole repository before concluding that a capability does or does not exist.
+13. The purpose of this investigation is to give us enough evidence to redesign the API intelligently, not to defend the current implementation.
+
+The central question is:
+
+«How can dioxus-auth give a beginner an almost frictionless authentication experience while still allowing an application developer to own their User model, database, identity strategy, and persistence when they need that control?»
+
+Do not answer that question with a final design yet.
+
+First tell us what the codebase makes possible.
