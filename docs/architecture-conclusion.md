@@ -264,3 +264,6 @@ creation and credential attachment for every operation.
 The lower-level primitives remain available for complete control. The
 goal is therefore not to choose between simplicity and flexibility,
 but to provide both as layers over the same architecture.
+
+
+The SQLite/rusqlite implementation is the current reference backend, not an architectural database requirement; the authentication and ownership model must remain implementable over other relational database backends through backend-specific adapters.
