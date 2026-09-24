@@ -109,7 +109,7 @@ done < <(grep -rn '#\[allow\|#\[expect' src examples/sqlite-reference/src --incl
 # glyph-free and does not flag itself.
 if grep -rn $'\u2014' \
     src/ tests/ examples/sqlite-reference/src examples/sqlite-reference/tests \
-    README.md docs/ CHANGELOG.md CONTRIBUTING.md scripts/ \
+    README.md docs/ CONTRIBUTING.md scripts/ \
     examples/sqlite-reference/README.md \
     --include='*.rs' --include='*.md' --include='*.sh' 2>/dev/null; then
     fail=1

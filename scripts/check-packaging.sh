@@ -18,7 +18,6 @@ whitelist=(
     '^clippy\.toml$'
     '^rustfmt\.toml$'
     '^README\.md$'
-    '^CHANGELOG\.md$'
     '^docs/README\.md$'
     '^docs/THREAT-MODEL\.md$'
     '^LICENSE$'

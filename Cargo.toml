@@ -39,7 +39,6 @@ include = [
     "/.github/workflows/ci.yml",
     "/.gitignore",
     "/Cargo.toml",
-    "/CHANGELOG.md",
     "/LICENSE",
     "/LICENSE-MIT",
     "/LICENSE-APACHE",

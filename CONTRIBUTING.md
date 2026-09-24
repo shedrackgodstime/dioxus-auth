@@ -36,6 +36,7 @@ Read the quickstart in `README.md` as a beginner would and confirm each:
 - [ ] `ErrorCode` variants only added (`#[non_exhaustive]`), messages unchanged
       or message-only diffs.
 - [ ] No new required trait methods, no new required struct fields on
-      `DefaultUser`, no verb signature changes. Anything else needs a
-      semver-major decision recorded in `CHANGELOG.md`.
+      shipped user types, no verb signature changes. Anything else needs a
+      recorded semver-major decision (no changelog is kept until the first
+      release settles).
 - [ ] `plan/00-dx-aim.md` amended for any gate/law change in the release.
