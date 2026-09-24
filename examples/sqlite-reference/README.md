@@ -14,6 +14,30 @@ let auth = Auth::new(store)?; // same verbs as the memory quickstart
 auth.sign_up_email("alice@example.com", "password", SqliteAppSetup::New(AppUser { ... }))?;
 ```
 
+## Transaction-joined signup (Direction D)
+
+When the application owns its transaction, authentication attaches
+inside it instead of the other way around. The application inserts its
+User row with its own SQL, claims the credential for its own key, and
+commits once; both land together or neither does:
+
+```rust
+let tx = conn.transaction()?;
+tx.execute("INSERT INTO users (...) VALUES (...)", ...)?;
+claims.claim(&tx, "alice@example.com", "password", app_id)?;
+tx.commit()?;
+```
+
+Ownership on this path: the application owns its model, table, rows,
+transaction, and commit. Auth owns credentials, sessions, hashing, and
+the link. Auth never writes application columns; the developer never
+manages an auth ID and implements no storage traits. `EmailClaims`
+holds the hasher, the timing-defense dummy, and an optional rate
+limiter shared with the login gate; it executes statements only and
+never commits. Taken identifiers, unknown keys, and mismatches fail
+indistinguishably with identical hashing work; re-claiming the same
+identifier for the same key succeeds so retries self-heal.
+
 ## Schema: apply this yourself
 
 `users` (application rows, zero auth columns) · `accounts` (credentials,
@@ -25,21 +49,21 @@ verbs). There is no subjects table: the application key serves as the
 subject key.
 
 ```sql
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL,
     email_verified_at INTEGER,
     name TEXT NOT NULL,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
-CREATE TABLE accounts (
+CREATE TABLE IF NOT EXISTS accounts (
     provider TEXT NOT NULL DEFAULT 'email',
     provider_account_id TEXT NOT NULL PRIMARY KEY,
     app_key INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL
 );
-CREATE INDEX accounts_app_key ON accounts (app_key);
-CREATE TABLE sessions (
+CREATE INDEX IF NOT EXISTS accounts_app_key ON accounts (app_key);
+CREATE TABLE IF NOT EXISTS sessions (
     id TEXT NOT NULL PRIMARY KEY,
     app_key INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL,
@@ -49,8 +73,8 @@ CREATE TABLE sessions (
     ip TEXT,
     user_agent TEXT
 );
-CREATE INDEX sessions_app_key ON sessions (app_key);
-CREATE TABLE verifications (
+CREATE INDEX IF NOT EXISTS sessions_app_key ON sessions (app_key);
+CREATE TABLE IF NOT EXISTS verifications (
     id TEXT NOT NULL PRIMARY KEY,
     identifier TEXT NOT NULL,
     token_hash TEXT NOT NULL,

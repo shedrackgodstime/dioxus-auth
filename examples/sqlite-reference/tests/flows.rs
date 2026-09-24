@@ -149,6 +149,7 @@ fn provision_rejects_duplicate_ids_without_side_effects() {
         .provision_subject(
             None,
             user(1, "alice@example.com"),
+            "email",
             "alice@example.com",
             "hash",
         )
@@ -156,14 +157,20 @@ fn provision_rejects_duplicate_ids_without_side_effects() {
 
     assert!(
         store
-            .provision_subject(None, user(1, "bob@example.com"), "bob@example.com", "hash")
+            .provision_subject(
+                None,
+                user(1, "bob@example.com"),
+                "email",
+                "bob@example.com",
+                "hash"
+            )
             .expect("provisioning must succeed")
             .is_none(),
         "a taken app id must be rejected"
     );
     assert!(
         store
-            .find_credential("bob@example.com")
+            .find_credential("email", "bob@example.com")
             .expect("lookup must succeed")
             .is_none(),
         "a rejected claim must write nothing"
@@ -210,12 +217,13 @@ fn existing_app_rows_adopt_without_rewriting_them() {
         .provision_subject(
             None,
             user(1, "alice@example.com"),
+            "email",
             "alice@example.com",
             "hash",
         )
         .expect("seed claim must succeed");
     let seeded = setup
-        .find_credential("alice@example.com")
+        .find_credential("email", "alice@example.com")
         .expect("lookup must succeed")
         .expect("seed credential must exist");
     setup
@@ -230,6 +238,7 @@ fn existing_app_rows_adopt_without_rewriting_them() {
         .provision_subject(
             None,
             SqliteAppSetup::Existing(1),
+            "email",
             "alice-2@example.com",
             &engine.hasher().hash("pw2").expect("hash must succeed"),
         )
@@ -271,7 +280,7 @@ fn deleting_the_app_row_cascades_credentials_and_sessions() {
 
     assert!(
         store
-            .find_credential("alice@example.com")
+            .find_credential("email", "alice@example.com")
             .expect("lookup must succeed")
             .is_none(),
         "credentials must cascade with the app row"
@@ -329,6 +338,42 @@ fn rotated_secrets_invalidate_old_sessions_lazily() {
     );
     auth.sign_in_email("alice@example.com", "new-secret")
         .expect("the new secret must work");
+}
+
+#[test]
+fn reopening_a_file_database_keeps_data_and_stays_usable() {
+    let path = std::env::temp_dir().join(format!("dioxus-auth-reopen-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let first = SqliteStore::open(&path).expect("first open must succeed");
+    first
+        .provision_subject(
+            None,
+            user(1, "alice@example.com"),
+            "email",
+            "alice@example.com",
+            "hash",
+        )
+        .expect("seed claim must succeed");
+    drop(first);
+
+    let second = SqliteStore::open(&path).expect("reopen must succeed on existing tables");
+    assert!(
+        second
+            .find_credential("email", "alice@example.com")
+            .expect("lookup must succeed")
+            .is_some(),
+        "credentials survive the reopen"
+    );
+    second
+        .provision_subject(
+            None,
+            user(2, "bob@example.com"),
+            "email",
+            "bob@example.com",
+            "hash",
+        )
+        .expect("post-reopen claims must work");
+    let _ = std::fs::remove_file(&path);
 }
 
 #[test]

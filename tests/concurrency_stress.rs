@@ -386,7 +386,7 @@ fn concurrent_sign_ups_claim_one_identifier_once() {
     let stored = auth
         .engine()
         .store()
-        .find_credential(IDENTIFIER)
+        .find_credential("email", IDENTIFIER)
         .expect("lookup must not fail")
         .expect("the winner must be stored");
     assert_eq!(

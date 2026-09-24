@@ -48,16 +48,31 @@ identifier state is never observable.
 3. Nothing else changes: same verbs, same sessions, same error codes.
    Sessions are opaque and user-type-agnostic, so zero migration.
 
-Your data lives in four tables. Column sketch below; the exact DDL ships
-in `examples/sqlite-reference`, which also implements the store. Apply it
+Your application table carries zero auth columns. Auth tables key off
+your key and cascade with your rows; the exact DDL ships in
+`examples/sqlite-reference`, which also implements the store. Apply it
 with any SQL tool, then point a store at it:
 
 ```sql
-users(id, email, name, ...)  -- your AppUser rows
-accounts(provider, identifier, user_id, password_hash)  -- credentials
-sessions(id, user_id, expiry, activity, metadata)  -- opaque server sessions
+users(id, email, name, ...)  -- your AppUser rows, untouched by auth
+accounts(provider, identifier, app_key, password_hash)  -- credentials
+sessions(id, app_key, expiry, activity, metadata)  -- opaque server sessions
 verifications(id, identifier, token, expiry)  -- reserved for future flows
 ```
+
+If your application owns its transaction, attach authentication inside
+it instead of handing row creation to the store:
+
+```rust,ignore
+let tx = conn.transaction()?;
+tx.execute("INSERT INTO users (...) VALUES (...)", ...)?;
+claims.claim(&tx, "alice@example.com", "password", app_id)?;
+tx.commit()?;
+```
+
+Same database, one atomic commit, no storage traits, no auth IDs to
+manage. See `examples/sqlite-reference` (`EmailClaims`) for the working
+reference.
 
 ```rust
 use dioxus_auth::{Auth, AuthUser, MemoryStore};

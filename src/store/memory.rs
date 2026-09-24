@@ -43,7 +43,7 @@ const FIRST_AUTH_ID: u64 = 1;
 /// serialize instead of interleaving.
 pub struct MemoryStore<User: AuthUser> {
     subjects: RwLock<Vec<AuthSubject<u64, User::Id>>>,
-    credentials: RwLock<Vec<(String, u64, String)>>,
+    credentials: RwLock<Vec<(String, String, u64, String)>>,
     users: RwLock<Vec<User>>,
     sessions: RwLock<Vec<Session<u64>>>,
     next_id: AtomicU64,
@@ -165,8 +165,10 @@ where
             let mut credentials = self.credentials.write();
             replace_or_push(
                 &mut credentials,
-                (identifier, id, hash),
-                |current, incoming| return current.0 == incoming.0,
+                (String::from("email"), identifier, id, hash),
+                |current, incoming| {
+                    return current.0 == incoming.0 && current.1 == incoming.1;
+                },
             );
         }
     }
@@ -184,13 +186,14 @@ impl<User: AuthUser + Clone> SubjectStore for MemoryStore<User> {
         &self,
         id_override: Option<Self::AuthId>,
         app: Self::AppSetup,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
         let mut credentials = self.credentials.write();
         if credentials
             .iter()
-            .any(|(ident, _, _)| return ident == identifier)
+            .any(|(prov, ident, _, _)| return prov == provider && ident == identifier)
         {
             return Ok(None);
         }
@@ -205,7 +208,12 @@ impl<User: AuthUser + Clone> SubjectStore for MemoryStore<User> {
         if users.iter().any(|existing| return existing.id() == app_id) {
             return Ok(None);
         }
-        credentials.push((identifier.to_string(), auth_id, secret_hash.to_string()));
+        credentials.push((
+            provider.to_string(),
+            identifier.to_string(),
+            auth_id,
+            secret_hash.to_string(),
+        ));
         users.push(app);
         let subject = AuthSubject {
             auth_id,
@@ -274,7 +282,7 @@ impl<User: AuthUser + Clone> SubjectStore for MemoryStore<User> {
         }
         {
             let mut credentials = self.credentials.write();
-            credentials.retain(|(_, id, _)| return id != auth_id);
+            credentials.retain(|(_, _, id, _)| return id != auth_id);
         }
         {
             let mut sessions = self.sessions.write();
@@ -287,14 +295,15 @@ impl<User: AuthUser + Clone> SubjectStore for MemoryStore<User> {
 impl<User: AuthUser + Clone> CredentialStore for MemoryStore<User> {
     fn find_credential(
         &self,
+        provider: &str,
         identifier: &str,
     ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
         let credential = {
             let credentials = self.credentials.read();
             credentials
                 .iter()
-                .find(|(ident, _, _)| return ident == identifier)
-                .map(|(_, auth_id, hash)| return (*auth_id, hash.clone()))
+                .find(|(prov, ident, _, _)| return prov == provider && ident == identifier)
+                .map(|(_, _, auth_id, hash)| return (*auth_id, hash.clone()))
         };
         let (auth_id, secret_hash) = match credential {
             Some(credential) => credential,
@@ -321,13 +330,14 @@ impl<User: AuthUser + Clone> CredentialStore for MemoryStore<User> {
     fn attach_credential(
         &self,
         auth_id: &Self::AuthId,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<bool, AuthError> {
         let mut credentials = self.credentials.write();
         if credentials
             .iter()
-            .any(|(ident, _, _)| return ident == identifier)
+            .any(|(prov, ident, _, _)| return prov == provider && ident == identifier)
         {
             return Ok(false);
         }
@@ -338,14 +348,19 @@ impl<User: AuthUser + Clone> CredentialStore for MemoryStore<User> {
         if !known {
             return Err(AuthError::InvalidCredentials);
         }
-        credentials.push((identifier.to_string(), *auth_id, secret_hash.to_string()));
+        credentials.push((
+            provider.to_string(),
+            identifier.to_string(),
+            *auth_id,
+            secret_hash.to_string(),
+        ));
         return Ok(true);
     }
 
     fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
         {
             let mut credentials = self.credentials.write();
-            for (_, id, hash) in credentials.iter_mut() {
+            for (_, _, id, hash) in credentials.iter_mut() {
                 if id == auth_id {
                     *hash = new_hash.to_string();
                 }

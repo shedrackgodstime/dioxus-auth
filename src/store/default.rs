@@ -41,7 +41,7 @@ const FIRST_APP_ID: u64 = 1;
 /// code names it only when spelling the facade type out.
 pub struct DefaultStore {
     subjects: RwLock<Vec<AuthSubject<u64, u64>>>,
-    credentials: RwLock<Vec<(String, u64, String)>>,
+    credentials: RwLock<Vec<(String, String, u64, String)>>,
     users: RwLock<Vec<DefaultUser>>,
     sessions: RwLock<Vec<Session<u64>>>,
     next_auth_id: AtomicU64,
@@ -96,6 +96,7 @@ impl SubjectStore for DefaultStore {
         &self,
         id_override: Option<Self::AuthId>,
         app: Self::AppSetup,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
@@ -105,7 +106,7 @@ impl SubjectStore for DefaultStore {
         let mut credentials = self.credentials.write();
         if credentials
             .iter()
-            .any(|(ident, _, _)| return ident == identifier)
+            .any(|(prov, ident, _, _)| return prov == provider && ident == identifier)
         {
             return Ok(None);
         }
@@ -120,7 +121,12 @@ impl SubjectStore for DefaultStore {
         if users.iter().any(|u| return u.id == app_id) {
             return Ok(None);
         }
-        credentials.push((identifier.to_string(), auth_id, secret_hash.to_string()));
+        credentials.push((
+            provider.to_string(),
+            identifier.to_string(),
+            auth_id,
+            secret_hash.to_string(),
+        ));
         users.push(DefaultUser {
             id: app_id,
             email: identifier.to_string(),
@@ -193,7 +199,7 @@ impl SubjectStore for DefaultStore {
         }
         {
             let mut credentials = self.credentials.write();
-            credentials.retain(|(_, id, _)| return id != auth_id);
+            credentials.retain(|(_, _, id, _)| return id != auth_id);
         }
         {
             let mut sessions = self.sessions.write();
@@ -206,14 +212,15 @@ impl SubjectStore for DefaultStore {
 impl CredentialStore for DefaultStore {
     fn find_credential(
         &self,
+        provider: &str,
         identifier: &str,
     ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
         let credential = {
             let credentials = self.credentials.read();
             credentials
                 .iter()
-                .find(|(ident, _, _)| return ident == identifier)
-                .map(|(_, auth_id, hash)| return (*auth_id, hash.clone()))
+                .find(|(prov, ident, _, _)| return prov == provider && ident == identifier)
+                .map(|(_, _, auth_id, hash)| return (*auth_id, hash.clone()))
         };
         let (auth_id, secret_hash) = match credential {
             Some(credential) => credential,
@@ -240,13 +247,14 @@ impl CredentialStore for DefaultStore {
     fn attach_credential(
         &self,
         auth_id: &Self::AuthId,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<bool, AuthError> {
         let mut credentials = self.credentials.write();
         if credentials
             .iter()
-            .any(|(ident, _, _)| return ident == identifier)
+            .any(|(prov, ident, _, _)| return prov == provider && ident == identifier)
         {
             return Ok(false);
         }
@@ -257,14 +265,19 @@ impl CredentialStore for DefaultStore {
         if !known {
             return Err(AuthError::InvalidCredentials);
         }
-        credentials.push((identifier.to_string(), *auth_id, secret_hash.to_string()));
+        credentials.push((
+            provider.to_string(),
+            identifier.to_string(),
+            *auth_id,
+            secret_hash.to_string(),
+        ));
         return Ok(true);
     }
 
     fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
         {
             let mut credentials = self.credentials.write();
-            for (_, id, hash) in credentials.iter_mut() {
+            for (_, _, id, hash) in credentials.iter_mut() {
                 if id == auth_id {
                     *hash = new_hash.to_string();
                 }

@@ -10,7 +10,7 @@ use dioxus_auth::{AuthError, AuthSubject, CredentialStore, MemoryStore, SubjectS
 fn provision_then_find_subject_roundtrip() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("free identifier must provision");
     assert_eq!(created.auth_id, 1);
@@ -31,11 +31,11 @@ fn find_missing_subject_is_none() {
 fn provision_mints_sequential_subject_ids() {
     let store = MemoryStore::<TestUser>::new();
     let first = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("first claim must succeed");
     let second = store
-        .provision_subject(None, TestUser::new(4, "carol"), "carol", "hash")
+        .provision_subject(None, TestUser::new(4, "carol"), "email", "carol", "hash")
         .unwrap()
         .expect("second claim must succeed");
     assert_eq!((first.auth_id, second.auth_id), (1, 2));
@@ -45,7 +45,7 @@ fn provision_mints_sequential_subject_ids() {
 fn provision_honors_an_explicit_subject_id_override() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(Some(77), TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(Some(77), TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("override claim must succeed");
     assert_eq!(created.auth_id, 77);
@@ -60,11 +60,17 @@ fn provision_honors_an_explicit_subject_id_override() {
 fn provision_rejects_a_taken_subject_id_override() {
     let store = MemoryStore::<TestUser>::new();
     store
-        .provision_subject(Some(77), TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(Some(77), TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap();
 
     let taken = store
-        .provision_subject(Some(77), TestUser::new(4, "carol"), "carol", "hash")
+        .provision_subject(
+            Some(77),
+            TestUser::new(4, "carol"),
+            "email",
+            "carol",
+            "hash",
+        )
         .unwrap();
     assert!(
         taken.is_none(),
@@ -83,7 +89,7 @@ fn set_app_link_to_the_same_ref_is_a_no_op_success() {
     // reachable arms: same-ref re-link succeeds without writing.
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("claim must succeed");
 
@@ -103,7 +109,7 @@ fn set_app_link_to_the_same_ref_is_a_no_op_success() {
 fn set_app_link_rejects_a_subject_bound_elsewhere() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("claim must succeed");
 
@@ -137,7 +143,7 @@ fn set_app_link_rejects_an_unknown_subject() {
 fn find_auth_id_translates_an_app_key_to_its_subject() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("claim must succeed");
 
@@ -149,18 +155,18 @@ fn find_auth_id_translates_an_app_key_to_its_subject() {
 fn delete_subject_removes_auth_rows_but_keeps_app_rows() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("claim must succeed");
     store
-        .attach_credential(&created.auth_id, "bobby", "hash")
+        .attach_credential(&created.auth_id, "email", "bobby", "hash")
         .unwrap();
 
     store.delete_subject(&created.auth_id).unwrap();
 
     assert!(store.find_subject(&created.auth_id).unwrap().is_none());
-    assert!(store.find_credential("bob").unwrap().is_none());
-    assert!(store.find_credential("bobby").unwrap().is_none());
+    assert!(store.find_credential("email", "bob").unwrap().is_none());
+    assert!(store.find_credential("email", "bobby").unwrap().is_none());
     assert!(store.find_auth_id(&3).unwrap().is_none());
     assert!(
         store.resolve(&3).unwrap().is_some(),
@@ -172,7 +178,7 @@ fn delete_subject_removes_auth_rows_but_keeps_app_rows() {
 fn resolve_returns_the_linked_application_user() {
     let store = MemoryStore::<TestUser>::new();
     store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap();
 
     let user = store.resolve(&3).unwrap().expect("linked row must resolve");
@@ -184,7 +190,7 @@ fn resolve_returns_the_linked_application_user() {
 fn subject_material_reports_its_binding() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(3, "bob"), "bob", "hash")
+        .provision_subject(None, TestUser::new(3, "bob"), "email", "bob", "hash")
         .unwrap()
         .expect("claim must succeed");
     assert_eq!(

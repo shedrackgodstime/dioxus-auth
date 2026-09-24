@@ -22,10 +22,6 @@ impl AuthUser for TestUser {
     fn id(&self) -> Self::Id {
         return self.id;
     }
-
-    fn session_auth_hash(&self) -> Option<&str> {
-        return None;
-    }
 }
 
 impl TestUser {

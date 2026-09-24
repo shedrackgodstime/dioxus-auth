@@ -75,6 +75,7 @@ pub trait SubjectStore: Debug + Send + Sync {
         &self,
         id_override: Option<Self::AuthId>,
         app: Self::AppSetup,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<SubjectClaim<Self::AuthId, Self::AppRef>, AuthError>;
@@ -136,23 +137,28 @@ pub trait SubjectStore: Debug + Send + Sync {
 
 /// Stores credentials against subjects (v0.1: passwords).
 ///
-/// Method-agnostic structure: each credential names its subject, so future
-/// families attach without schema changes. The v0.1 surface is passwords
-/// only; a method discriminator arrives with the second family.
+/// Method-agnostic structure: each credential names its subject and its
+/// provider method (`email` today; `google`, `passkey`, and so on later),
+/// so future families attach without schema changes. The v0.1 verbs all
+/// pass the email provider; the discriminator is already threaded so the
+/// second family never needs a redesign.
 pub trait CredentialStore: SubjectStore {
-    /// Loads subject material with the stored secret by login identifier.
+    /// Loads subject material with the stored secret by method and identifier.
     ///
-    /// The identifier arrives engine-normalized; match it exactly for one
-    /// canonical row per key. The engine verifies `secret` against the
-    /// returned hash; the store never receives plaintext from the login
-    /// path and never verifies itself. Returning the hash lets the engine
-    /// apply timing defense on unknown-identifier logins.
+    /// The identifier arrives engine-normalized; match the
+    /// provider-plus-identifier pair exactly for one canonical row per key.
+    /// Providers are closed lowercase vocabulary (`email` in v0.1). The
+    /// engine verifies `secret` against the returned hash; the store never
+    /// receives plaintext from the login path and never verifies itself.
+    /// Returning the hash lets the engine apply timing defense on
+    /// unknown-identifier logins.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "the lookup result must be used"]
     fn find_credential(
         &self,
+        provider: &str,
         identifier: &str,
     ) -> Result<StoredCredential<Self::AuthId, Self::AppRef>, AuthError>;
 
@@ -175,6 +181,7 @@ pub trait CredentialStore: SubjectStore {
     fn attach_credential(
         &self,
         auth_id: &Self::AuthId,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<bool, AuthError>;

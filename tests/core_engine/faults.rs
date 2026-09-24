@@ -34,12 +34,13 @@ impl SubjectStore for FailingSaveStore {
         &self,
         id_override: Option<Self::AuthId>,
         app: Self::AppSetup,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
         return self
             .inner
-            .provision_subject(id_override, app, identifier, secret_hash);
+            .provision_subject(id_override, app, provider, identifier, secret_hash);
     }
 
     fn find_subject(
@@ -69,20 +70,22 @@ impl SubjectStore for FailingSaveStore {
 impl CredentialStore for FailingSaveStore {
     fn find_credential(
         &self,
+        provider: &str,
         identifier: &str,
     ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
-        return self.inner.find_credential(identifier);
+        return self.inner.find_credential(provider, identifier);
     }
 
     fn attach_credential(
         &self,
         auth_id: &Self::AuthId,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<bool, AuthError> {
         return self
             .inner
-            .attach_credential(auth_id, identifier, secret_hash);
+            .attach_credential(auth_id, provider, identifier, secret_hash);
     }
 
     fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
@@ -148,12 +151,13 @@ impl SubjectStore for FailingRevokeStore {
         &self,
         id_override: Option<Self::AuthId>,
         app: Self::AppSetup,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<Option<AuthSubject<Self::AuthId, Self::AppRef>>, AuthError> {
         return self
             .inner
-            .provision_subject(id_override, app, identifier, secret_hash);
+            .provision_subject(id_override, app, provider, identifier, secret_hash);
     }
 
     fn find_subject(
@@ -183,20 +187,22 @@ impl SubjectStore for FailingRevokeStore {
 impl CredentialStore for FailingRevokeStore {
     fn find_credential(
         &self,
+        provider: &str,
         identifier: &str,
     ) -> Result<Option<(AuthSubject<Self::AuthId, Self::AppRef>, String)>, AuthError> {
-        return self.inner.find_credential(identifier);
+        return self.inner.find_credential(provider, identifier);
     }
 
     fn attach_credential(
         &self,
         auth_id: &Self::AuthId,
+        provider: &str,
         identifier: &str,
         secret_hash: &str,
     ) -> Result<bool, AuthError> {
         return self
             .inner
-            .attach_credential(auth_id, identifier, secret_hash);
+            .attach_credential(auth_id, provider, identifier, secret_hash);
     }
 
     fn rotate_secret(&self, auth_id: &Self::AuthId, new_hash: &str) -> Result<(), AuthError> {
