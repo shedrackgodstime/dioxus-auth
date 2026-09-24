@@ -1,4 +1,4 @@
-# Handoff: dioxus-auth v2 branch — full arc to date
+# Handoff: dioxus-auth v2 branch, full arc to date
 
 For PC pull, test, and verification. Push back to `v2` when done for
 last review before publishing.
@@ -8,7 +8,7 @@ last review before publishing.
 Branch `v2`, pushed clean. `git status` on handoff day shows only two
 untracked-or-modified stragglers, both yours-or-junk, neither code:
 
-- `prompt.md` (modified, your brief files — left untouched deliberately)
+- `prompt.md` (modified, your brief files, left untouched deliberately)
 - `kb.1` (untracked man page for the `kb` CLI that landed in root by
   accident; safe to delete, never committed)
 
@@ -16,51 +16,51 @@ Everything else is committed and pushed through `9ec190a`.
 
 ## 2. Commit arc (what changed, in order)
 
-- `5ec4fb7` — cut `AuthUser::email`, provision takes creation input and
+- `5ec4fb7`, cut `AuthUser::email`, provision takes creation input and
   returns the created user instead of `bool`.
-- `d7796dc` — ID-free memory quickstart (`DefaultStore` with atomic
+- `d7796dc`, ID-free memory quickstart (`DefaultStore` with atomic
   counters, `DefaultUserInput::new(name)`, no invented IDs).
-- `d7187b6` — filed working design docs under `docs/` (investigations,
+- `d7187b6`, filed working design docs under `docs/` (investigations,
   decisions, vision, inconclusion notes).
-- `f8d38ef` — retired `DefaultUser::new`, reframed `DefaultUser` as
+- `f8d38ef`, retired `DefaultUser::new`, reframed `DefaultUser` as
   store plumbing, not a model to grow.
-- `066132f` — dropped `CHANGELOG.md` until the first release settles;
+- `066132f`, dropped `CHANGELOG.md` until the first release settles;
   packaging whitelist and script references updated with it.
-- `0c6cf5b` + `f3e12a4` — checkpoint of the subject remodel
+- `0c6cf5b` + `f3e12a4`, checkpoint of the subject remodel
   (intermediate, pre-R1; second entry is a duplicate push, ignore it).
-- `3a02214` — R1 reference migration: SQLite reference dropped its
+- `3a02214`, R1 reference migration: SQLite reference dropped its
   subjects table; credentials and sessions key off the application key
   with cascading deletes; binding derived from the current secret.
-- `546401f` — key-returning reads (`login_key`, `validate_key`),
+- `546401f`, key-returning reads (`login_key`, `validate_key`),
   caller-loader composition (`login_user`, `validate_user`), signup
   options with id override (`SignupOptions`,
   `sign_up_email_with_options`), trust-based hash import
   (`import_email_credential`, `attach_imported_email_credential`,
   tx-side `claim_hash`).
-- `cd52eea` — provider-keyed credentials (`find`/`attach`/`provision`
+- `cd52eea`, provider-keyed credentials (`find`/`attach`/`provision`
   all take provider; credentials keyed by provider-plus-identifier),
   idempotent DDL (`IF NOT EXISTS`, reopen-safe files), `session_auth_hash`
   hook removal.
-- `b3b2908` — straggler test updates from the provider pass.
-- `c58ed28` — settings network parity (`attach_current` +
+- `b3b2908`, straggler test updates from the provider pass.
+- `c58ed28`, settings network parity (`attach_current` +
   `change_password` engine verbs, operations, context, five-endpoint
   macro with additive arm, redacted inputs), AuthUser `Hash` trim,
   `ResolvingStore` (subject store plus loader closure).
-- `9ec190a` — `docs/README.md` rewritten as one complete guides file.
+- `9ec190a`, `docs/README.md` rewritten as one complete guides file.
 
 ## 3. Architecture decisions (all in `docs/`)
 
-- `docs/architecture-conclusion.md` — authoritative. Direction D
+- `docs/architecture-conclusion.md`, authoritative. Direction D
   (dev-owned transaction + tx-scoped claim), R1, key-returning reads,
   loader-as-convenience, options channel, hash import, two-tier Dioxus
   experience, tiered escape hatches, north star. Read this first.
-- `docs/dioxus-auth-user-creation-decisions.md` — decision log with
+- `docs/dioxus-auth-user-creation-decisions.md`, decision log with
   IMPLEMENTED/DECIDED markers per item.
 - `docs/signup-storage-investigation.md`,
-  `docs/user-creation-developer-control.md` — early research, frozen.
-- `docs/picturing.md`, `docs/inconclusion.md` — vision and synthesis
+  `docs/user-creation-developer-control.md`, early research, frozen.
+- `docs/picturing.md`, `docs/inconclusion.md`, vision and synthesis
   notes that drove the final direction.
-- `docs/prompt.md`, `docs/prompt-00.txt`, `docs/prompt.txt` — the
+- `docs/prompt.md`, `docs/prompt-00.txt`, `docs/prompt.txt`, the
   investigation briefs, kept for provenance.
 
 ## 4. What is implemented (v0.1 email/password vertical)
