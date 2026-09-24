@@ -6,7 +6,7 @@ mod common;
 mod password;
 
 use common::TestUser;
-use dioxus_auth::{MemoryStore, PasswordUserStore, UserStore};
+use dioxus_auth::{AuthError, MemoryStore, PasswordUserStore, UserStore};
 use password::hash_password;
 
 #[test]
@@ -132,6 +132,59 @@ fn provision_rejects_a_duplicate_user_id_without_state_change() {
     let survivor = store.find_by_identifier("bob").unwrap().unwrap();
     assert_eq!(survivor.0.id, 3, "the winner's user row must survive");
     assert_eq!(survivor.1, hash, "the winner's credential must survive");
+}
+
+#[test]
+fn attach_adds_a_second_identifier_to_an_existing_user() {
+    let store = MemoryStore::<TestUser>::new();
+    let first_hash = hash_password("first");
+    let second_hash = hash_password("second");
+    store
+        .provision_user_with_password(TestUser::new(3, "bob"), "bob", &first_hash)
+        .unwrap();
+
+    let attached = store
+        .attach_password_credential(&3, "bobby", &second_hash)
+        .unwrap();
+    assert!(attached);
+
+    let added = store.find_by_identifier("bobby").unwrap().unwrap();
+    assert_eq!(added.0.id, 3);
+    assert_eq!(added.1, second_hash);
+    let original = store.find_by_identifier("bob").unwrap().unwrap();
+    assert_eq!(original.0.id, 3);
+    assert_eq!(original.1, first_hash);
+}
+
+#[test]
+fn attach_rejects_a_taken_identifier_without_state_change() {
+    let store = MemoryStore::<TestUser>::new();
+    let winner_hash = hash_password("winner");
+    store
+        .provision_user_with_password(TestUser::new(3, "bob"), "bob", &winner_hash)
+        .unwrap();
+
+    let attached = store
+        .attach_password_credential(&3, "bob", &hash_password("loser"))
+        .unwrap();
+    assert!(!attached, "a taken identifier must not be attached twice");
+
+    let survivor = store.find_by_identifier("bob").unwrap().unwrap();
+    assert_eq!(survivor.0.id, 3);
+    assert_eq!(survivor.1, winner_hash);
+}
+
+#[test]
+fn attach_rejects_an_unknown_user_id() {
+    let store = MemoryStore::<TestUser>::new();
+
+    let result = store.attach_password_credential(&404, "ghost", &hash_password("pw"));
+    assert_eq!(
+        result.unwrap_err(),
+        AuthError::InvalidCredentials,
+        "attaching to a missing user must fail without writing"
+    );
+    assert!(store.find_by_identifier("ghost").unwrap().is_none());
 }
 
 /// Updating a password rewrites every credential row for the user id, so a

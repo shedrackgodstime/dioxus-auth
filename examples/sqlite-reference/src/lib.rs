@@ -289,6 +289,38 @@ impl PasswordUserStore for SqliteStore {
         Ok(())
     }
 
+    fn attach_password_credential(
+        &self,
+        id: &Self::Id,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction().map_err(internal)?;
+        let user_exists: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1)",
+                [*id],
+                |row| row.get(0),
+            )
+            .map_err(internal)?;
+        if !user_exists {
+            return Err(AuthError::InvalidCredentials);
+        }
+        if let Err(error) = tx.execute(
+            "INSERT INTO accounts (provider, provider_account_id, user_id, password_hash)
+             VALUES ('email', ?1, ?2, ?3)",
+            params![identifier, id, password_hash],
+        ) {
+            if is_conflict(&error) {
+                return Ok(false);
+            }
+            return Err(internal(error));
+        }
+        tx.commit().map_err(internal)?;
+        Ok(true)
+    }
+
     fn provision_user_with_password(
         &self,
         input: Self::NewUser,

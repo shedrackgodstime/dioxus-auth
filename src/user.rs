@@ -88,3 +88,24 @@ impl AuthUser for DefaultUser {
         return self.id;
     }
 }
+
+/// Creation input for the zero-modeling quickstart.
+///
+/// [`Auth::memory`](crate::auth::Auth::memory) signup takes this instead of a
+/// finished [`DefaultUser`]: the developer supplies only the display name,
+/// and the default store generates the id and derives the email from the
+/// signup identifier. No primary-key thought, no struct completion, no trait
+/// to implement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultUserInput {
+    /// Display name for the created user.
+    pub name: String,
+}
+
+impl DefaultUserInput {
+    /// Creates quickstart signup input from a display name.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        return Self { name: name.into() };
+    }
+}

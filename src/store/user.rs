@@ -67,6 +67,39 @@ pub trait PasswordUserStore: UserStore {
     #[must_use = "a failed hash update must be handled"]
     fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError>;
 
+    /// Attaches a password credential to an existing user.
+    ///
+    /// The companion to provisioning: provisioning creates the user *and* its
+    /// first credential, attaching adds another login to a user that already
+    /// exists (imported rows, admin-created users, SSO-linked accounts, a
+    /// second identifier on one account). The user id must already exist;
+    /// this method never creates users.
+    ///
+    /// Atomic: when the identifier is already taken (by any user, including
+    /// this one), nothing is written and `Ok(false)` is returned. The
+    /// existence check and the write must land as one indivisible step, for
+    /// the same racing-provisioner reason as
+    /// [`provision_user_with_password`](Self::provision_user_with_password).
+    ///
+    /// The identifier arrives engine-normalized (trimmed, lowercased); compare
+    /// it byte-for-byte, one canonical row per key.
+    ///
+    /// Privileged operation: whoever calls this binds a new login to the
+    /// account, so callers must authorize first (a session for this user, or
+    /// admin tooling). The store cannot tell a legitimate link from an
+    /// attacker binding their own identifier to a victim's account.
+    ///
+    /// # Errors
+    /// Returns `AuthError::InvalidCredentials` when no user with the given id
+    /// exists, or a store error if the underlying store fails.
+    #[must_use = "the attach result must be checked"]
+    fn attach_password_credential(
+        &self,
+        id: &Self::Id,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError>;
+
     /// Provisions a user and their credential iff the identifier is unused.
     ///
     /// Builds the stored user from the creation input: the store owns

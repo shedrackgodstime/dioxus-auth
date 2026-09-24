@@ -48,6 +48,17 @@ impl PasswordUserStore for FailingSaveStore {
         return self.inner.update_password(id, new_hash);
     }
 
+    fn attach_password_credential(
+        &self,
+        id: &Self::Id,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError> {
+        return self
+            .inner
+            .attach_password_credential(id, identifier, password_hash);
+    }
+
     fn provision_user_with_password(
         &self,
         input: Self::NewUser,
@@ -122,6 +133,17 @@ impl PasswordUserStore for FailingRevokeStore {
 
     fn update_password(&self, id: &Self::Id, new_hash: &str) -> Result<(), AuthError> {
         return self.inner.update_password(id, new_hash);
+    }
+
+    fn attach_password_credential(
+        &self,
+        id: &Self::Id,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError> {
+        return self
+            .inner
+            .attach_password_credential(id, identifier, password_hash);
     }
 
     fn provision_user_with_password(

@@ -4,10 +4,12 @@
 //! the crate root; the implementing modules underneath stay closed so each
 //! item keeps one documented path.
 
+pub(crate) mod default;
 pub(crate) mod memory;
 pub(crate) mod session;
 pub(crate) mod user;
 
+pub use default::DefaultStore;
 pub use memory::MemoryStore;
 pub use session::SessionStore;
 pub use user::{PasswordUserStore, UserStore};

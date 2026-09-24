@@ -1,6 +1,24 @@
-//! Default in-memory store implementing all storage capability traits.
+//! Default store behind [`Auth::memory`](crate::auth::Auth::memory).
+//!
+//! Stores [`DefaultUser`](crate::user::DefaultUser) rows with generated `u64`
+//! identities: signup takes [`DefaultUserInput`](crate::user::DefaultUserInput)
+//! (a display name only) and the store mints the id from an atomic counter,
+//! derives the email from the normalized signup identifier, and returns
+//! exactly what it persisted. Beginners never invent a primary key.
+//!
+//! Sessions are keyed by their storage-form id (`sha256(raw wire token)`).
+//! The engine is responsible for passing the storage form.
+//!
+//! Lookups are linear scans over `Vec`s and expired sessions drop lazily on
+//! use, like [`MemoryStore`](crate::store::MemoryStore). Prototype-only:
+//! everything dies with the process.
+//!
+//! `Debug` is **manual and redacted**: a derived impl would render credential
+//! hashes, login identifiers, and full user rows. Counts preserve
+//! debuggability without leaking store secrets.
 
 use std::fmt::{self, Debug};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use parking_lot::RwLock;
 
@@ -9,141 +27,68 @@ use crate::session::Session;
 use crate::status::SessionId;
 use crate::store::session::SessionStore;
 use crate::store::user::{PasswordUserStore, UserStore};
-use crate::user::AuthUser;
+use crate::user::{DefaultUser, DefaultUserInput};
 
-/// In-memory [`UserStore`], [`PasswordUserStore`], and [`SessionStore`].
+/// First generated user id.
+const FIRST_USER_ID: u64 = 1;
+
+/// Default [`UserStore`], [`PasswordUserStore`], and [`SessionStore`].
 ///
-/// Sessions are keyed by their storage-form id (`sha256(raw wire token)`).
-/// The engine is responsible for passing the storage form.
-///
-/// Lookups are linear scans over `Vec`s, appropriate for the default
-/// single-process development store. Expired sessions are dropped lazily on
-/// use, never by a background task, so this store is unsuitable for
-/// long-lived deployments without external cleanup.
-/// `Clone` neither blocks nor panics on a
-/// poisoned lock: it falls back to an empty store (see `cloned_or_empty`).
-///
-/// `Debug` is **manual and redacted**: a derived impl would render credential
-/// hashes, login identifiers, and full user rows. Counts preserve
-/// debuggability without leaking store secrets.
-pub struct MemoryStore<User: AuthUser> {
-    users: RwLock<Vec<User>>,
-    credentials: RwLock<Vec<(String, User::Id, String)>>,
-    sessions: RwLock<Vec<Session<User::Id>>>,
+/// Created through [`Auth::memory`](crate::auth::Auth::memory); application
+/// code names it only when spelling the facade type out.
+pub struct DefaultStore {
+    users: RwLock<Vec<DefaultUser>>,
+    credentials: RwLock<Vec<(String, u64, String)>>,
+    sessions: RwLock<Vec<Session<u64>>>,
+    next_id: AtomicU64,
 }
 
-impl<User: AuthUser> Debug for MemoryStore<User> {
+impl Debug for DefaultStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return f
-            .debug_struct("MemoryStore")
+            .debug_struct("DefaultStore")
             .field("users", &self.users.read().len())
             .field("credentials", &self.credentials.read().len())
             .field("sessions", &self.sessions.read().len())
+            .field("next_id", &self.next_id.load(Ordering::Relaxed))
             .finish();
     }
 }
 
-impl<User: AuthUser> Default for MemoryStore<User> {
+impl Default for DefaultStore {
     fn default() -> Self {
         return Self {
             users: RwLock::new(Vec::new()),
             credentials: RwLock::new(Vec::new()),
             sessions: RwLock::new(Vec::new()),
+            next_id: AtomicU64::new(FIRST_USER_ID),
         };
     }
 }
 
-impl<User: AuthUser + Clone> Clone for MemoryStore<User> {
-    fn clone(&self) -> Self {
-        return Self {
-            users: RwLock::new(cloned_or_empty(&self.users)),
-            credentials: RwLock::new(cloned_or_empty(&self.credentials)),
-            sessions: RwLock::new(cloned_or_empty(&self.sessions)),
-        };
-    }
-}
-
-fn cloned_or_empty<T: Clone>(lock: &RwLock<Vec<T>>) -> Vec<T> {
-    return lock
-        .try_read()
-        .map_or_else(Vec::new, |guard| return guard.clone());
-}
-
-/// Replaces the first entry matching the incoming value, or pushes it.
-fn replace_or_push<T>(items: &mut Vec<T>, value: T, matches: impl Fn(&T, &T) -> bool) {
-    if let Some(existing) = items
-        .iter_mut()
-        .find(|current| return matches(current, &value))
-    {
-        *existing = value;
-    } else {
-        items.push(value);
-    }
-}
-
-impl<User: AuthUser> MemoryStore<User> {
-    /// Creates a new empty in-memory store.
+impl DefaultStore {
+    /// Creates a new empty default store.
     #[must_use]
     pub fn new() -> Self {
         return Self::default();
     }
-
-    /// Inserts or updates a user without credentials.
-    pub fn insert_user(&self, user: User) {
-        let mut users = self.users.write();
-        replace_or_push(&mut users, user, |current, incoming| {
-            return current.id() == incoming.id();
-        });
-    }
-
-    /// Inserts or updates a user with login identifier and hashed password.
-    ///
-    /// Replaces the credential of an existing identifier. For registration,
-    /// where a taken identifier must be rejected without disturbing the
-    /// existing account, use
-    /// [`provision_user_with_password`](PasswordUserStore::provision_user_with_password).
-    ///
-    /// No aliasing checks: pairing an identifier that belongs to user A with
-    /// a user object carrying user B's id re-points the identifier at B while
-    /// B's old identifier still resolves to B. Callers maintain one
-    /// identifier per user row; this is a development store, not a
-    /// constraint-enforcing database.
-    pub fn insert_user_with_password(
-        &self,
-        user: User,
-        identifier: impl Into<String>,
-        password_hash: impl Into<String>,
-    ) {
-        let id = user.id();
-        self.insert_user(user);
-        let identifier = identifier.into();
-        let hash = password_hash.into();
-        {
-            let mut credentials = self.credentials.write();
-            replace_or_push(
-                &mut credentials,
-                (identifier, id, hash),
-                |current, incoming| return current.0 == incoming.0,
-            );
-        }
-    }
 }
 
-impl<User: AuthUser + Clone> UserStore for MemoryStore<User> {
-    type Id = User::Id;
-    type User = User;
+impl UserStore for DefaultStore {
+    type Id = u64;
+    type User = DefaultUser;
 
     fn find_by_id(&self, id: &Self::Id) -> Result<Option<Self::User>, AuthError> {
         let user = {
             let users = self.users.read();
-            users.iter().find(|u| return &u.id() == id).cloned()
+            users.iter().find(|u| return &u.id == id).cloned()
         };
         return Ok(user);
     }
 }
 
-impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
-    type NewUser = User;
+impl PasswordUserStore for DefaultStore {
+    type NewUser = DefaultUserInput;
 
     fn find_by_identifier(
         &self,
@@ -154,7 +99,7 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             credentials
                 .iter()
                 .find(|(ident, _, _)| return ident == identifier)
-                .map(|(_, user_id, hash)| return (user_id.clone(), hash.clone()))
+                .map(|(_, user_id, hash)| return (*user_id, hash.clone()))
         };
         let (user_id, password_hash) = match credential {
             Some(credential) => credential,
@@ -162,7 +107,7 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
         };
         let found = {
             let users = self.users.read();
-            users.iter().find(|u| return u.id() == user_id).cloned()
+            users.iter().find(|u| return u.id == user_id).cloned()
         };
         let user = match found {
             Some(user) => user,
@@ -205,21 +150,17 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
         }
         let known = {
             let users = self.users.read();
-            users.iter().any(|existing| return existing.id() == *id)
+            users.iter().any(|existing| return existing.id == *id)
         };
         if !known {
             return Err(AuthError::InvalidCredentials);
         }
-        credentials.push((
-            identifier.to_string(),
-            id.clone(),
-            password_hash.to_string(),
-        ));
+        credentials.push((identifier.to_string(), *id, password_hash.to_string()));
         return Ok(true);
     }
 
-    // reason: the guard must stay held across the identifier check, id check,
-    // and both pushes; releasing it earlier would split the claim.
+    // reason: the guard must stay held across the identifier check, the id
+    // mint, and both pushes; releasing it earlier would split the claim.
     #[expect(clippy::significant_drop_tightening)]
     fn provision_user_with_password(
         &self,
@@ -228,11 +169,10 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
         password_hash: &str,
     ) -> Result<Option<Self::User>, AuthError> {
         // One guard order, both tables: `credentials` before `users`, held
-        // across the identifier check, the id check, and both pushes, so the
-        // claim is one indivisible step. A racing provisioner blocks on the
-        // guard, then observes the identifier or the id row as taken. The
-        // guards must span the returns. That span is the indivisibility this
-        // method exists to provide.
+        // across the identifier check, the id mint, and both pushes, so the
+        // claim is one indivisible step. The counter alone already yields
+        // fresh ids; the id check below honors the trait contract for the
+        // unreachable wrap-around case.
         let mut credentials = self.credentials.write();
         if credentials
             .iter()
@@ -241,25 +181,32 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             return Ok(None);
         }
         let mut users = self.users.write();
-        let id = input.id();
-        if users.iter().any(|existing| return existing.id() == id) {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        if users.iter().any(|existing| return existing.id == id) {
             return Ok(None);
         }
         credentials.push((identifier.to_string(), id, password_hash.to_string()));
-        users.push(input.clone());
-        return Ok(Some(input));
+        let user = DefaultUser {
+            id,
+            email: identifier.to_string(),
+            name: input.name,
+        };
+        users.push(user.clone());
+        return Ok(Some(user));
     }
 }
 
-impl<User: AuthUser + Clone> SessionStore for MemoryStore<User> {
-    type Id = User::Id;
+impl SessionStore for DefaultStore {
+    type Id = u64;
 
     fn save_session(&self, session: Session<Self::Id>) -> Result<(), AuthError> {
         {
             let mut sessions = self.sessions.write();
-            replace_or_push(&mut sessions, session, |current, incoming| {
-                return current.id() == incoming.id();
-            });
+            if let Some(existing) = sessions.iter_mut().find(|s| return s.id() == session.id()) {
+                *existing = session;
+            } else {
+                sessions.push(session);
+            }
         }
         return Ok(());
     }

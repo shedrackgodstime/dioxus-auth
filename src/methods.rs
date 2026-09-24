@@ -221,4 +221,77 @@ where
         // user always comes from the single credential-lookup path.
         return self.sign_in_email(identifier, password);
     }
+
+    /// Attaches an email/password credential to an existing user.
+    ///
+    /// The companion to signup: signup creates the user *and* its first
+    /// credential, this adds another login to a user that already exists
+    /// (imported rows, admin-created users, SSO-linked accounts, a second
+    /// identifier on one account). Unknown user ids and taken identifiers
+    /// both report `InvalidCredentials` with the same hashing work, so
+    /// neither user existence nor identifier state is observable.
+    ///
+    /// Privileged operation: binding a new login to an account must be
+    /// authorized first (a session for this user, or admin tooling). The
+    /// engine cannot tell a legitimate link from an attacker binding their
+    /// own identifier to a victim's account, so server wiring must enforce
+    /// the caller (e.g. match `user_id` against `require_user`) before
+    /// reaching this verb.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{Auth, AuthUser, MemoryStore};
+    /// # #[derive(Debug, Clone)]
+    /// # struct User { id: u64, name: String }
+    /// # impl AuthUser for User {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> u64 { return self.id; }
+    /// # }
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// let auth = Auth::new(MemoryStore::<User>::new())?;
+    /// auth.sign_up_email("alice", "s3cret", User { id: 1, name: String::from("alice") })?;
+    /// auth.attach_email_credential(&1, "alice-2", "other-secret")?;
+    /// let (user, _) = auth.sign_in_email("alice-2", "other-secret")?;
+    /// assert_eq!(user.id(), 1);
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns `InvalidCredentials` for unknown user ids or taken
+    /// identifiers, `RateLimited` when limited, or a store or hasher error.
+    #[must_use = "credential attachment must be acknowledged"]
+    pub fn attach_email_credential(
+        &self,
+        user_id: &<D as UserStore>::Id,
+        identifier: &str,
+        password: &str,
+    ) -> Result<(), AuthError> {
+        match self.engine.check_rate_limit(identifier, None) {
+            Ok(()) => {}
+            Err(error) => return Err(error),
+        }
+        let hash = match self.engine.hasher().hash(password) {
+            Ok(hash) => hash,
+            Err(error) => return Err(error),
+        };
+        let normalized = normalize_identifier(identifier);
+        let attached =
+            match self
+                .engine
+                .user_store()
+                .attach_password_credential(user_id, &normalized, &hash)
+            {
+                Ok(attached) => attached,
+                Err(error) => return Err(error),
+            };
+        if !attached {
+            self.engine.record_rate_limit_failure(identifier, None);
+            self.engine.dummy_verify(password);
+            return Err(AuthError::InvalidCredentials);
+        }
+        self.engine.record_rate_limit_success(identifier, None);
+        return Ok(());
+    }
 }

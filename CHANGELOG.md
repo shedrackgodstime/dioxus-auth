@@ -19,6 +19,22 @@ and returns the persisted user with the session. `MemoryStore` and the SQLite
 reference alias `NewUser` to their user type (passthrough); stores that
 generate identity declare their own input shape.
 
+Breaking (pre-1.0, create-vs-attach decision): split credential attachment
+into its own capability. `PasswordUserStore::attach_password_credential`
+adds a login to an existing user id (`false` when the identifier is taken,
+`InvalidCredentials` for unknown ids); `Auth::attach_email_credential` is
+the facade verb with the same enumeration defense as signup. Privileged by
+design: callers must authorize (session for the user, or admin) before
+binding a new login to an account.
+
+Breaking (pre-1.0, ID-free quickstart): `Auth::memory()` now runs over the
+new `DefaultStore`, which generates `u64` user ids from an atomic counter.
+Signup on the memory path takes `DefaultUserInput::new(name)` instead of a
+finished `DefaultUser`; the store derives the email from the signup
+identifier and returns the persisted row. Beginners never construct an id.
+`MemoryStore<DefaultUser>` still works with caller-built users for anyone
+already on it.
+
 Gate 1 (M1 vertical) on the 1e surface:
 
 - `Auth` facade: `new(store)` by value, zero-modeling `memory()` over

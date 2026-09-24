@@ -16,7 +16,7 @@
 
 use std::sync::Arc;
 
-use dioxus_auth::{Auth, AuthEngine, AuthUser, DefaultUser, InMemoryRateLimiter, MemoryStore};
+use dioxus_auth::{Auth, AuthEngine, AuthUser, DefaultUserInput, InMemoryRateLimiter, MemoryStore};
 
 /// A minimal user mirroring the README's `AppUser`. The serde derives exist
 /// so the fullstack drift pins below can expand the server-fn macro against
@@ -43,11 +43,7 @@ fn readme_quickstart() {
     auth.sign_up_email(
         "alice@example.com",
         "password",
-        DefaultUser {
-            id: 1,
-            email: String::from("alice@example.com"),
-            name: String::from("alice"),
-        },
+        DefaultUserInput::new("alice"),
     )
     .expect("sign-up must succeed");
 
@@ -55,6 +51,7 @@ fn readme_quickstart() {
         .sign_in_email("alice@example.com", "password")
         .expect("sign-in must succeed");
     assert_eq!(user.id, 1);
+    assert_eq!(user.name, "alice");
 
     auth.sign_out(&session).expect("sign-out must succeed");
     return;
@@ -88,11 +85,7 @@ fn graduation_preserves_verb_behavior() {
         .sign_up_email(
             "alice@example.com",
             "password",
-            DefaultUser {
-                id: 1,
-                email: String::from("alice@example.com"),
-                name: String::from("alice"),
-            },
+            DefaultUserInput::new("alice"),
         )
         .expect("sign-up must succeed");
 

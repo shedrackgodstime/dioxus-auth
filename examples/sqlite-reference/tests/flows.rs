@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use dioxus_auth::{
-    Auth, AuthEngine, AuthError, DefaultUser, PasswordUserStore, SessionId, SessionStore,
+    Auth, AuthEngine, AuthError, DefaultUserInput, PasswordUserStore, SessionId, SessionStore,
 };
 use sqlite_reference::{AppUser, SCHEMA_SQL, SqliteStore};
 
@@ -162,6 +162,35 @@ fn provision_rejects_duplicate_ids_without_side_effects() {
 }
 
 #[test]
+fn attach_adds_a_second_login_and_rejects_taken_or_missing() {
+    let auth = auth();
+    auth.sign_up_email(
+        "alice@example.com",
+        "s3cret-password",
+        user(1, "alice@example.com"),
+    )
+    .expect("sign-up must succeed");
+
+    auth.attach_email_credential(&1, "alice-2@example.com", "other-secret")
+        .expect("attach must succeed");
+    let (user, _) = auth
+        .sign_in_email("alice-2@example.com", "other-secret")
+        .expect("the attached login must work");
+    assert_eq!(user.id, 1);
+
+    assert!(
+        auth.attach_email_credential(&1, "alice@example.com", "pw")
+            .is_err(),
+        "a taken identifier must be rejected"
+    );
+    assert_eq!(
+        auth.attach_email_credential(&404, "ghost@example.com", "pw")
+            .expect_err("unknown user must fail"),
+        AuthError::InvalidCredentials
+    );
+}
+
+#[test]
 fn touch_missing_sessions_is_a_noop_and_single_active_rotates() {
     let store = Arc::new(SqliteStore::open_in_memory().expect("in-memory store must open"));
     store
@@ -213,11 +242,7 @@ fn graduation_from_memory_quickstart_preserves_behavior() {
         .sign_up_email(
             "alice@example.com",
             "password",
-            DefaultUser {
-                id: 1,
-                email: String::from("alice@example.com"),
-                name: String::from("alice"),
-            },
+            DefaultUserInput::new("alice"),
         )
         .expect("sign-up must succeed");
 

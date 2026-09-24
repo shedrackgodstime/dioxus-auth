@@ -11,8 +11,7 @@ use std::sync::Arc;
 
 use crate::engine::AuthEngine;
 use crate::error::AuthError;
-use crate::store::{MemoryStore, SessionStore, UserStore};
-use crate::user::DefaultUser;
+use crate::store::{DefaultStore, SessionStore, UserStore};
 
 /// Entry point for authentication.
 ///
@@ -218,27 +217,29 @@ where
     }
 }
 
-impl Auth<MemoryStore<DefaultUser>> {
+impl Auth<DefaultStore> {
     /// Creates zero-modeling in-memory authentication.
     ///
-    /// The quickstart: no user type, no traits, no turbofish. Uses
-    /// [`MemoryStore`] over [`DefaultUser`] with the default Argon2id hasher
-    /// and 7-day session TTL. Memory dies with the process: prototype with it,
-    /// then graduate to [`Auth::new`] with your own store before anything
-    /// matters.
+    /// The quickstart: no user type, no traits, no turbofish, no invented
+    /// ids. Uses [`DefaultStore`] with the default Argon2id hasher and 7-day
+    /// session TTL: signup takes a display name, the store generates the id
+    /// and derives the email from the signup identifier. Memory dies with the
+    /// process: prototype with it, then graduate to [`Auth::new`] with your
+    /// own store before anything matters.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use dioxus_auth::{Auth, DefaultUser};
+    /// # use dioxus_auth::{Auth, DefaultUserInput};
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::memory()?;
     /// let (user, _) = auth.sign_up_email(
     ///     "alice@example.com",
     ///     "password",
-    ///     DefaultUser { id: 1, email: String::from("alice@example.com"), name: String::from("alice") },
+    ///     DefaultUserInput::new("alice"),
     /// )?;
     /// assert_eq!(user.id, 1);
+    /// assert_eq!(user.name, "alice");
     /// # return Ok(());
     /// # }
     /// ```
@@ -248,6 +249,6 @@ impl Auth<MemoryStore<DefaultUser>> {
     /// timing-defense dummy hash.
     #[must_use = "the constructed facade must be used"]
     pub fn memory() -> Result<Self, AuthError> {
-        return Self::new(MemoryStore::<DefaultUser>::new());
+        return Self::new(DefaultStore::new());
     }
 }

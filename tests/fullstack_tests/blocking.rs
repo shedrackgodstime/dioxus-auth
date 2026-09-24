@@ -78,6 +78,17 @@ impl PasswordUserStore for ProbingUserStore {
         return self.inner.update_password(id, new_hash);
     }
 
+    fn attach_password_credential(
+        &self,
+        id: &u64,
+        identifier: &str,
+        password_hash: &str,
+    ) -> Result<bool, AuthError> {
+        return self
+            .inner
+            .attach_password_credential(id, identifier, password_hash);
+    }
+
     fn provision_user_with_password(
         &self,
         input: TestUser,

@@ -15,7 +15,7 @@ cargo add dioxus-auth
 Zero modeling. A built-in user, verbs that just work:
 
 ```rust
-use dioxus_auth::{Auth, DefaultUser};
+use dioxus_auth::{Auth, DefaultUserInput};
 
 fn main() -> Result<(), dioxus_auth::AuthError> {
     let auth = Auth::memory()?;
@@ -23,15 +23,11 @@ fn main() -> Result<(), dioxus_auth::AuthError> {
     auth.sign_up_email(
         "alice@example.com",
         "password",
-        DefaultUser {
-            id: 1,
-            email: String::from("alice@example.com"),
-            name: String::from("alice"),
-        },
+        DefaultUserInput::new("alice"),
     )?;
 
     let (user, session) = auth.sign_in_email("alice@example.com", "password")?;
-    assert_eq!(user.id, 1);
+    assert_eq!(user.name, "alice");
 
     auth.sign_out(&session)?;
     Ok(())

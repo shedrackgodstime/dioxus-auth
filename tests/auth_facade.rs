@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use common::TestUser;
 use dioxus_auth::{
-    Argon2Hasher, Auth, AuthEngine, AuthError, AuthUser, DefaultUser, ErrorCode,
+    Argon2Hasher, Auth, AuthEngine, AuthError, AuthUser, DefaultUserInput, ErrorCode,
     InMemoryRateLimiter, MemoryStore, PasswordHasher,
 };
 use password::hash_password;
@@ -342,14 +342,44 @@ fn sign_up_taken_and_free_paths_cost_equal_argon2_work() {
 }
 
 #[test]
-fn default_user_constructor_flows_through_memory() {
+fn attach_adds_a_second_login_to_the_same_account() {
     let auth = Auth::memory().expect("quickstart must construct");
-    let alice = DefaultUser::new(1, "alice@example.com", "alice");
-    assert_eq!(alice.id(), 1);
-    assert_eq!(alice.email, "alice@example.com");
-    let (user, _) = auth
-        .sign_up_email("alice@example.com", "pw", alice)
+    let (signed_up, _) = auth
+        .sign_up_email("alice@example.com", "pw", DefaultUserInput::new("alice"))
         .expect("sign-up must succeed");
-    assert_eq!(user, DefaultUser::new(1, "alice@example.com", "alice"));
+
+    auth.attach_email_credential(&signed_up.id, "alice-2@example.com", "other")
+        .expect("attach must succeed");
+    let (user, _) = auth
+        .sign_in_email("alice-2@example.com", "other")
+        .expect("the attached login must work");
+    assert_eq!(user.id, 1);
+
+    assert_eq!(
+        auth.attach_email_credential(&404, "ghost@example.com", "pw")
+            .expect_err("unknown user must fail"),
+        AuthError::InvalidCredentials
+    );
+    assert_eq!(
+        auth.attach_email_credential(&signed_up.id, "alice@example.com", "pw")
+            .expect_err("taken identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+    return;
+}
+
+#[test]
+fn memory_generates_identity_from_name_only_input() {
+    let auth = Auth::memory().expect("quickstart must construct");
+    let (first, _) = auth
+        .sign_up_email("alice@example.com", "pw", DefaultUserInput::new("alice"))
+        .expect("sign-up must succeed");
+    assert_eq!(first.id, 1);
+    assert_eq!(first.email, "alice@example.com");
+    assert_eq!(first.name, "alice");
+    let (second, _) = auth
+        .sign_up_email("bob@example.com", "pw", DefaultUserInput::new("bob"))
+        .expect("sign-up must succeed");
+    assert_eq!(second.id, 2);
     return;
 }

@@ -16,19 +16,15 @@
 //! # Example
 //!
 //! ```
-//! use dioxus_auth::{Auth, DefaultUser};
+//! use dioxus_auth::{Auth, DefaultUserInput};
 //!
 //! # fn main() -> Result<(), dioxus_auth::AuthError> {
 //! let auth = Auth::memory()?;
 //!
-//! let alice = DefaultUser {
-//!     id: 1,
-//!     email: String::from("alice"),
-//!     name: String::from("alice"),
-//! };
-//! let (user, session) = auth.sign_up_email("alice", "password", alice)?;
+//! let (user, session) =
+//!     auth.sign_up_email("alice", "password", DefaultUserInput::new("alice"))?;
 //! let (user, _session) = auth.sign_in_email("alice", "password")?;
-//! assert_eq!(user.id, 1);
+//! assert_eq!(user.name, "alice");
 //! auth.sign_out(&session)?;
 //! # return Ok(());
 //! # }
@@ -122,7 +118,7 @@ pub use crate::session::Session;
 pub use crate::status::{AuthStatus, SessionId};
 
 #[doc(inline)]
-pub use crate::store::{MemoryStore, PasswordUserStore, SessionStore, UserStore};
+pub use crate::store::{DefaultStore, MemoryStore, PasswordUserStore, SessionStore, UserStore};
 
 #[doc(inline)]
 pub use crate::token::MemoryTokenStorage;
@@ -131,7 +127,7 @@ pub use crate::token::MemoryTokenStorage;
 pub use crate::transport::TokenStorage;
 
 #[doc(inline)]
-pub use crate::user::{AuthUser, DefaultUser};
+pub use crate::user::{AuthUser, DefaultUser, DefaultUserInput};
 
 #[cfg(feature = "dioxus")]
 #[doc(inline)]
