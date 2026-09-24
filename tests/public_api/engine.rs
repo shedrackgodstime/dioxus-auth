@@ -123,7 +123,7 @@ fn custom_hasher_override_is_used_for_verification() {
 fn login_rotates_sessions_bound_to_a_previous_credential_version() {
     let store = MemoryStore::<TestUser>::new();
     let created = store
-        .provision_subject(None, TestUser::new(1, "alice"), "alice", "pw")
+        .provision_subject(None, TestUser::new(1, "alice"), "email", "alice", "pw")
         .unwrap()
         .expect("claim must succeed");
     let store = Arc::new(store);
@@ -151,7 +151,7 @@ fn memory_store_clone_is_independent() {
     store.save_session(session.clone()).unwrap();
 
     let clone = store.clone();
-    assert!(clone.find_credential("alice").unwrap().is_some());
+    assert!(clone.find_credential("email", "alice").unwrap().is_some());
     assert!(clone.find_session(session.id()).unwrap().is_some());
 
     clone.insert_user(TestUser::new(2, "bob"));
