@@ -31,6 +31,13 @@ pub trait UserStore: Debug + Send + Sync {
 /// before every call, so stores compare byte-for-byte and never fold case or
 /// whitespace themselves.
 pub trait PasswordUserStore: UserStore {
+    /// Creation input the store builds a [`UserStore::User`] from.
+    ///
+    /// Stores that persist the input as-is (e.g. [`MemoryStore`](crate::store::MemoryStore))
+    /// alias this to their user type. Stores that generate identity or apply
+    /// defaults (database ids, timestamps, mapped columns) declare their own
+    /// input shape holding only what the caller must supply.
+    type NewUser;
     /// Finds a user and their stored password hash by login identifier.
     ///
     /// The identifier arrives engine-normalized (trimmed, lowercased). Match
@@ -62,8 +69,13 @@ pub trait PasswordUserStore: UserStore {
 
     /// Provisions a user and their credential iff the identifier is unused.
     ///
+    /// Builds the stored user from the creation input: the store owns
+    /// construction and identity (generated ids, applied defaults, mapped
+    /// columns) and hands back exactly what it persisted, so generated values
+    /// surface to the caller instead of dying inside the store.
+    ///
     /// Atomic: when the identifier is already taken, no user or credential row
-    /// is written and `Ok(false)` is returned. Implementations must run the
+    /// is written and `Ok(None)` is returned. Implementations must run the
     /// uniqueness check and the write as one indivisible step. A separate
     /// lookup followed by a write leaves a window in which two registrations
     /// both pass the check, and the loser's write overwrites the winner's
@@ -71,16 +83,16 @@ pub trait PasswordUserStore: UserStore {
     ///
     /// The identifier arrives engine-normalized (trimmed, lowercased); compare
     /// it byte-for-byte, one canonical row per key. Also rejects when the
-    /// `user.id()` row already exists, returning `Ok(false)` with no writes.
-    /// Two identifiers must never alias one user row.
+    /// constructed user's id row already exists, returning `Ok(None)` with no
+    /// writes. Two identifiers must never alias one user row.
     ///
     /// # Errors
     /// Returns an error if the underlying store fails.
     #[must_use = "the provisioning result must be checked"]
     fn provision_user_with_password(
         &self,
-        user: Self::User,
+        input: Self::NewUser,
         identifier: &str,
         password_hash: &str,
-    ) -> Result<bool, AuthError>;
+    ) -> Result<Option<Self::User>, AuthError>;
 }

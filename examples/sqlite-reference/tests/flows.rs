@@ -146,9 +146,10 @@ fn provision_rejects_duplicate_ids_without_side_effects() {
         .expect("first claim must succeed");
 
     assert!(
-        !store
+        store
             .provision_user_with_password(user(1, "bob@example.com"), "bob@example.com", "hash")
-            .expect("provisioning must succeed"),
+            .expect("provisioning must succeed")
+            .is_none(),
         "a taken user id must be rejected"
     );
     assert!(

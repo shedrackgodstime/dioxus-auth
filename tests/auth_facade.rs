@@ -346,7 +346,7 @@ fn default_user_constructor_flows_through_memory() {
     let auth = Auth::memory().expect("quickstart must construct");
     let alice = DefaultUser::new(1, "alice@example.com", "alice");
     assert_eq!(alice.id(), 1);
-    assert_eq!(alice.email(), "alice@example.com");
+    assert_eq!(alice.email, "alice@example.com");
     let (user, _) = auth
         .sign_up_email("alice@example.com", "pw", alice)
         .expect("sign-up must succeed");

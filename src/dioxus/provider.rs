@@ -42,7 +42,6 @@ use super::storage::TokenStorageHandle;
 /// # impl dioxus_auth::AuthUser for User {
 /// #     type Id = u64;
 /// #     fn id(&self) -> u64 { return self.id; }
-/// #     fn email(&self) -> &str { return &self.name; }
 /// # }
 /// # fn App() -> Element {
 /// #     let auth = match Auth::new(MemoryStore::<User>::new()) {

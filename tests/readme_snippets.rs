@@ -33,10 +33,6 @@ impl AuthUser for AppUser {
     fn id(&self) -> Self::Id {
         return self.id;
     }
-
-    fn email(&self) -> &str {
-        return &self.name;
-    }
 }
 
 /// Mirror of the README's quickstart snippet: zero modeling, zero traits.

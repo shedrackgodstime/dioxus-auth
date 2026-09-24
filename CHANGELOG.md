@@ -5,6 +5,20 @@ yet; pre-1.0 entries may describe breaking changes without deprecation.
 
 ## [0.1.0] (unreleased, v2 branch)
 
+Breaking (pre-1.0, AuthUser boundary decision): removed `AuthUser::email()`.
+The trait is the session-owner contract (`id()` plus optional
+`session_auth_hash()`); login identifiers travel as verb arguments and app
+fields stay plain struct data. Every `AuthUser` impl drops one method; no
+engine behavior changes.
+
+Breaking (pre-1.0, store-owned creation decision): `provision_user_with_password`
+takes `Self::NewUser` creation input and returns `Result<Option<Self::User>>`
+(`None` when the identifier or id row is taken) instead of taking a finished
+user and returning `bool`. `Auth::sign_up_email` takes the store's `NewUser`
+and returns the persisted user with the session. `MemoryStore` and the SQLite
+reference alias `NewUser` to their user type (passthrough); stores that
+generate identity declare their own input shape.
+
 Gate 1 (M1 vertical) on the 1e surface:
 
 - `Auth` facade: `new(store)` by value, zero-modeling `memory()` over

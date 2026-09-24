@@ -143,6 +143,8 @@ impl<User: AuthUser + Clone> UserStore for MemoryStore<User> {
 }
 
 impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
+    type NewUser = User;
+
     fn find_by_identifier(
         &self,
         identifier: &str,
@@ -186,10 +188,10 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
     #[expect(clippy::significant_drop_tightening)]
     fn provision_user_with_password(
         &self,
-        user: Self::User,
+        input: Self::NewUser,
         identifier: &str,
         password_hash: &str,
-    ) -> Result<bool, AuthError> {
+    ) -> Result<Option<Self::User>, AuthError> {
         // One guard order, both tables: `credentials` before `users`, held
         // across the identifier check, the id check, and both pushes, so the
         // claim is one indivisible step. A racing provisioner blocks on the
@@ -201,16 +203,16 @@ impl<User: AuthUser + Clone> PasswordUserStore for MemoryStore<User> {
             .iter()
             .any(|(ident, _, _)| return ident == identifier)
         {
-            return Ok(false);
+            return Ok(None);
         }
         let mut users = self.users.write();
-        let id = user.id();
+        let id = input.id();
         if users.iter().any(|existing| return existing.id() == id) {
-            return Ok(false);
+            return Ok(None);
         }
         credentials.push((identifier.to_string(), id, password_hash.to_string()));
-        users.push(user);
-        return Ok(true);
+        users.push(input.clone());
+        return Ok(Some(input));
     }
 }
 

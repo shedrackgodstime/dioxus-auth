@@ -46,8 +46,8 @@ identifier state is never observable.
 
 1. Rename `DefaultUser` to your own `AppUser` and add your fields.
 2. Swap `Auth::memory()` for `Auth::new(your_store)` (for example
-   `examples/sqlite-reference`) and implement `AuthUser` (two methods:
-   `id` and `email`).
+   `examples/sqlite-reference`) and implement `AuthUser` (one method:
+   `id`).
 3. Nothing else changes: same verbs, same sessions, same error codes.
    Sessions are opaque and user-type-agnostic, so zero migration.
 
@@ -76,10 +76,6 @@ impl AuthUser for AppUser {
 
     fn id(&self) -> u64 {
         self.id
-    }
-
-    fn email(&self) -> &str {
-        &self.email
     }
 }
 
@@ -151,10 +147,6 @@ impl AuthUser for AppUser {
 
     fn id(&self) -> u64 {
         self.id
-    }
-
-    fn email(&self) -> &str {
-        &self.email
     }
 }
 

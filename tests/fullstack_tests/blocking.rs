@@ -64,6 +64,8 @@ impl UserStore for ProbingUserStore {
 }
 
 impl PasswordUserStore for ProbingUserStore {
+    type NewUser = TestUser;
+
     fn find_by_identifier(
         &self,
         identifier: &str,
@@ -78,13 +80,13 @@ impl PasswordUserStore for ProbingUserStore {
 
     fn provision_user_with_password(
         &self,
-        user: TestUser,
+        input: TestUser,
         identifier: &str,
         password_hash: &str,
-    ) -> Result<bool, AuthError> {
+    ) -> Result<Option<TestUser>, AuthError> {
         return self
             .inner
-            .provision_user_with_password(user, identifier, password_hash);
+            .provision_user_with_password(input, identifier, password_hash);
     }
 }
 

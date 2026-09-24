@@ -79,7 +79,7 @@ const SESSION_COLUMNS: &str =
 pub struct AppUser {
     /// Stable row id (`users.id`).
     pub id: i64,
-    /// Login identifier (`users.email`, engine-normalized upstream).
+    /// Application login identifier (`users.email`, engine-normalized upstream).
     pub email: String,
     /// Display name (`users.name`).
     pub name: String,
@@ -90,10 +90,6 @@ impl AuthUser for AppUser {
 
     fn id(&self) -> Self::Id {
         self.id
-    }
-
-    fn email(&self) -> &str {
-        &self.email
     }
 }
 
@@ -255,6 +251,8 @@ impl UserStore for SqliteStore {
 }
 
 impl PasswordUserStore for SqliteStore {
+    type NewUser = AppUser;
+
     fn find_by_identifier(
         &self,
         identifier: &str,
@@ -293,35 +291,35 @@ impl PasswordUserStore for SqliteStore {
 
     fn provision_user_with_password(
         &self,
-        user: Self::User,
+        input: Self::NewUser,
         identifier: &str,
         password_hash: &str,
-    ) -> Result<bool, AuthError> {
+    ) -> Result<Option<Self::User>, AuthError> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction().map_err(internal)?;
         if let Err(error) = tx.execute(
             "INSERT INTO users (id, email, name) VALUES (?1, ?2, ?3)",
-            params![user.id, user.email, user.name],
+            params![input.id, input.email, input.name],
         ) {
             if is_conflict(&error) {
-                return Ok(false);
+                return Ok(None);
             }
             return Err(internal(error));
         }
         if let Err(error) = tx.execute(
             "INSERT INTO accounts (provider, provider_account_id, user_id, password_hash)
              VALUES ('email', ?1, ?2, ?3)",
-            params![identifier, user.id, password_hash],
+            params![identifier, input.id, password_hash],
         ) {
             if is_conflict(&error) {
                 // Dropping `tx` without commit rolls back; a taken second row
                 // must not leave the first row behind.
-                return Ok(false);
+                return Ok(None);
             }
             return Err(internal(error));
         }
         tx.commit().map_err(internal)?;
-        Ok(true)
+        Ok(Some(input))
     }
 }
 

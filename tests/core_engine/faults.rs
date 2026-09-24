@@ -35,6 +35,8 @@ impl UserStore for FailingSaveStore {
 }
 
 impl PasswordUserStore for FailingSaveStore {
+    type NewUser = TestUser;
+
     fn find_by_identifier(
         &self,
         identifier: &str,
@@ -48,13 +50,13 @@ impl PasswordUserStore for FailingSaveStore {
 
     fn provision_user_with_password(
         &self,
-        user: Self::User,
+        input: Self::NewUser,
         identifier: &str,
         password_hash: &str,
-    ) -> Result<bool, AuthError> {
+    ) -> Result<Option<Self::User>, AuthError> {
         return self
             .inner
-            .provision_user_with_password(user, identifier, password_hash);
+            .provision_user_with_password(input, identifier, password_hash);
     }
 }
 
@@ -109,6 +111,8 @@ impl UserStore for FailingRevokeStore {
 }
 
 impl PasswordUserStore for FailingRevokeStore {
+    type NewUser = TestUser;
+
     fn find_by_identifier(
         &self,
         identifier: &str,
@@ -122,13 +126,13 @@ impl PasswordUserStore for FailingRevokeStore {
 
     fn provision_user_with_password(
         &self,
-        user: Self::User,
+        input: Self::NewUser,
         identifier: &str,
         password_hash: &str,
-    ) -> Result<bool, AuthError> {
+    ) -> Result<Option<Self::User>, AuthError> {
         return self
             .inner
-            .provision_user_with_password(user, identifier, password_hash);
+            .provision_user_with_password(input, identifier, password_hash);
     }
 }
 

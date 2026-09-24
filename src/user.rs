@@ -9,13 +9,16 @@ use std::hash::Hash;
 /// The crate is generic over this trait, so application domain logic
 /// (roles, subscriptions, profile fields) stays entirely on the user type.
 ///
-/// Two methods only: [`AuthUser::id`] is the stable unique identifier
-/// (e.g. `u64`, `Uuid`, `String`) and [`AuthUser::email`] is the login
-/// identifier. The email is the credential key: `sign_up_email`/
-/// `sign_in_email` look the user up by it, and the engine normalizes it once
-/// (trim plus lowercase) before any store call. Stores compare byte-for-byte
-/// and never fold case or whitespace themselves. `Clone` lets the engine hand
-/// identities to callers; show the email wherever a display name would go.
+/// This is the session-owner contract, nothing more: [`AuthUser::id`] is the
+/// stable unique identifier (e.g. `u64`, `Uuid`, `String`) that sessions point
+/// at and that [`UserStore`](crate::store::UserStore) rehydrates through
+/// `find_by_id`. Login identifiers travel as separate `&str` arguments on the
+/// credential verbs (`sign_up_email`/`sign_in_email`); the engine normalizes
+/// them once (trim plus lowercase) before any store call, and stores compare
+/// byte-for-byte without folding case or whitespace themselves. The user
+/// struct carries every other field (email, name, roles, …) as plain
+/// application data the engine never reads. `Clone` lets the engine hand
+/// identities to callers.
 pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
     /// Stable unique identifier for the user (e.g. `u64`, `Uuid`, `String`).
     type Id: Clone + Eq + Hash + Debug + Send + Sync + 'static;
@@ -24,16 +27,18 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
     #[must_use]
     fn id(&self) -> Self::Id;
 
-    /// Returns the user's login identifier (the email address).
-    #[must_use]
-    fn email(&self) -> &str;
-
     /// Opaque value that binds sessions to a known password (or other secret
     /// material) state.
     ///
     /// When a user's password changes, this value changes and every session
-    /// bound to the old value is rejected. Return `None` when the application
-    /// enforces credential binding through other means (e.g. store-side
+    /// bound to the old value is rejected on next validation or login.
+    /// Implement this when credentials change outside
+    /// [`Auth::change_password`](crate::auth::Auth::change_password) (direct
+    /// store writes, admin resets, external providers): that verb revokes all
+    /// sessions explicitly, but out-of-band changes leave old sessions alive
+    /// until TTL expiry unless this binding catches them. Return `None` when
+    /// every credential change flows through `change_password` or the
+    /// application enforces binding through other means (e.g. store-side
     /// checks or token versions).
     #[must_use]
     fn session_auth_hash(&self) -> Option<&str> {
@@ -46,7 +51,8 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
 /// `DefaultUser` is deliberately the minimal app-user shape (`id`, `email`,
 /// `name`): graduating to your own user type is a rename (plus added fields)
 /// and a one-line constructor swap, with zero session migration. Sessions
-/// are opaque and user-type-agnostic.
+/// are opaque and user-type-agnostic. The `email` and `name` fields are plain
+/// application data; authentication reads only the `id`.
 ///
 /// Memory-backed deployments are non-durable by definition: everything dies
 /// with the process. Memory is for prototyping.
@@ -54,7 +60,7 @@ pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
 pub struct DefaultUser {
     /// Stable unique identifier.
     pub id: u64,
-    /// Login identifier and credential key.
+    /// Application login identifier (mirrors the signup identifier by convention).
     pub email: String,
     /// Display name.
     pub name: String,
@@ -80,9 +86,5 @@ impl AuthUser for DefaultUser {
 
     fn id(&self) -> Self::Id {
         return self.id;
-    }
-
-    fn email(&self) -> &str {
-        return &self.email;
     }
 }

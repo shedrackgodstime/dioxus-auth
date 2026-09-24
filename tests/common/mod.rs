@@ -23,10 +23,6 @@ impl AuthUser for TestUser {
         return self.id;
     }
 
-    fn email(&self) -> &str {
-        return &self.name;
-    }
-
     fn session_auth_hash(&self) -> Option<&str> {
         return None;
     }

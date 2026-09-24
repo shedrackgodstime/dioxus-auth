@@ -6,7 +6,7 @@ mod common;
 mod password;
 
 use common::TestUser;
-use dioxus_auth::{AuthUser, MemoryStore, PasswordUserStore, UserStore};
+use dioxus_auth::{MemoryStore, PasswordUserStore, UserStore};
 use password::hash_password;
 
 #[test]
@@ -71,16 +71,16 @@ fn provision_claims_a_free_identifier() {
     let store = MemoryStore::<TestUser>::new();
     let hash = hash_password("first");
 
-    let claimed = store
+    let created = store
         .provision_user_with_password(TestUser::new(3, "bob"), "bob", &hash)
         .unwrap();
-    assert!(claimed);
+    assert_eq!(created, Some(TestUser::new(3, "bob")));
 
     let found = store.find_by_identifier("bob").unwrap().unwrap();
     assert_eq!(found.0.id, 3);
     assert_eq!(found.1, hash);
     let user = store.find_by_id(&3).unwrap().unwrap();
-    assert_eq!(user.email(), "bob");
+    assert_eq!(user.name, "bob");
 }
 
 #[test]
@@ -92,10 +92,13 @@ fn provision_rejects_a_taken_identifier_without_state_change() {
         .provision_user_with_password(TestUser::new(3, "bob"), "bob", &winner_hash)
         .unwrap();
 
-    let claimed = store
+    let created = store
         .provision_user_with_password(TestUser::new(4, "mallory"), "bob", &loser_hash)
         .unwrap();
-    assert!(!claimed, "a taken identifier must not be claimed twice");
+    assert!(
+        created.is_none(),
+        "a taken identifier must not be claimed twice"
+    );
 
     let found = store.find_by_identifier("bob").unwrap().unwrap();
     assert_eq!(found.0.id, 3, "the winner's user row must survive");
@@ -114,10 +117,13 @@ fn provision_rejects_a_duplicate_user_id_without_state_change() {
         .provision_user_with_password(TestUser::new(3, "bob"), "bob", &hash)
         .unwrap();
 
-    let claimed = store
+    let created = store
         .provision_user_with_password(TestUser::new(3, "cloned-row"), "cloned-row", &hash)
         .unwrap();
-    assert!(!claimed, "a duplicate user id must not be claimed twice");
+    assert!(
+        created.is_none(),
+        "a duplicate user id must not be claimed twice"
+    );
 
     assert!(
         store.find_by_identifier("cloned-row").unwrap().is_none(),

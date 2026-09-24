@@ -92,7 +92,6 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return 1; }
-    /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::new(MemoryStore::<User>::new())?;
@@ -137,7 +136,6 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return 1; }
-    /// #     fn email(&self) -> &str { return "user@example.com"; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// # let db = Arc::new(MemoryStore::<User>::new());

@@ -46,7 +46,6 @@ pub struct AuthStateEvent<T: AuthUser> {
 /// # impl AuthUser for User {
 /// #     type Id = u64;
 /// #     fn id(&self) -> u64 { return self.id; }
-/// #     fn email(&self) -> &str { return &self.name; }
 /// # }
 /// # fn main() {
 /// on_auth_state_change::<User, _>(|event| {

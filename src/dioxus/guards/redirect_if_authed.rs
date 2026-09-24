@@ -36,7 +36,6 @@ use super::{GuardRedirect, guard_body, initial_redirect_state};
 /// # impl dioxus_auth::AuthUser for User {
 /// #     type Id = u64;
 /// #     fn id(&self) -> u64 { return 1; }
-/// #     fn email(&self) -> &str { return "user@example.com"; }
 /// # }
 /// ```
 ///

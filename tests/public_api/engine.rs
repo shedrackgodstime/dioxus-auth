@@ -17,7 +17,6 @@ use dioxus_auth::{
 #[derive(Debug, Clone)]
 struct VersionedUser {
     id: u64,
-    name: String,
     version: String,
 }
 
@@ -28,10 +27,6 @@ impl AuthUser for VersionedUser {
         return self.id;
     }
 
-    fn email(&self) -> &str {
-        return &self.name;
-    }
-
     fn session_auth_hash(&self) -> Option<&str> {
         return Some(&self.version);
     }
@@ -40,10 +35,9 @@ impl AuthUser for VersionedUser {
 impl VersionedUser {
     /// Creates a versioned test user.
     #[must_use]
-    fn new(id: u64, name: impl Into<String>, version: impl Into<String>) -> Self {
+    fn new(id: u64, version: impl Into<String>) -> Self {
         return Self {
             id,
-            name: name.into(),
             version: version.into(),
         };
     }
@@ -157,11 +151,7 @@ fn custom_hasher_override_is_used_for_verification() {
 #[test]
 fn login_rotates_sessions_bound_to_a_previous_credential_version() {
     let store = MemoryStore::<VersionedUser>::new();
-    store.insert_user_with_password(
-        VersionedUser::new(1, "alice", "v1"),
-        "alice",
-        String::from("pw"),
-    );
+    store.insert_user_with_password(VersionedUser::new(1, "v1"), "alice", String::from("pw"));
     let store = Arc::new(store);
     let engine = AuthEngine::builder(Arc::clone(&store), Arc::clone(&store))
         .hasher(IdentityHasher)
@@ -169,7 +159,7 @@ fn login_rotates_sessions_bound_to_a_previous_credential_version() {
         .expect("engine construction must succeed");
 
     let (_, first) = engine.login("alice", "pw").unwrap();
-    store.insert_user(VersionedUser::new(1, "alice", "v2"));
+    store.insert_user(VersionedUser::new(1, "v2"));
 
     let (_, second) = engine.login("alice", "pw").unwrap();
 

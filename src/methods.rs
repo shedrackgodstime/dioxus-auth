@@ -33,7 +33,6 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::new(MemoryStore::<User>::new())?;
@@ -95,7 +94,6 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::new(MemoryStore::<User>::new())?;
@@ -135,7 +133,6 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::new(MemoryStore::<User>::new())?;
@@ -154,7 +151,8 @@ where
 
     /// Signs up by provisioning credentials, then signing in.
     ///
-    /// The caller builds the user; the store provisions the credential row.
+    /// The caller supplies creation input; the store builds the user row,
+    /// owning construction and identity, and hands back what it persisted.
     /// Taken and free identifiers cost the same and fail with the same
     /// `InvalidCredentials`, so identifier state is not observable. Probing
     /// any identifier counts toward the same rate gate as sign-in. Works over
@@ -170,7 +168,6 @@ where
     /// # impl AuthUser for User {
     /// #     type Id = u64;
     /// #     fn id(&self) -> u64 { return self.id; }
-    /// #     fn email(&self) -> &str { return &self.name; }
     /// # }
     /// # fn main() -> Result<(), dioxus_auth::AuthError> {
     /// let auth = Auth::new(MemoryStore::<User>::new())?;
@@ -189,7 +186,7 @@ where
         &self,
         identifier: &str,
         password: &str,
-        user: D::User,
+        input: D::NewUser,
     ) -> Result<(D::User, SessionId), AuthError> {
         match self.engine.check_rate_limit(identifier, None) {
             Ok(()) => {}
@@ -204,12 +201,12 @@ where
             match self
                 .engine
                 .user_store()
-                .provision_user_with_password(user, &normalized, &hash)
+                .provision_user_with_password(input, &normalized, &hash)
             {
                 Ok(provisioned) => provisioned,
                 Err(error) => return Err(error),
             };
-        if !provisioned {
+        let Some(_created) = provisioned else {
             // The identifier or id row is taken. The hash above is the work
             // the free path spends before storage; one dummy verifier pass
             // matches the work the free path spends after it, so user state
@@ -219,7 +216,9 @@ where
             self.engine.record_rate_limit_failure(identifier, None);
             self.engine.dummy_verify(password);
             return Err(AuthError::InvalidCredentials);
-        }
+        };
+        // The created row is re-read by the sign-in below, so the returned
+        // user always comes from the single credential-lookup path.
         return self.sign_in_email(identifier, password);
     }
 }
