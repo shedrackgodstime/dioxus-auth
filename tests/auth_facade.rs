@@ -490,6 +490,56 @@ fn attach_imported_links_a_second_login_without_plaintext() {
 }
 
 #[test]
+fn resolving_store_answers_from_the_loader_not_the_rows() {
+    use dioxus_auth::ResolvingStore;
+    use std::collections::HashMap;
+
+    let inner = MemoryStore::<TestUser>::new();
+    inner.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let directory = HashMap::from([(1u64, TestUser::new(1, "loader-alice"))]);
+    let store = ResolvingStore::new(inner, move |key| {
+        return Ok(directory.get(key).cloned());
+    });
+    let auth = Auth::new(store).expect("facade must construct over resolving stores");
+
+    let (user, session) = auth
+        .sign_in_email("alice", "pw")
+        .expect("sign-in must succeed");
+    assert_eq!(
+        user.name, "loader-alice",
+        "resolution flows through the loader, never around it"
+    );
+    let current = auth
+        .engine()
+        .validate_session(&session)
+        .expect("validation must succeed");
+    assert!(
+        current.is_some(),
+        "engine validation stays subject-level underneath"
+    );
+    return;
+}
+
+#[test]
+fn resolving_store_unresolvable_keys_fail_closed() {
+    use dioxus_auth::ResolvingStore;
+
+    let inner = MemoryStore::<TestUser>::new();
+    inner.insert_user_with_password(TestUser::new(1, "alice"), "alice", hash_password("pw"));
+    let store = ResolvingStore::new(inner, |_: &u64| {
+        return Ok(None::<TestUser>);
+    });
+    let auth = Auth::new(store).expect("facade must construct over resolving stores");
+
+    assert_eq!(
+        auth.sign_in_email("alice", "pw")
+            .expect_err("unresolvable keys must fail"),
+        AuthError::InvalidCredentials
+    );
+    return;
+}
+
+#[test]
 fn memory_generates_identity_from_name_only_input() {
     let auth = Auth::memory().expect("quickstart must construct");
     let (first, _) = auth

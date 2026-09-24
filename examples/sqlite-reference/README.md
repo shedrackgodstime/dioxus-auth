@@ -38,6 +38,13 @@ never commits. Taken identifiers, unknown keys, and mismatches fail
 indistinguishably with identical hashing work; re-claiming the same
 identifier for the same key succeeds so retries self-heal.
 
+To stop repeating the row writer every signup, configure it once with
+`ConfiguredSignup::new(claims, insert_fn)` and call `sign_up` with
+application data. Same ownership, same transaction discipline, less
+repetition. Raw `signup_with` (and the transaction primitive
+underneath) remains available for one-off shapes that do not merit
+configuration.
+
 ## Schema: apply this yourself
 
 `users` (application rows, zero auth columns) · `accounts` (credentials,

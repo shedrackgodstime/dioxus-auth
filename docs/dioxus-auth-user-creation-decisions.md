@@ -194,8 +194,14 @@ session/association machinery.
    auth-space material for attach/migration flows; resolve failures
    fail closed (`InvalidCredentials`) while store outages propagate.
    Method tag deferred past v0.1.
-4. `AuthUser` fate (loader contract in outer layers vs dissolve into
-   `app_ref` + app helpers).
+4. `AuthUser` fate: KEEP as the resolver-backed UI model marker. Verified:
+   the engine never reads it (any `U` works with loaders), Dioxus and
+   server layers hold it nominally (no method calls, no `Id`
+   projections), and exactly one consumer needs the accessor (generic
+   resolving stores keying app rows). Dissolving would scatter the same
+   bounds unnamed across every use site. Trimmed as part of the verdict:
+   dead `session_auth_hash` hook removed, unused `Hash` bound dropped
+   from all four identifier types.
 5. Auth-ID type and generation (counter vs random vs UUID).
 6. Options-channel shape: IMPLEMENTED as one struct (`SignupOptions`
    with explicit id override; canonical verb unchanged beside

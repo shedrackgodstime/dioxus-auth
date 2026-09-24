@@ -6,11 +6,13 @@
 
 pub(crate) mod default;
 pub(crate) mod memory;
+pub(crate) mod resolving;
 pub(crate) mod session;
 pub(crate) mod user;
 
 pub use default::DefaultStore;
 pub use memory::MemoryStore;
+pub use resolving::ResolvingStore;
 pub use session::SessionStore;
 pub use user::{
     AuthSubject, CredentialStore, StoredCredential, SubjectClaim, SubjectStore, UserStore,

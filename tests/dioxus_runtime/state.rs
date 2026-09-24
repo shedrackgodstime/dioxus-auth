@@ -217,6 +217,24 @@ fn login_and_logout_route_through_the_single_engine_spelling() {
         fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
             return Ok(None);
         }
+
+        fn attach_current(
+            &self,
+            _session_id: &SessionId,
+            _identifier: &str,
+            _password: &str,
+        ) -> Result<(), AuthError> {
+            return Ok(());
+        }
+
+        fn change_password(
+            &self,
+            _identifier: &str,
+            _current_password: &str,
+            _new_password: &str,
+        ) -> Result<(), AuthError> {
+            return Ok(());
+        }
     }
 
     let counts = Arc::new(CountingEngine::default());

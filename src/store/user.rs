@@ -10,7 +10,6 @@
 //! never fold case or whitespace themselves.
 
 use std::fmt::Debug;
-use std::hash::Hash;
 
 use crate::error::AuthError;
 use crate::user::AuthUser;
@@ -47,9 +46,9 @@ pub type StoredCredential<AuthId, AppRef> = Option<(AuthSubject<AuthId, AppRef>,
 /// subject, never off individual credentials.
 pub trait SubjectStore: Debug + Send + Sync {
     /// Subject identifier type.
-    type AuthId: Clone + Eq + Hash + Debug + Send + Sync + 'static;
+    type AuthId: Clone + Eq + Debug + Send + Sync + 'static;
     /// Opaque application key type.
-    type AppRef: Clone + Eq + Hash + Debug + Send + Sync + 'static;
+    type AppRef: Clone + Eq + Debug + Send + Sync + 'static;
     /// Per-store signup material (new fields, existing refs, or nothing).
     type AppSetup;
 

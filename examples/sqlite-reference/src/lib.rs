@@ -25,6 +25,7 @@
 //! with default lints, where `needless_return` would fire.
 
 use std::fmt;
+use std::marker::PhantomData;
 use std::path::Path;
 
 use parking_lot::Mutex;
@@ -763,6 +764,35 @@ impl EmailClaims {
         Ok(())
     }
 
+    /// Signs up with custom application data in your transaction.
+    ///
+    /// One call for the whole unit: runs your row writer, then claims the
+    /// credential for the key it returns, all inside your transaction.
+    /// Your writer owns your columns entirely (any shape your table has);
+    /// auth never sees them. On any error, roll back: the row and the
+    /// credential vanish together, so retries never strand orphans.
+    ///
+    /// The application key is `i64` here because this reference stores keys
+    /// in `INTEGER` columns. Other key types need per-deployment storage
+    /// decisions, which is exactly what the copy-paste file is for: fork
+    /// it. Raw storage traits remain for anything further out.
+    ///
+    /// # Errors
+    /// Returns your writer's error as-is, or claim failures per
+    /// [`claim`](Self::claim). On any error, roll back.
+    pub fn signup_with<D>(
+        &self,
+        tx: &Transaction<'_>,
+        email: &str,
+        password: &str,
+        data: D,
+        insert: impl FnOnce(&Transaction<'_>, D) -> Result<i64, AuthError>,
+    ) -> Result<i64, AuthError> {
+        let app_key = insert(tx, data)?;
+        self.claim(tx, email, password, app_key)?;
+        Ok(app_key)
+    }
+
     /// Burns one verifier pass so failure branches cost what hits cost.
     fn dummy_verify(&self, password: &str) {
         let _ = self.hasher.verify(password, &self.dummy_hash);
@@ -780,5 +810,65 @@ impl EmailClaims {
         if let Some(limiter) = &self.limiter {
             limiter.record_success(identifier);
         }
+    }
+}
+
+/// High-level signup orchestration over caller-owned transactions.
+///
+/// Bundles claim machinery with one application row writer, configured
+/// once and reused for every signup: the writer stays application-owned
+/// SQL (any columns the application table has), the transaction stays
+/// caller-owned, and `sign_up` composes both atomically. This is the
+/// configured-persistence step toward `sign_up_email(email, password,
+/// UserData)`: same ownership, less repetition. Raw `signup_with` (and
+/// the transaction primitive underneath) remain available for one-off
+/// shapes that do not merit configuration.
+///
+/// The application key is `i64` here for the same storage reason as
+/// [`signup_with`](EmailClaims::signup_with): this reference stores keys
+/// in `INTEGER` columns.
+#[derive(Debug)]
+pub struct ConfiguredSignup<D, F> {
+    claims: EmailClaims,
+    insert: F,
+    _data: PhantomData<D>,
+}
+
+impl<D, F> ConfiguredSignup<D, F>
+where
+    F: Fn(&Transaction<'_>, D) -> Result<i64, AuthError>,
+{
+    /// Configures high-level signup from claim machinery and a row writer.
+    ///
+    /// The writer inserts one application row and returns its key; it runs
+    /// inside the signup transaction on every call. No new traits, tables,
+    /// or auth vocabulary: plain caller code, stored once.
+    pub fn new(claims: EmailClaims, insert: F) -> Self {
+        Self {
+            claims,
+            insert,
+            _data: PhantomData,
+        }
+    }
+
+    /// Signs up with application data in your transaction.
+    ///
+    /// Runs the configured writer, then claims the credential for the
+    /// returned key, all inside your transaction. On any error, roll
+    /// back: the row and the credential vanish together.
+    ///
+    /// # Errors
+    /// Returns the writer's error as-is, or claim failures per
+    /// [`claim`](EmailClaims::claim). On any error, roll back.
+    pub fn sign_up(
+        &self,
+        tx: &Transaction<'_>,
+        email: &str,
+        password: &str,
+        data: D,
+    ) -> Result<i64, AuthError> {
+        let app_key = (self.insert)(tx, data)?;
+        self.claims.claim(tx, email, password, app_key)?;
+        Ok(app_key)
     }
 }

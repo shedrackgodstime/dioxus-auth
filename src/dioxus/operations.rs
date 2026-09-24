@@ -52,6 +52,33 @@ pub trait AuthOperations<T: AuthUser>: Send + Sync {
     /// Mirrors [`AuthEngine::validate_session`](crate::engine::AuthEngine::validate_session).
     #[must_use = "the validated user must be used"]
     fn validate(&self, session_id: &SessionId) -> Result<Option<T>, AuthError>;
+
+    /// Attaches a credential to the session owner's subject.
+    ///
+    /// Privilege comes from session possession: only the session owner can
+    /// extend their own logins.
+    ///
+    /// # Errors
+    /// Mirrors [`AuthEngine::attach_current`](crate::engine::AuthEngine::attach_current).
+    #[must_use = "session credential attachment must be handled"]
+    fn attach_current(
+        &self,
+        session_id: &SessionId,
+        identifier: &str,
+        password: &str,
+    ) -> Result<(), AuthError>;
+
+    /// Changes a password after proving the current one.
+    ///
+    /// # Errors
+    /// Mirrors [`AuthEngine::change_password`](crate::engine::AuthEngine::change_password).
+    #[must_use = "a failed password change must be handled"]
+    fn change_password(
+        &self,
+        identifier: &str,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<(), AuthError>;
 }
 
 impl<C, S> AuthOperations<C::User> for AuthEngine<C, S>
@@ -73,6 +100,24 @@ where
 
     fn logout(&self, session_id: &SessionId) -> Result<(), AuthError> {
         return Self::logout(self, session_id);
+    }
+
+    fn attach_current(
+        &self,
+        session_id: &SessionId,
+        identifier: &str,
+        password: &str,
+    ) -> Result<(), AuthError> {
+        return Self::attach_current(self, session_id, identifier, password);
+    }
+
+    fn change_password(
+        &self,
+        identifier: &str,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<(), AuthError> {
+        return Self::change_password(self, identifier, current_password, new_password);
     }
 
     fn validate(&self, session_id: &SessionId) -> Result<Option<C::User>, AuthError> {

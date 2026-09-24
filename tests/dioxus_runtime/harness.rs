@@ -135,6 +135,24 @@ impl AuthOperations<TestUser> for UnknownEngine {
     fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
         return Err(AuthError::Internal(String::from("transport down")));
     }
+
+    fn attach_current(
+        &self,
+        _session_id: &SessionId,
+        _identifier: &str,
+        _password: &str,
+    ) -> Result<(), AuthError> {
+        return Err(AuthError::Internal(String::from("transport down")));
+    }
+
+    fn change_password(
+        &self,
+        _identifier: &str,
+        _current_password: &str,
+        _new_password: &str,
+    ) -> Result<(), AuthError> {
+        return Err(AuthError::Internal(String::from("transport down")));
+    }
 }
 
 /// An erased engine that definitively rejects every token it is asked about.
@@ -155,6 +173,24 @@ impl AuthOperations<TestUser> for RejectedEngine {
     }
 
     fn validate(&self, _session_id: &SessionId) -> Result<Option<TestUser>, AuthError> {
+        return Err(AuthError::InvalidCredentials);
+    }
+
+    fn attach_current(
+        &self,
+        _session_id: &SessionId,
+        _identifier: &str,
+        _password: &str,
+    ) -> Result<(), AuthError> {
+        return Err(AuthError::InvalidCredentials);
+    }
+
+    fn change_password(
+        &self,
+        _identifier: &str,
+        _current_password: &str,
+        _new_password: &str,
+    ) -> Result<(), AuthError> {
         return Err(AuthError::InvalidCredentials);
     }
 }

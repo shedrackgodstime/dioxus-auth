@@ -71,6 +71,7 @@ mod readme_mirror {}
 
 pub mod auth;
 pub mod builder;
+pub(crate) mod credentials;
 #[cfg(feature = "dioxus")]
 pub mod dioxus;
 pub mod engine;
@@ -122,8 +123,8 @@ pub use crate::status::{AuthStatus, SessionId};
 
 #[doc(inline)]
 pub use crate::store::{
-    AuthSubject, CredentialStore, DefaultStore, MemoryStore, SessionStore, StoredCredential,
-    SubjectClaim, SubjectStore, UserStore,
+    AuthSubject, CredentialStore, DefaultStore, MemoryStore, ResolvingStore, SessionStore,
+    StoredCredential, SubjectClaim, SubjectStore, UserStore,
 };
 
 #[doc(inline)]
@@ -146,8 +147,9 @@ pub use crate::dioxus::{
 #[cfg(feature = "dioxus-fullstack")]
 #[doc(inline)]
 pub use crate::dioxus::{
-    AuthLayer, AuthService, LoginRequest, RequireAuthLayer, RequireAuthService, ServerAuthConfig,
-    ServerAuthContext, ServerError, current_user, require_user, server_init, write_session_cookie,
+    AttachRequest, AuthLayer, AuthService, ChangePasswordRequest, LoginRequest, RequireAuthLayer,
+    RequireAuthService, ServerAuthConfig, ServerAuthContext, ServerError, current_user,
+    require_user, server_init, write_session_cookie,
 };
 // Note: `fullstack_server_fns!` needs no re-export: `#[macro_export]` places it
 // at the crate root, where `dioxus_auth::fullstack_server_fns!(…)` finds it.

@@ -45,9 +45,9 @@ pub use storage::TokenStorageHandle;
 
 #[cfg(feature = "dioxus-fullstack")]
 pub use server::{
-    AuthLayer, AuthService, LoginRequest, RequireAuthLayer, RequireAuthService, ServerAuthConfig,
-    ServerAuthContext, ServerError, current_user, fullstack_server_fns, require_user, server_init,
-    write_session_cookie,
+    AttachRequest, AuthLayer, AuthService, ChangePasswordRequest, LoginRequest, RequireAuthLayer,
+    RequireAuthService, ServerAuthConfig, ServerAuthContext, ServerError, current_user,
+    fullstack_server_fns, require_user, server_init, write_session_cookie,
 };
 
 #[cfg(feature = "dioxus-fullstack")]

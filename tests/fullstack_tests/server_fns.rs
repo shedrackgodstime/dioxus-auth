@@ -7,11 +7,46 @@
 use std::sync::Arc;
 
 use dioxus_auth::{
-    AuthEngine, AuthEngineHandle, AuthError, CookieConfig, MemoryStore, SameSite, ServerAuthConfig,
-    ServerAuthContext, ServerError, SessionId, current_user, require_user, write_session_cookie,
+    AttachRequest, AuthEngine, AuthEngineHandle, AuthError, ChangePasswordRequest, CookieConfig,
+    MemoryStore, SameSite, ServerAuthConfig, ServerAuthContext, ServerError, SessionId,
+    current_user, require_user, write_session_cookie,
 };
 use dioxus_fullstack::http;
 use dioxus_fullstack::{FullstackContext, ServerFnError};
+
+/// Runs the generated attach server function in a fullstack scope.
+pub async fn run_attach(
+    parts: http::request::Parts,
+    identifier: &str,
+    password: &str,
+) -> Result<(), ServerFnError> {
+    let request = AttachRequest {
+        identifier: String::from(identifier),
+        password: String::from(password),
+    };
+    let context = FullstackContext::new(parts);
+    return context
+        .scope(async move { return super::dioxus_auth_attach(request).await })
+        .await;
+}
+
+/// Runs the generated change-password server function in a fullstack scope.
+pub async fn run_change_password(
+    parts: http::request::Parts,
+    identifier: &str,
+    current_password: &str,
+    new_password: &str,
+) -> Result<(), ServerFnError> {
+    let request = ChangePasswordRequest {
+        identifier: String::from(identifier),
+        current_password: String::from(current_password),
+        new_password: String::from(new_password),
+    };
+    let context = FullstackContext::new(parts);
+    return context
+        .scope(async move { return super::dioxus_auth_change_password(request).await })
+        .await;
+}
 
 use super::common::TestUser;
 use super::dioxus_auth_session;
@@ -108,6 +143,86 @@ async fn logout_clears_the_cookie_for_guests() {
     let (result, headers) = run_logout(parts).await;
     result.expect("guest logout must succeed");
     assert_cleared_cookie(&headers);
+}
+
+#[tokio::test]
+async fn attach_adds_a_login_for_the_session_owner() {
+    let config = config();
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (_login, headers) = run_login(parts, IDENTIFIER, PASSWORD).await;
+    let token = response_token(&headers, COOKIE);
+
+    let parts = request_parts(Some(&config), COOKIE, Some(&token), "/api/auth/attach");
+    run_attach(parts, "ada-2", PASSWORD)
+        .await
+        .expect("attach must succeed");
+
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (login, _) = run_login(parts, "ada-2", PASSWORD).await;
+    let user = login.expect("attached login must work");
+    assert_eq!(user.id, USER_ID);
+}
+
+#[tokio::test]
+async fn attach_rejects_guests_with_401() {
+    let config = config();
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/attach");
+    let result = run_attach(parts, "ada-2", PASSWORD).await;
+    assert_eq!(error_code(&result), 401);
+}
+
+#[tokio::test]
+async fn attach_rejects_taken_identifiers() {
+    let config = config();
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (_login, headers) = run_login(parts, IDENTIFIER, PASSWORD).await;
+    let token = response_token(&headers, COOKIE);
+
+    let parts = request_parts(Some(&config), COOKIE, Some(&token), "/api/auth/attach");
+    let result = run_attach(parts, IDENTIFIER, PASSWORD).await;
+    assert_eq!(error_code(&result), 401);
+}
+
+#[tokio::test]
+async fn change_password_rotates_the_credential_over_the_wire() {
+    let config = config();
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (_login, headers) = run_login(parts, IDENTIFIER, PASSWORD).await;
+    let token = response_token(&headers, COOKIE);
+
+    let parts = request_parts(
+        Some(&config),
+        COOKIE,
+        Some(&token),
+        "/api/auth/change-password",
+    );
+    run_change_password(parts, IDENTIFIER, PASSWORD, "rotated")
+        .await
+        .expect("change must succeed");
+
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (stale, _) = run_login(parts, IDENTIFIER, PASSWORD).await;
+    assert_eq!(error_code(&stale), 401);
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (fresh, _) = run_login(parts, IDENTIFIER, "rotated").await;
+    assert!(fresh.is_ok());
+}
+
+#[tokio::test]
+async fn change_password_rejects_wrong_current_password() {
+    let config = config();
+    let parts = request_parts(Some(&config), COOKIE, None, "/api/auth/login");
+    let (_login, headers) = run_login(parts, IDENTIFIER, PASSWORD).await;
+    let token = response_token(&headers, COOKIE);
+
+    let parts = request_parts(
+        Some(&config),
+        COOKIE,
+        Some(&token),
+        "/api/auth/change-password",
+    );
+    let result = run_change_password(parts, IDENTIFIER, "wrong", "rotated").await;
+    assert_eq!(error_code(&result), 401);
 }
 
 #[tokio::test]

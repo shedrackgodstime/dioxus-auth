@@ -209,6 +209,81 @@ impl<U: AuthUser + Clone> ServerAuthContext<U> {
             Err(_) => return Err(blocking_cancelled()),
         }
     }
+
+    /// Attaches a credential to the calling session's subject.
+    ///
+    /// Privilege comes from the session cookie: only the session owner can
+    /// extend their own logins. The engine call runs off the async worker
+    /// via the blocking boundary.
+    ///
+    /// When the configuration sets expected origins, the request must carry
+    /// a present, matching `Origin` header: attach is state-changing.
+    ///
+    /// # Errors
+    /// Returns the engine's attach error verbatim, or `ServerError::Engine`
+    /// wrapping `AuthError::Csrf` for a missing or mismatched origin.
+    #[must_use = "session credential attachment must be handled"]
+    pub async fn attach_current(
+        &self,
+        token: &SessionId,
+        identifier: &str,
+        password: &str,
+    ) -> Result<(), ServerError> {
+        match check_state_changing_origin(self.config.cookie()) {
+            Ok(()) => {}
+            Err(error) => return Err(error),
+        }
+        let engine = Arc::clone(self.engine().engine());
+        let token = token.clone();
+        let identifier = String::from(identifier);
+        let password = String::from(password);
+        let outcome =
+            run_blocking(move || return engine.attach_current(&token, &identifier, &password))
+                .await;
+        match outcome {
+            Ok(Ok(())) => return Ok(()),
+            Ok(Err(error)) => return Err(ServerError::from(error)),
+            Err(_) => return Err(blocking_cancelled()),
+        }
+    }
+
+    /// Changes a password after proving the current one.
+    ///
+    /// The engine call (Argon2 verification, session revocation, secret
+    /// rotation) runs off the async worker via the blocking boundary.
+    ///
+    /// When the configuration sets expected origins, the request must carry
+    /// a present, matching `Origin` header: rotation is state-changing.
+    ///
+    /// # Errors
+    /// Returns the engine's change-password error verbatim, or
+    /// `ServerError::Engine` wrapping `AuthError::Csrf` for a missing or
+    /// mismatched origin.
+    #[must_use = "a failed password change must be handled"]
+    pub async fn change_password(
+        &self,
+        identifier: &str,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<(), ServerError> {
+        match check_state_changing_origin(self.config.cookie()) {
+            Ok(()) => {}
+            Err(error) => return Err(error),
+        }
+        let engine = Arc::clone(self.engine().engine());
+        let identifier = String::from(identifier);
+        let current_password = String::from(current_password);
+        let new_password = String::from(new_password);
+        let outcome = run_blocking(move || {
+            return engine.change_password(&identifier, &current_password, &new_password);
+        })
+        .await;
+        match outcome {
+            Ok(Ok(())) => return Ok(()),
+            Ok(Err(error)) => return Err(ServerError::from(error)),
+            Err(_) => return Err(blocking_cancelled()),
+        }
+    }
 }
 
 /// Maps a blocking task lost to runtime shutdown to an internal error.

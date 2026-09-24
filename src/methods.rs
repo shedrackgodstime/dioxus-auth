@@ -107,27 +107,9 @@ where
         current_password: &str,
         new_password: &str,
     ) -> Result<(), AuthError> {
-        let subject = match self
+        return self
             .engine
-            .verify_password(identifier, current_password, None)
-        {
-            Ok(subject) => subject,
-            Err(error) => return Err(error),
-        };
-        let hash = match self.engine.hasher().hash(new_password) {
-            Ok(hash) => hash,
-            Err(error) => return Err(error),
-        };
-        match self.engine.revoke_all_subject_sessions(&subject.auth_id) {
-            Ok(()) => {}
-            Err(error) => return Err(error),
-        }
-        match self.engine.store().rotate_secret(&subject.auth_id, &hash) {
-            Ok(()) => {}
-            Err(error) => return Err(error),
-        }
-        self.engine.record_rate_limit_success(identifier, None);
-        return Ok(());
+            .change_password(identifier, current_password, new_password);
     }
 
     /// Signs out by revoking one raw wire session.

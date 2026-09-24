@@ -229,7 +229,18 @@ Trust-based hash import is implemented (`import_email_credential` plus
 `attach_imported_email_credential` plus tx-side `claim_hash`; migration
 and admin only, no verification possible, no session minted, empty
 hashes rejected; pre-hashed secrets stay out of `SignupOptions` by
-design). No loader configuration object, no adapters beyond the
+design). High-level custom-model orchestration is implemented as
+`EmailClaims::signup_with` plus configured `ConfiguredSignup`: one call
+running a caller-supplied row writer plus the claim inside the caller
+transaction (arbitrary custom columns proven, writer reuse proven,
+rollback without orphans proven); i64-keyed reference scope with other
+key types as documented escape-hatch forks. Settings surface is
+complete over the network (`dioxus_auth_attach` and
+`dioxus_auth_change_password` generated fns with redacted inputs,
+session-bound privilege, origin gating, and status-code tests). Split
+architectures mount the full UI through `ResolvingStore` (subject store
+plus one loader closure; loader answers proven to win over store rows
+end to end, unresolvable keys fail closed). No adapters beyond the
 bundled stores.
 
 Architecturally decided (settled, implementation pending or in flight):

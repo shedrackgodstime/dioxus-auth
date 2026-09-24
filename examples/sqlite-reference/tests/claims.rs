@@ -261,6 +261,152 @@ fn imported_hash_claims_verify_against_the_original_password() {
     teardown(&path);
 }
 
+/// Custom application data with a custom column: auth never sees either.
+struct NewProfile {
+    name: String,
+    role: String,
+}
+
+/// Writes a profile row through caller-owned SQL, returning its key.
+fn insert_profile(tx: &rusqlite::Transaction<'_>, profile: NewProfile) -> Result<i64, AuthError> {
+    let NewProfile { name, role } = profile;
+    tx.execute(
+        "INSERT INTO users (email, name, role) VALUES (?1, ?2, ?3)",
+        params![format!("{name}@example.com"), name, role],
+    )
+    .map_err(|error| AuthError::Internal(error.to_string()))?;
+    Ok(tx.last_insert_rowid())
+}
+
+#[test]
+fn signup_with_custom_columns_needs_no_auth_mapping() {
+    let (store, path) = setup();
+    let claims = EmailClaims::new().expect("claim machinery must construct");
+    let mut raw = rusqlite::Connection::open(&path).expect("raw connection must open");
+    raw.execute(
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT ''",
+        [],
+    )
+    .expect("custom column must land");
+    let tx = raw.transaction().expect("dev transaction must open");
+    let app_key = claims
+        .signup_with(
+            &tx,
+            "alice@example.com",
+            "s3cret-password",
+            NewProfile {
+                name: String::from("alice"),
+                role: String::from("admin"),
+            },
+            insert_profile,
+        )
+        .expect("orchestrated signup must succeed");
+    tx.commit().expect("commit must succeed");
+
+    let check = rusqlite::Connection::open(&path).expect("raw connection must open");
+    let role: String = check
+        .query_row("SELECT role FROM users WHERE id = ?1", [app_key], |row| {
+            row.get(0)
+        })
+        .expect("custom column must read back");
+    assert_eq!(role, "admin", "application data stays application-owned");
+    drop(check);
+    drop(store);
+    teardown(&path);
+}
+
+#[test]
+fn signup_with_rolls_back_custom_rows_on_taken_identifiers() {
+    let (_store, path) = setup();
+    let claims = EmailClaims::new().expect("claim machinery must construct");
+    let mut raw = rusqlite::Connection::open(&path).expect("raw connection must open");
+    raw.execute(
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT ''",
+        [],
+    )
+    .expect("custom column must land");
+    let tx = raw.transaction().expect("dev transaction must open");
+    insert_user(&tx, 1, "alice@example.com", "alice");
+    claims
+        .claim(&tx, "alice@example.com", "s3cret-password", 1)
+        .expect("seed claim must succeed");
+    tx.commit().expect("commit must succeed");
+
+    let mut raw = rusqlite::Connection::open(&path).expect("raw connection must open");
+    let tx = raw.transaction().expect("dev transaction must open");
+    let raced = claims.signup_with(
+        &tx,
+        "alice@example.com",
+        "other-password",
+        NewProfile {
+            name: String::from("mallory"),
+            role: String::from("admin"),
+        },
+        insert_profile,
+    );
+    assert_eq!(
+        raced.expect_err("taken identifier must fail"),
+        AuthError::InvalidCredentials
+    );
+    drop(tx);
+
+    let check = rusqlite::Connection::open(&path).expect("raw connection must open");
+    let orphans: i64 = check
+        .query_row(
+            "SELECT COUNT(*) FROM users WHERE name = 'mallory'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count must succeed");
+    assert_eq!(orphans, 0, "rolled-back custom rows must not strand");
+    teardown(&path);
+}
+
+#[test]
+fn configured_signup_reuses_one_writer_across_signups() {
+    use sqlite_reference::ConfiguredSignup;
+
+    let (_store, path) = setup();
+    let claims = EmailClaims::new().expect("claim machinery must construct");
+    let signup = ConfiguredSignup::new(claims, insert_profile);
+    rusqlite::Connection::open(&path)
+        .expect("raw connection must open")
+        .execute(
+            "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT ''",
+            [],
+        )
+        .expect("custom column must land once");
+
+    for (email, name, role) in [
+        ("alice@example.com", "alice", "admin"),
+        ("bob@example.com", "bob", "member"),
+    ] {
+        let mut raw = rusqlite::Connection::open(&path).expect("raw connection must open");
+        let tx = raw.transaction().expect("dev transaction must open");
+        let key = signup
+            .sign_up(
+                &tx,
+                email,
+                "s3cret-password",
+                NewProfile {
+                    name: String::from(name),
+                    role: String::from(role),
+                },
+            )
+            .expect("configured signup must succeed");
+        tx.commit().expect("commit must succeed");
+        assert!(key > 0, "the application key comes back for routing");
+    }
+
+    let store = Arc::new(SqliteStore::open(&path).expect("reopen must succeed"));
+    let auth = Auth::from_engine(engine_for(&store));
+    let (user, _) = auth
+        .sign_in_email("bob@example.com", "s3cret-password")
+        .expect("configured signup must authenticate");
+    assert_eq!(user.name, "bob");
+    teardown(&path);
+}
+
 #[test]
 fn claim_probing_counts_toward_the_shared_rate_gate() {
     use std::time::Duration;

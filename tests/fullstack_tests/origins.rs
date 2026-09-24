@@ -9,6 +9,7 @@ use super::fullstack_shared::{
     run_logout, run_session,
 };
 use super::harness::{COOKIE, ORIGIN, origin_parts, origins_config};
+use super::server_fns::{run_attach, run_change_password};
 
 #[tokio::test]
 async fn login_accepts_a_matching_origin() {
@@ -71,6 +72,42 @@ async fn logout_rejects_a_missing_origin_with_403() {
 
     let parts = origin_parts(&config, Some(&token), "/api/auth/logout", None);
     let (result, _) = run_logout(parts).await;
+    assert_eq!(error_code(&result), 403);
+}
+
+#[tokio::test]
+async fn attach_rejects_a_mismatched_origin_with_403() {
+    let config = origins_config();
+    let login_parts = origin_parts(&config, None, "/api/auth/login", Some(ORIGIN));
+    let (login, headers) = run_login(login_parts, IDENTIFIER, PASSWORD).await;
+    assert!(login.is_ok());
+    let token = response_token(&headers, COOKIE);
+
+    let parts = origin_parts(
+        &config,
+        Some(&token),
+        "/api/auth/attach",
+        Some("https://evil.example.com"),
+    );
+    let result = run_attach(parts, "ada-2", PASSWORD).await;
+    assert_eq!(error_code(&result), 403);
+}
+
+#[tokio::test]
+async fn change_password_rejects_a_mismatched_origin_with_403() {
+    let config = origins_config();
+    let login_parts = origin_parts(&config, None, "/api/auth/login", Some(ORIGIN));
+    let (login, headers) = run_login(login_parts, IDENTIFIER, PASSWORD).await;
+    assert!(login.is_ok());
+    let token = response_token(&headers, COOKIE);
+
+    let parts = origin_parts(
+        &config,
+        Some(&token),
+        "/api/auth/change-password",
+        Some("https://evil.example.com"),
+    );
+    let result = run_change_password(parts, IDENTIFIER, PASSWORD, "rotated").await;
     assert_eq!(error_code(&result), 403);
 }
 

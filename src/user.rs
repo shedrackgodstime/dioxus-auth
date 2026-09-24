@@ -1,7 +1,6 @@
 //! User identity trait.
 
 use std::fmt::Debug;
-use std::hash::Hash;
 
 /// The application user contract for resolver-backed stores.
 ///
@@ -18,7 +17,7 @@ use std::hash::Hash;
 /// secret itself, so no per-user hook is needed for rotation.
 pub trait AuthUser: Clone + Debug + Send + Sync + 'static {
     /// Stable application-row identifier (e.g. `u64`, `Uuid`, `String`).
-    type Id: Clone + Eq + Hash + Debug + Send + Sync + 'static;
+    type Id: Clone + Eq + Debug + Send + Sync + 'static;
 
     /// Returns the application-row identifier.
     #[must_use]
