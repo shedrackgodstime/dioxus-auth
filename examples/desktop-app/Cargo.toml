@@ -18,3 +18,7 @@ dioxus-core = "0.7"
 dioxus-signals = "0.7"
 dioxus-desktop = "0.7"
 quickstart = { path = "../quickstart" }
+
+# Own workspace root: excluded from the parent workspace (see its `exclude`)
+# so the GUI dependency splits never touch the main lockfile or gates.
+[workspace]
