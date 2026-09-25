@@ -1,116 +1,159 @@
+[workspace]
+members = [".", "examples/sqlite-reference", "examples/quickstart", "examples/fullstack-app"]
+# desktop-app is excluded, not removed: its GUI dependency tree duplicates
+# transitive versions workspace-wide, tripping multiple_crate_versions for
+# every member. It carries its own lockfile and its own CI job instead.
+exclude = ["examples/desktop-app"]
+
+[workspace.dependencies]
+parking_lot = "0.12"
+
+[lints]
+rust = { warnings = "deny", ambiguous_negative_literals = "deny", missing_debug_implementations = "deny", redundant_imports = "deny", redundant_lifetimes = "deny", trivial_numeric_casts = "deny", unused_lifetimes = "deny" }
+# multiple_crate_versions is unactionable here: fresh resolves of the dioxus
+# 0.7 tree span ecosystem transitions (rand 0.9/0.10, thiserror 1/2) no
+# version requirement on our side can unify. Direct-dependency duplication
+# stays a review item (proven clean); transitive churn is upstream's.
+clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny", implicit_return = "deny", multiple_crate_versions = { level = "allow", priority = 1 } }
+
 [package]
 name = "dioxus-auth"
 version = "0.1.0"
 edition = "2024"
+# MSRV applies to the core library (default features) and is CI-gated in the
+# dedicated "MSRV (1.85.0)" job (`cargo check/clippy --lib`). The `dioxus` and
+# `dioxus-fullstack` layers follow the Dioxus ecosystem's MSRV, which is higher
+# (upstream deps like yoke 0.8 under-declare their true rustc requirement), so
+# those layers are gated on stable only. See the comment block in
+# .github/workflows/ci.yml before touching this value.
 rust-version = "1.85"
 authors = ["Shedrack Godstime <shedrackgodstime@gmail.com>"]
 description = "Dioxus-native authentication and session management."
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/shedrackgodstime/dioxus-auth"
+homepage = "https://github.com/shedrackgodstime/dioxus-auth"
 documentation = "https://docs.rs/dioxus-auth"
 keywords = ["auth", "dioxus", "session", "axum"]
 categories = ["authentication", "web-programming"]
-# Packaging whitelist — every pattern is ROOT-ANCHORED on purpose.
-# Guarded by scripts/check-packaging.sh (CI job "Packaging guard"): keep the
-# whitelist there in sync when editing this list.
-# The previous `include = ["src/**", "crates/**", "Cargo.toml", "README.md",
-# "LICENSE*"]` used unanchored gitignore-style patterns: `README.md` and
-# `LICENSE*` matched those filenames at ANY depth, and the package walk
-# followed the per-clone `scratch/` and `.agent-rules/` symlinks — shipping
-# ~80 private knowledge-base files (vendored next-auth, agent rules) to
-# crates.io. Found via `cargo package --list` before the real 0.1.0 publish.
-#
-# - `crates/**` is gone: cargo auto-excludes workspace-member packages from
-#   the parent's tarball, so that entry never shipped anything (verified:
-#   zero `crates/` files in `cargo package --list`). `dioxus-auth-derive`
-#   stays dev-only and unpublished; its path-only dep on this crate has no
-#   version, so it could not be published as-is anyway.
-# - `tests/derive_auth_user.rs` is deliberately NOT listed: cargo strips the
-#   path-only dev-dependency from the published manifest, so the shipped
-#   test would not compile for anyone who vendors the crate. It still runs
-#   in this workspace (`cargo test --all-features`).
+# Packaging whitelist — every pattern is ROOT-ANCHORED on purpose. Unanchored
+# gitignore-style patterns match at ANY depth: `README.md` and `LICENSE*`
+# matched those filenames inside the per-clone `scratch/` and `.agent-rules/`
+# symlinks, which cargo's package walk follows even though git ignores them
+# (v1 shipped ~80 private KB files this way; found via scripts/check-packaging.sh
+# on 2026-09-21). Guarded by that script in the CI "Packaging" job — keep the
+# script whitelist in sync when editing this list.
 include = [
-    "/src/**",
-    "/tests/auth_lifecycle_integration.rs",
-    "/tests/concurrency_stress.rs",
-    "/tests/sqlite_integration.rs",
-    "/tests/transport_extract.rs",
-    "/examples/basic_auth.rs",
-    "/examples/sqlite_adapter.rs",
+    "/.github/workflows/ci.yml",
+    "/.gitignore",
     "/Cargo.toml",
-    "/README.md",
-    "/CHANGELOG.md",
+    "/LICENSE",
     "/LICENSE-MIT",
     "/LICENSE-APACHE",
+    "/README.md",
+    "/clippy.toml",
+    "/rustfmt.toml",
+    "/scripts/check-packaging.sh",
+    "/scripts/check-ssot.sh",
+    "/scripts/check-docs.sh",
+    "/scripts/verify.sh",
+    "/docs/README.md",
+    "/src/**",
 ]
 
-[workspace]
-members = ["crates/dioxus-auth-derive"]
-
-[workspace.lints.rust]
-# missing_docs is enforced via #![warn(missing_docs)] inside each lib target
-# (src/lib.rs, crates/dioxus-auth-derive/src/lib.rs) so tests and examples
-# are not held to library documentation standards.
-
-[workspace.lints.clippy]
-correctness = "deny"
-suspicious = "warn"
-style = "warn"
-complexity = "warn"
-perf = "warn"
-cargo = "warn"
-# Note: dioxus 0.7's own tree depends on both syn 2 (darling) and syn 3
-# (async-trait). clippy::multiple_crate_versions is allowed in src/lib.rs
-# because upstream duplication is not resolvable from this crate.
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-strip = true
-
 [features]
-default = ["dioxus"]
-dioxus = ["dep:dioxus"]
-dioxus-fullstack = ["dioxus", "dioxus/fullstack", "dep:http"]
-axum = ["dep:axum", "dep:tower", "dep:http"]
-
-[lints]
-workspace = true
+default = []
+dioxus = ["dep:dioxus", "dep:dioxus-core", "dep:dioxus-router", "dep:dioxus-signals"]
+dioxus-fullstack = ["dioxus", "dep:dioxus-fullstack", "dep:serde", "dep:axum", "dep:tower", "dep:tokio"]
+# Compile-phase gate for the server half of dioxus-fullstack-generated fns.
+# dioxus-fullstack's `#[server]`/`#[post]` macros expand the wire call under
+# `cfg(feature = "server")`; apps that declare their own fullstack fns must
+# declare the same-named feature (dioxus's convention, see the macro docs).
+server = ["dioxus-fullstack/server"]
 
 [dependencies]
 argon2 = { version = "0.5", default-features = false, features = ["std", "password-hash", "alloc"] }
+axum = { version = "0.8", optional = true }
+dioxus = { version = "0.7", optional = true, default-features = false, features = ["hooks", "signals", "macro", "html"] }
+dioxus-core = { version = "0.7", optional = true }
+dioxus-fullstack = { version = "0.7", optional = true }
+dioxus-router = { version = "0.7", optional = true, default-features = false, features = ["html"] }
+dioxus-signals = { version = "0.7", optional = true }
 hex = "0.4"
+parking_lot.workspace = true
 rand_core = { version = "0.6", features = ["std"] }
-serde = { version = "1", features = ["derive"] }
+rustc-hash = "2"
+serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10"
 thiserror = "2.0"
-dioxus = { version = "0.7", default-features = false, features = ["hooks", "signals", "macro", "html", "router"], optional = true }
-http = { version = "1", optional = true }
-axum = { version = "0.8", optional = true }
+tokio = { version = "1", optional = true, features = ["rt"] }
 tower = { version = "0.5", optional = true }
 
+# getrandom 0.2 (pulled by rand_core 0.6) needs its `js` feature to compile on
+# wasm32-unknown-unknown; without it `SessionId::generate` (OsRng) fails the
+# wasm build with a compile_error! inside getrandom itself.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
-serde_json = "1"
-wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["BroadcastChannel", "console", "Location", "MessageEvent", "Window", "Storage"] }
 
 [dev-dependencies]
-rusqlite = { version = "0.40", features = ["bundled"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-dioxus-auth-derive = { path = "./crates/dioxus-auth-derive" }
-serde_json = "1"
+dioxus-fullstack = { version = "0.7", features = ["server"] }
+dioxus-history = "0.7"
+dioxus-server = "0.7"
+http-body-util = "0.1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tower = { version = "0.5", features = ["util"] }
 
-[[example]]
-name = "basic_auth"
-required-features = ["dioxus"]
+[[test]]
+name = "auth_facade"
+path = "tests/auth_facade.rs"
+required-features = []
 
-[[example]]
-name = "sqlite_adapter"
+[[test]]
+name = "conformance_user_store"
+path = "tests/conformance/user_store.rs"
+
+[[test]]
+name = "conformance_password_store"
+path = "tests/conformance/password_store.rs"
+
+[[test]]
+name = "conformance_session_store"
+path = "tests/conformance/session_store.rs"
+
+[[test]]
+name = "concurrency_stress"
+path = "tests/concurrency_stress.rs"
+required-features = []
+
+[[test]]
+name = "core_engine"
+path = "tests/core_engine/main.rs"
+required-features = []
+
+[[test]]
+name = "public_api"
+path = "tests/public_api/main.rs"
+required-features = []
+
+[[test]]
+name = "dioxus_runtime"
+path = "tests/dioxus_runtime/main.rs"
 required-features = ["dioxus"]
 
 [[test]]
-name = "auth_lifecycle_integration"
-required-features = ["dioxus"]
+name = "fullstack_tests"
+path = "tests/fullstack_tests/main.rs"
+required-features = ["dioxus-fullstack", "server"]
+
+[[test]]
+name = "fullstack_global_tests"
+path = "tests/fullstack_global_tests.rs"
+required-features = ["dioxus-fullstack", "server"]
+
+# Compile-checked mirrors of the README quickstart snippets (review finding
+# N9): plain snippets must fail CI when the documented API drifts.
+[[test]]
+name = "readme_snippets"
+path = "tests/readme_snippets.rs"
+required-features = []

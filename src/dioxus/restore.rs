@@ -1,156 +1,62 @@
-//! Restore-error classification — did the server say "no session", or did we
-//! fail to find out?
+//! Network-aware session restore classification.
 //!
-//! Research 23 §2.1: treating *any* restore error as logout turns a boot-time
-//! Wi-Fi/DNS blip into a guest session. The fix is to classify failures before
-//! acting on them:
+//! A restore attempt can fail for reasons that mean fundamentally different
+//! things for the user's session: the server may have *definitively* answered
+//! "no session for this token", or the attempt may have failed before any
+//! answer was learnable (storage read failure, rate limiting, transport
+//! errors). Treating both as "signed out" silently demotes live sessions to
+//! guest on a mere network blip.
 //!
-//! | Probe result | Meaning | Client status |
-//! |---|---|---|
-//! | `Ok(Some(user))` | session valid | `Authenticated` |
-//! | `Ok(None)` | server said no session | `Unauthenticated` |
-//! | `Err` → [`RestoreVerdict::Unauthenticated`] | server definitively rejected | `Unauthenticated` |
-//! | `Err` → [`RestoreVerdict::Unknown`] | network/transport — we learned nothing | **stay `Loading`** |
-//!
-//! The crate provides [`RestoreClassify`] for `ServerFnError` (feature
-//! `dioxus-fullstack`). Apps with a custom whoami error type implement the
-//! one method themselves:
-//!
-//! ```rust,ignore
-//! struct MyError;
-//! impl RestoreClassify for MyError {
-//!     fn restore_verdict(&self) -> RestoreVerdict {
-//!         RestoreVerdict::Unknown // or inspect your own shapes
-//!     }
-//! }
-//! ```
-//!
-//! Requires the `dioxus-fullstack` feature.
+//! [`RestoreVerdict`] and [`RestoreClassify`] carry that distinction so
+//! callers (the provider, or an application retry loop) can keep the context
+//! in [`AuthStatus::Loading`](crate::status::AuthStatus::Loading) while the
+//! outcome is genuinely unknown.
 
-/// What a restore failure *means*.
-///
-/// The distinction drives the client state machine: only a **definitive**
-/// server rejection may demote the user to a guest; anything else must leave
-/// the previous status untouched so a network blip can't log anyone out.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+use crate::error::AuthError;
+
+/// Outcome of a session restore attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestoreVerdict {
-    /// The server responded and definitively said "not authenticated"
-    /// (an HTTP 401/403-class answer).
+    /// A stored token was present and the engine accepted it; the context is
+    /// authenticated.
+    Restored,
+    /// Definitive rejection: the context is a guest.
+    ///
+    /// No usable token existed, or the server definitively rejected the
+    /// stored token.
     Unauthenticated,
-    /// We failed to learn anything (DNS failure, timeout, offline, 5xx,
-    /// malformed response, …). The session state is *unknown*, not absent.
+    /// The attempt failed before the session question could be answered. The
+    /// context is deliberately left in
+    /// [`AuthStatus::Loading`](crate::status::AuthStatus::Loading); callers
+    /// may retry.
     Unknown,
 }
 
-/// Classify a restore failure for [`crate::use_auth_restore`].
+/// Classifies a restore failure as rejection or unknown.
 ///
-/// Implemented by this crate for `ServerFnError`; implement it for your own
-/// whoami error type when you don't use the built-in server functions.
+/// Did the server definitively say "no session", or did the attempt fail
+/// without an answer?
+///
+/// Implemented for [`AuthError`] in-crate. Applications wrapping remote
+/// engines whose transport errors surface through other error types implement
+/// this trait for their own error and feed the verdict to
+/// [`AuthContext::restore`](crate::dioxus::AuthContext::restore) semantics.
 pub trait RestoreClassify {
-    /// Did the server definitively reject the session, or did we fail to
-    /// find out? See the [module docs](self) for the decision table.
+    /// The restore outcome implied by this failure.
+    #[must_use = "the restore verdict must be handled"]
     fn restore_verdict(&self) -> RestoreVerdict;
 }
 
-#[cfg(feature = "dioxus-fullstack")]
-mod sfe_impl {
-    use super::{RestoreClassify, RestoreVerdict};
-    use dioxus::fullstack::{RequestError, ServerFnError};
-
-    fn verdict_for_status(code: u16) -> RestoreVerdict {
-        // 401/403 = the server *answered* and rejected the credential.
-        // Everything else (5xx, 404-ish routing oddities, …) tells us nothing
-        // about session validity.
-        match code {
-            401 | 403 => RestoreVerdict::Unauthenticated,
-            _ => RestoreVerdict::Unknown,
-        }
-    }
-
-    impl RestoreClassify for ServerFnError {
-        fn restore_verdict(&self) -> RestoreVerdict {
-            match self {
-                // The client never reached a valid answer: connect/timeout/
-                // send/decode failures are all "unknown"; only an actual
-                // rejection status is definitive.
-                ServerFnError::Request(RequestError::Status(_, code)) => verdict_for_status(*code),
-                // The server fn itself reported a failure — trust its code.
-                ServerFnError::ServerError { code, .. } => verdict_for_status(*code),
-                // Transport/serialization noise: nothing definitive.
-                _ => RestoreVerdict::Unknown,
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        fn classify(err: ServerFnError) -> RestoreVerdict {
-            err.restore_verdict()
-        }
-
-        #[test]
-        fn definitive_rejections_are_unauthenticated() {
-            // Client saw a rejection status.
-            assert_eq!(
-                classify(ServerFnError::Request(RequestError::Status(
-                    "unauthorized".into(),
-                    401
-                ))),
-                RestoreVerdict::Unauthenticated
-            );
-            assert_eq!(
-                classify(ServerFnError::Request(RequestError::Status(
-                    "forbidden".into(),
-                    403
-                ))),
-                RestoreVerdict::Unauthenticated
-            );
-            // Server fn reported a rejection code.
-            assert_eq!(
-                classify(ServerFnError::ServerError {
-                    message: "restore failed: unauthenticated".into(),
-                    code: 401,
-                    details: None,
-                }),
-                RestoreVerdict::Unauthenticated
-            );
-        }
-
-        #[test]
-        fn network_and_transport_failures_are_unknown() {
-            assert_eq!(
-                classify(ServerFnError::Request(RequestError::Connect(
-                    "dns error: temporary failure in name resolution".into()
-                ))),
-                RestoreVerdict::Unknown
-            );
-            assert_eq!(
-                classify(ServerFnError::Request(RequestError::Timeout(
-                    "request timed out".into()
-                ))),
-                RestoreVerdict::Unknown
-            );
-            assert_eq!(
-                classify(ServerFnError::Request(RequestError::Decode(
-                    "bad body".into()
-                ))),
-                RestoreVerdict::Unknown
-            );
-            // A 5xx from the server fn tells us nothing about the session.
-            assert_eq!(
-                classify(ServerFnError::ServerError {
-                    message: "db down".into(),
-                    code: 500,
-                    details: None,
-                }),
-                RestoreVerdict::Unknown
-            );
-            assert_eq!(
-                classify(ServerFnError::Deserialization("oops".into())),
-                RestoreVerdict::Unknown
-            );
-        }
+impl RestoreClassify for AuthError {
+    fn restore_verdict(&self) -> RestoreVerdict {
+        return match self {
+            // The engine compared the stored token against session state and
+            // answered "no such session". That is a definitive rejection.
+            Self::InvalidCredentials | Self::PasswordHashError => RestoreVerdict::Unauthenticated,
+            // Rate limiting, CSRF rejection and internal errors (the channel
+            // transport failures surface through) all mean the token was
+            // never judged. The session question is still open.
+            Self::RateLimited | Self::Csrf | Self::Internal(_) => RestoreVerdict::Unknown,
+        };
     }
 }

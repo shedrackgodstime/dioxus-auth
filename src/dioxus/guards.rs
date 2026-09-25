@@ -1,92 +1,56 @@
-//! Pure routing-guard logic: outcome evaluation and declarative guard rules.
-//! The rendering component lives in [`crate::dioxus::components::RouteGate`].
+//! Route guards: component-level redirection driven by auth state.
 
-use crate::session::AuthStatus;
+mod redirect_if_authed;
+mod require_auth;
 
-/// The outcome of evaluating route access permissions.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GuardOutcome<R> {
-    /// Access granted; render the child route.
-    Allow,
-    /// Authentication state is still loading (e.g. session restore in progress).
-    /// Renders the fallback view without triggering a premature redirect.
-    Pending,
-    /// Access denied; redirect the user to the target route.
-    Redirect(R),
+pub use redirect_if_authed::{RedirectIfAuthed, RedirectIfAuthedProps};
+pub use require_auth::{RequireAuth, RequireAuthProps};
+
+use ::dioxus::prelude::{Element, Signal, rsx};
+use ::dioxus_router::Navigator;
+use ::dioxus_signals::{ReadableExt, WritableExt};
+
+/// The initial redirect flag for a guard: no redirect has been issued yet.
+const fn initial_redirect_state() -> bool {
+    return false;
 }
 
-impl<R> GuardOutcome<R> {
-    /// Returns `true` when access is granted and the child route should render.
-    #[must_use]
-    pub fn is_allowed(&self) -> bool {
-        matches!(self, Self::Allow)
-    }
-
-    /// Returns `true` while authentication state is still loading.
-    #[must_use]
-    pub fn is_pending(&self) -> bool {
-        matches!(self, Self::Pending)
-    }
-
-    /// Returns `true` when access is denied and a redirect was produced.
-    #[must_use]
-    pub fn is_redirect(&self) -> bool {
-        matches!(self, Self::Redirect(_))
-    }
+/// Navigation state for a guard redirect.
+pub struct GuardRedirect {
+    /// Where to navigate when the rendered subtree is not at home.
+    pub to: String,
+    /// Whether a redirect was already issued for the current period.
+    pub issued: Signal<bool>,
+    /// Router navigator used to issue the redirect.
+    pub navigator: Navigator,
 }
 
-/// Evaluates whether the current user is authenticated, otherwise redirects.
+/// Shared redirect-or-render body for the route guards.
 ///
-/// `AuthStatus::Loading` maps to [`GuardOutcome::Pending`] so guards never
-/// redirect during session restore (no login flash, no false bounce).
-#[must_use]
-pub fn require_auth<R: Clone, User>(status: &AuthStatus<User>, redirect_to: R) -> GuardOutcome<R> {
-    match status {
-        AuthStatus::Loading => GuardOutcome::Pending,
-        AuthStatus::Authenticated(_) => GuardOutcome::Allow,
-        AuthStatus::Unauthenticated => GuardOutcome::Redirect(redirect_to),
-    }
-}
-
-/// Evaluates whether the user is already authenticated (e.g. on `/login` or `/register`),
-/// redirecting them to a dashboard if signed in.
-#[must_use]
-pub fn redirect_if_authed<R: Clone, User>(
-    status: &AuthStatus<User>,
-    redirect_to: R,
-) -> GuardOutcome<R> {
-    match status {
-        AuthStatus::Loading => GuardOutcome::Pending,
-        AuthStatus::Authenticated(_) => GuardOutcome::Redirect(redirect_to),
-        AuthStatus::Unauthenticated => GuardOutcome::Allow,
-    }
-}
-
-/// Trait for custom declarative route protection rules.
+/// `at_home` is true when the current state matches the rendered subtree:
+/// authenticated for [`RequireAuth`], guest for [`RedirectIfAuthed`].
 ///
-/// Implement this to encode domain authorization (roles, subscriptions) on top
-/// of the built-in [`RequireAuth`] / [`RedirectIfAuthed`] guards.
-pub trait RouteGuard<R, User>: Send + Sync + 'static {
-    /// Evaluate the current auth status into a routing outcome.
-    fn evaluate(&self, status: &AuthStatus<User>) -> GuardOutcome<R>;
-}
-
-/// Declarative route guard requiring an active authenticated session.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RequireAuth<R>(pub R);
-
-impl<R: Clone + Send + Sync + 'static, User: 'static> RouteGuard<R, User> for RequireAuth<R> {
-    fn evaluate(&self, status: &AuthStatus<User>) -> GuardOutcome<R> {
-        require_auth(status, self.0.clone())
+/// The returned [`Element`](::dioxus::prelude::Element) is itself `#[must_use]`,
+/// so call sites cannot silently drop the rendered subtree.
+pub fn guard_body(at_home: bool, children: Element, redirect: GuardRedirect) -> Element {
+    if at_home {
+        let mut issued = redirect.issued;
+        *issued.write() = false;
+        return rsx! {
+            {children}
+        };
     }
-}
 
-/// Declarative route guard redirecting authenticated users away from guest pages.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RedirectIfAuthed<R>(pub R);
-
-impl<R: Clone + Send + Sync + 'static, User: 'static> RouteGuard<R, User> for RedirectIfAuthed<R> {
-    fn evaluate(&self, status: &AuthStatus<User>) -> GuardOutcome<R> {
-        redirect_if_authed(status, self.0.clone())
+    if !*redirect.issued.read() {
+        let mut issued = redirect.issued;
+        *issued.write() = true;
+        if redirect.navigator.push(redirect.to).is_some() {
+            // reason: `push` reports `Some` only for external targets the
+            // router cannot open. Unlatch so a later render retries instead of
+            // sitting blank forever with the redirect marked done.
+            *issued.write() = false;
+        }
     }
+
+    return rsx!();
 }

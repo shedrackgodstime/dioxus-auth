@@ -1,0 +1,5 @@
+# Clippy configuration for dioxus-auth.
+#
+# All lint levels live in Cargo.toml `[lints]`; this file exists to satisfy the
+# RULES requirement of a `clippy.toml` at the crate root and carries no
+# per-lint overrides by design.

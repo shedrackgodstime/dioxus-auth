@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [v2]
   pull_request:
-    branches: [main]
+    branches: [v2]
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,65 +14,49 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    strategy:
-      # A red cell must not cancel the rest of the matrix: the M1
-      # (--no-default-features) failure silently hid whether every other
-      # combination was green.
-      fail-fast: false
-      matrix:
-        rust:
-          - stable
-          - 1.85.0
-        features:
-          - "--features dioxus"
-          - "--features dioxus-fullstack"
-          - "--features axum"
-          - "--no-default-features"
-        exclude:
-          - rust: 1.85.0
-            features: "--features dioxus-fullstack"
-        include:
-          # `test_flags` merges into the generated stable × dioxus cell; the
-          # plain `features` key stays clippy-friendly (clippy always adds
-          # --all-targets itself).
-          - rust: stable
-            features: "--features dioxus"
-            test_flags: "--all-targets --features dioxus"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
-      - name: Check format
-        run: cargo fmt -- --check
-      # --all-targets everywhere: the M1 bug class (test-only code broken
-      # under one feature combination) is invisible to clippy without it.
-      - name: Check clippy
-        run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
-      - name: Run tests
-        run: cargo test ${{ matrix.test_flags || matrix.features }}
-      - name: Run doc tests
-        if: matrix.test_flags == '--all-targets --features dioxus'
-        run: cargo test --doc --features dioxus
+      # Full matrix lives in scripts/verify.sh (single home: local runs call
+      # the same script, so the two cannot diverge). `--pedantic` is a clippy
+      # flag and belongs after the `--` separator; before it, cargo rejects
+      # the argument and the step never runs.
+      - name: Verify (fmt, clippy x3, tests x3, doctests, docs, ssot)
+        run: bash scripts/verify.sh
 
-  wasm:
-    name: wasm32 check
+  msrv:
+    # MSRV gate: the core library (default features) must build on the
+    # declared rust-version. Scoped to `--lib` because upstream dioxus deps
+    # (yoke 0.8 declares rust-version "1.82" but its proc-macro needs an API
+    # stabilized after 1.85) cannot compile on 1.85 even under MSRV-aware
+    # resolution. The dioxus/fullstack layers follow Dioxus's MSRV, not ours,
+    # and are fully gated on stable above.
+    name: MSRV (1.85.0)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
-          targets: wasm32-unknown-unknown
-      # Mirrors the local release gate: wasm-only code (cross-tab sync,
-      # broadcaster emit, return-to capture, token storage) is invisible to
-      # host builds — sync.rs shipped broken once because of exactly that.
-      - name: Check wasm32 (dioxus feature)
-        run: cargo check --target wasm32-unknown-unknown --features dioxus
+          toolchain: 1.85.0
+          components: rustfmt, clippy
+      - name: Check format
+        run: cargo fmt -- --check
+      - name: Check library on MSRV
+        run: cargo check --lib
+      - name: Check clippy on MSRV
+        run: cargo clippy --lib -- -D warnings -W clippy::pedantic
 
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    env:
+      # No lockfile is committed: jobs resolve dependencies fresh, and
+      # MSRV-aware resolution (rust-version = 1.85) would pin `time` below
+      # the RUSTSEC-2026-0009 fix line (>= 0.3.47). Advisories must be
+      # judged on the newest resolution, not the MSRV-capped one.
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: allow
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -81,16 +65,9 @@ jobs:
       - name: Run cargo audit
         run: cargo audit
       - name: Install cargo-deny
-        # Pinned to the locally-verified version: unpinned installs compile
-        # the latest release, whose config parsing/behavior can drift under
-        # the pinned deny.toml (this job went red once with no local repro).
         run: cargo install cargo-deny --version 0.19.8 --locked
       - name: Run cargo deny
-        # Full check (advisories + bans + licenses + sources) against the
-        # committed policy; without --config cargo-deny looks for deny.toml in
-        # the repo root and silently runs its default policy. Graph flags are
-        # top-level in cargo-deny 0.19.x.
-        run: cargo deny --all-features check --config .cargo/deny.toml
+        run: cargo deny check --config .cargo/deny.toml
 
   doc:
     name: Documentation
@@ -99,26 +76,63 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Generate docs
-        run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus
+        run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps
+      # The dioxus/fullstack modules are cfg-gated: default-only docs never
+      # resolve their intra-doc links (e.g. AuthProvider, erased_engine).
+      # The fullstack build subsumes the dioxus layer.
+      - name: Generate docs (fullstack)
+        run: RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --no-deps --features dioxus-fullstack
 
   packaging:
-    name: Packaging guard
+    name: Packaging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # The src/-coverage check compares `cargo package --list` against
-          # `git ls-files src/` — a default shallow checkout is fine, but
-          # fetch-depth 0 keeps git ls-files authoritative if history-based
-          # tooling is ever added.
-          fetch-depth: 0
+      - name: Check packaging
+        run: bash scripts/check-packaging.sh
+
+  wasm:
+    name: Wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # Fails the build if `cargo package --list` contains any file outside
-      # the packaging whitelist (unanchored include globs once shipped ~80
-      # private files via the per-clone scratch/ and .agent-rules/ symlinks),
-      # if the include list silently dropped tracked src/ files or canary
-      # targets, or if private paths appear. Script whitelist must stay in
-      # sync with [package] include in Cargo.toml — both have comments
-      # pointing at each other.
-      - name: Check packaging whitelist
-        run: ./scripts/check-packaging.sh
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Check wasm target
+        run: cargo check --target wasm32-unknown-unknown
+
+  desktop:
+    # The desktop example lives outside the workspace (see `exclude` in
+    # Cargo.toml): its GUI tree duplicates transitive versions workspace-wide
+    # and trips multiple_crate_versions for every member. It carries its own
+    # lockfile; check hard-gates, clippy stays advisory.
+    name: Desktop example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install WebKit system libraries
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev
+      - name: Check desktop example
+        working-directory: examples/desktop-app
+        run: cargo check
+      - name: Clippy desktop example (advisory)
+        working-directory: examples/desktop-app
+        continue-on-error: true
+        run: cargo clippy --all-targets -- -D warnings -W clippy::pedantic
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Run coverage
+        run: cargo tarpaulin --out Xml --fail-under 60

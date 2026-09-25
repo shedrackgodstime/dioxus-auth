@@ -1,62 +1,100 @@
+//! Root auth provider component.
+
 use std::sync::Arc;
 
-use dioxus::prelude::*;
+use ::dioxus::prelude::{Element, Props, component, rsx, use_context_provider, use_signal};
 
-use crate::dioxus::context::Auth;
-use crate::session::AuthStatus;
-use crate::transport::TokenStorage;
+use crate::auth::Auth;
+use crate::error::ErrorCode;
+use crate::status::{AuthStatus, SessionId};
+use crate::store::{CredentialStore, SessionStore, SubjectStore, UserStore};
+use crate::token::MemoryTokenStorage;
 
-/// Opaque reference to a [`TokenStorage`] implementation that can be passed as a
-/// Dioxus prop. Equality is pointer-based so components using it do not re-render
-/// when the underlying storage has not changed.
-#[derive(Clone)]
-pub struct TokenStorageRef(Arc<dyn TokenStorage>);
+use super::context::{AuthContext, AuthSignals};
+use super::operations::AuthEngineHandle;
+use super::storage::TokenStorageHandle;
 
-impl PartialEq for TokenStorageRef {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl TokenStorageRef {
-    /// Wrap an [`Arc<dyn TokenStorage>`] for use as a Dioxus prop.
-    pub fn new(storage: Arc<dyn TokenStorage>) -> Self {
-        Self(storage)
-    }
-
-    /// Access the inner [`TokenStorage`].
-    pub fn into_inner(self) -> Arc<dyn TokenStorage> {
-        self.0
-    }
-}
-
-/// Inject the reactive authentication context into the component tree.
+/// Provides authentication state to the subtree.
 ///
-/// # Loading-forever footgun (G5)
+/// Mount once above the router with the single [`Auth`] entry point; storage
+/// and restore wiring are the provider's responsibility, so beginner code
+/// never names a handle. The provider restores the identity from a
+/// default in-memory token storage on its first render, and hands a reactive
+/// [`AuthContext`] to every descendant. Mount a
+/// [`Router`](dioxus_router::Router) outside (or above) it so route guards can
+/// navigate.
 ///
-/// The initial status defaults to [`AuthStatus::Loading`], and the restore
-/// flow only leaves `Loading` when the whoami probe returns a *decided*
-/// result — a network-classified error deliberately keeps the app loading so
-/// a boot-time blip can't log anyone out (research 23 §2.1). The flip side:
-/// if the probe never resolves and the app never retries, guards stay
-/// `Pending` and [`crate::SignedIn`]/[`crate::SignedOut`] render **nothing**
-/// for as long as the status is `Loading`. Always pair the restore probe
-/// with a retry affordance (e.g. restart it on window focus or
-/// `visibilitychange`), and render explicit pending UI via
-/// [`crate::RouteGate`]'s `fallback` so "still deciding" never looks like a
-/// blank screen.
+/// Restore runs synchronously inside the first render, including server-side
+/// renders. The engine core is synchronous by design, so a store that blocks
+/// (network, disk) stalls the render worker while restore runs; SSR
+/// deployments with remote stores must front them with a fast local cache or
+/// accept the stall. Server functions do not share this path: they dispatch
+/// through the blocking boundary instead.
+///
+/// # Examples
+///
+/// ```no_run
+/// use dioxus::prelude::*;
+/// use dioxus_auth::{AuthProvider, Auth};
+///
+/// # fn App() -> Element {
+/// #     let auth = match Auth::memory() {
+/// #         Ok(auth) => auth,
+/// #         Err(_) => return rsx! { "auth unavailable" },
+/// #     };
+/// #     let children = rsx! { "signed in" };
+/// rsx! {
+///     AuthProvider { auth: auth, children: children }
+/// }
+/// # }
+/// ```
+///
+/// # Panics
+/// Panics when the default Argon2id hasher cannot pre-compute the
+/// timing-defense dummy hash.
 #[component]
-pub fn AuthProvider<User: Clone + PartialEq + 'static>(
-    #[props(default)] initial_status: Option<AuthStatus<User>>,
-    #[props(default)] token_storage: Option<TokenStorageRef>,
-    children: Element,
-) -> Element {
-    let status_signal = use_context_provider(|| Signal::new(initial_status.unwrap_or_default()));
-    let auth = Auth::new(status_signal);
-    let _auth = use_context_provider(|| auth);
-    let _storage = use_context_provider(|| token_storage.map(|r| r.into_inner()));
+pub fn AuthProvider<D>(auth: Auth<D>, children: Element) -> Element
+where
+    D: CredentialStore + SessionStore<AuthId = <D as SubjectStore>::AuthId> + UserStore + 'static,
+{
+    let engine: AuthEngineHandle<D::User> = auth
+        .erased_engine
+        .clone()
+        .unwrap_or_else(|| return AuthEngineHandle::from(Arc::clone(auth.engine())));
+    let token_storage = auth.token_storage.unwrap_or_else(|| {
+        return TokenStorageHandle::new(MemoryTokenStorage::new());
+    });
 
-    rsx! {
-        {children}
+    let status = use_signal(|| {
+        return AuthStatus::<D::User>::Loading;
+    });
+    let token = use_signal(|| {
+        return None::<SessionId>;
+    });
+    let token_persisted = use_signal(|| {
+        return false;
+    });
+    let restore_unavailable = use_signal(|| {
+        return None::<ErrorCode>;
+    });
+    let context = use_context_provider(|| {
+        return AuthContext::new(
+            engine,
+            token_storage,
+            &AuthSignals::new(status, token, token_persisted, restore_unavailable),
+        );
+    });
+
+    if context.is_loading() {
+        // reason: the first render settles the identity from storage; a
+        // definitive rejection demotes to guest, while an unknown outcome
+        // (storage failure, rate limit, transport error) leaves the tree in
+        // Loading with the failure recorded, so `session_state()` reports
+        // `Unavailable` and `restart()` can be used to ask again.
+        let _verdict = context.restore();
     }
+
+    return rsx! {
+        {children}
+    };
 }

@@ -1,0 +1,237 @@
+//! Central authentication flow orchestrator.
+
+use std::fmt;
+use std::sync::Arc;
+
+use parking_lot::Mutex;
+
+use crate::builder::AuthEngineBuilder;
+use crate::error::AuthError;
+use crate::rate_limit::RateLimiter;
+use crate::security::PasswordHasher;
+use crate::session::Session;
+use crate::store::session::SessionStore;
+use crate::store::user::{AuthSubject, CredentialStore};
+
+/// Options for [`AuthEngine::login_with_options`].
+///
+/// Fields are private; read them through the accessors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LoginOptions<'a> {
+    ip_address: Option<&'a str>,
+    user_agent: Option<&'a str>,
+}
+
+impl<'a> LoginOptions<'a> {
+    /// Creates empty login options.
+    #[must_use]
+    pub const fn new() -> Self {
+        return Self {
+            ip_address: None,
+            user_agent: None,
+        };
+    }
+
+    /// Client IP address for session activity tracking and the per-IP
+    /// rate-limit dimension.
+    #[must_use]
+    pub const fn ip_address(&self) -> Option<&'a str> {
+        return self.ip_address;
+    }
+
+    /// Client user agent for session activity tracking.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<&'a str> {
+        return self.user_agent;
+    }
+
+    /// Sets the client IP address.
+    #[must_use = "the returned options must be used"]
+    pub const fn with_ip_address(mut self, ip_address: Option<&'a str>) -> Self {
+        self.ip_address = ip_address;
+        return self;
+    }
+
+    /// Sets the client user agent.
+    #[must_use = "the returned options must be used"]
+    pub const fn with_user_agent(mut self, user_agent: Option<&'a str>) -> Self {
+        self.user_agent = user_agent;
+        return self;
+    }
+}
+/// Arc-wrapped subject callback set by the builder.
+pub type SubjectCallback<AuthId, AppRef> = Arc<dyn Fn(&AuthSubject<AuthId, AppRef>) + Send + Sync>;
+
+/// An authenticated subject paired with its freshly minted session.
+///
+/// The engine's login-shaped return: who was proven plus the session that
+/// proves it on the wire.
+pub type AuthenticatedPair<AuthId, AppRef> = (AuthSubject<AuthId, AppRef>, Session<AuthId>);
+
+/// Renders the six store/hasher/config fields shared by [`AuthEngine`] and
+/// [`AuthEngineBuilder`](crate::builder::AuthEngineBuilder) debug output.
+macro_rules! shared_auth_debug_fields {
+    ($debug:expr, $target:expr) => {
+        $debug
+            .field("store", &$target.store)
+            .field("sessions", &$target.sessions)
+            .field("hasher", &$target.hasher)
+            .field("session_ttl_secs", &$target.session_ttl_secs)
+            .field("idle_timeout_secs", &$target.idle_timeout_secs)
+            .field("single_active_session", &$target.single_active_session)
+    };
+}
+
+pub(crate) use shared_auth_debug_fields;
+
+/// Central authentication flow orchestrator.
+///
+/// Encapsulates credential verification with timing-attack mitigation,
+/// CSPRNG session generation, session validation, expiration checks, and
+/// session revocation. Works on auth-space subjects throughout: the
+/// application model never enters.
+///
+/// Method implementations are split across the `login`, `logout`, `validate`,
+/// and `hooks` modules and attached here as inherent methods.
+///
+/// `Clone` clones the shared `Arc` handles and copies the plain scalar fields;
+/// it does not clone the inner stores or hasher.
+#[derive(Clone)]
+pub struct AuthEngine<C, S>
+where
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
+{
+    pub(crate) store: Arc<C>,
+    pub(crate) sessions: Arc<S>,
+    pub(crate) hasher: Arc<dyn PasswordHasher>,
+    pub(crate) session_ttl_secs: u64,
+    pub(crate) idle_timeout_secs: Option<u64>,
+    pub(crate) single_active_session: bool,
+    pub(crate) on_sign_in: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    pub(crate) on_sign_out: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    pub(crate) on_session_validated: Option<SubjectCallback<C::AuthId, C::AppRef>>,
+    pub(crate) rate_limiter: Option<Arc<dyn RateLimiter>>,
+    /// Pre-computed Argon2-encoded hash of a constant dummy password.
+    ///
+    /// Used by [`AuthEngine::login`] when the identifier is not found, so the
+    /// verifier runs a real Argon2 verification on miss and the miss/hit paths
+    /// take indistinguishable time. This closes the user-enumeration timing
+    /// side-channel.
+    pub(crate) dummy_hash: String,
+    /// Clock producing the current UNIX timestamp in seconds.
+    pub(crate) now: Arc<dyn Fn() -> u64 + Send + Sync>,
+    /// Serializes the save-then-rotate window of [`AuthEngine::login`].
+    ///
+    /// The session save and rotation (single-active enforcement,
+    /// stale-credential sweep) must land as one step: two logins racing
+    /// through the window would otherwise both survive, breaking
+    /// single-active enforcement exactly when it matters. The guard is held
+    /// across store calls only, never across user hooks, which may call back
+    /// into the engine. Process-local: distributed deployments need the same
+    /// atomicity from their session store transaction.
+    pub(crate) login_lock: Arc<Mutex<()>>,
+}
+
+impl<C, S> fmt::Debug for AuthEngine<C, S>
+where
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // reason: the dummy hash is a constant and the clock is a closure; both
+        // are irrelevant for debugging and are elided.
+        let mut debug = f.debug_struct("AuthEngine");
+        return shared_auth_debug_fields!(&mut debug, self)
+            .field("on_sign_in", &self.on_sign_in.is_some())
+            .field("on_sign_out", &self.on_sign_out.is_some())
+            .field("on_session_validated", &self.on_session_validated.is_some())
+            .field("rate_limiter", &self.rate_limiter)
+            .field("dummy_hash", &self.dummy_hash.len())
+            .field("now", &"<clock>")
+            .field("login_lock", &"<mutex>")
+            .finish();
+    }
+}
+
+impl<C, S> AuthEngine<C, S>
+where
+    C: CredentialStore,
+    S: SessionStore<AuthId = C::AuthId>,
+{
+    /// Creates a new [`AuthEngine`] with the default Argon2id hasher and
+    /// 7-day session TTL.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dioxus_auth::{AuthEngine, DefaultStore};
+    /// # use std::sync::Arc;
+    /// # fn main() -> Result<(), dioxus_auth::AuthError> {
+    /// let store = Arc::new(DefaultStore::new());
+    /// let engine = AuthEngine::new(Arc::clone(&store), store)?;
+    /// assert_eq!(engine.session_ttl_secs(), 60 * 60 * 24 * 7);
+    /// # return Ok(());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns `AuthError` if the default hasher cannot pre-compute the
+    /// timing-defense dummy hash.
+    #[must_use = "the constructed engine must be used"]
+    pub fn new(store: Arc<C>, sessions: Arc<S>) -> Result<Self, AuthError> {
+        return Self::builder(store, sessions).build();
+    }
+
+    /// Starts configuring an [`AuthEngine`] via [`AuthEngineBuilder`].
+    #[must_use = "builder configuration must be completed with `.build()`"]
+    pub fn builder(store: Arc<C>, sessions: Arc<S>) -> AuthEngineBuilder<C, S> {
+        return AuthEngineBuilder::new(store, sessions);
+    }
+
+    /// Accesses the underlying auth store.
+    #[must_use]
+    pub fn store(&self) -> &C {
+        return &self.store;
+    }
+
+    /// Accesses the underlying session store.
+    #[must_use]
+    pub fn session_store(&self) -> &S {
+        return &self.sessions;
+    }
+
+    /// Accesses the configured `PasswordHasher`.
+    #[must_use]
+    pub fn hasher(&self) -> &dyn PasswordHasher {
+        return &*self.hasher;
+    }
+
+    /// Configured session time-to-live in seconds.
+    #[must_use]
+    pub const fn session_ttl_secs(&self) -> u64 {
+        return self.session_ttl_secs;
+    }
+
+    /// Configured idle timeout in seconds.
+    #[must_use]
+    pub const fn idle_timeout_secs(&self) -> Option<u64> {
+        return self.idle_timeout_secs;
+    }
+
+    /// Whether single active session is enforced.
+    #[must_use]
+    pub const fn single_active_session(&self) -> bool {
+        return self.single_active_session;
+    }
+}
+
+/// Current UNIX timestamp in seconds.
+///
+/// Returns `0` if the system clock predates the Unix epoch.
+#[must_use]
+pub fn now_unix() -> u64 {
+    return std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| return duration.as_secs());
+}

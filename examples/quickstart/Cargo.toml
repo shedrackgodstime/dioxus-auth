@@ -1,0 +1,21 @@
+[package]
+name = "quickstart"
+version = "0.1.0"
+edition = "2024"
+description = "Minimal Dioxus client app on dioxus-auth: login form, guarded route, SSR-rendered tests."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shedrackgodstime/dioxus-auth"
+homepage = "https://github.com/shedrackgodstime/dioxus-auth"
+documentation = "https://docs.rs/dioxus-auth"
+keywords = ["auth", "dioxus", "example"]
+categories = ["authentication", "web-programming"]
+
+[dependencies]
+dioxus-auth = { path = "../..", features = ["dioxus"] }
+dioxus = "0.7"
+dioxus-router = "0.7"
+
+[dev-dependencies]
+dioxus-history = "0.7"
+dioxus-ssr = "0.7"

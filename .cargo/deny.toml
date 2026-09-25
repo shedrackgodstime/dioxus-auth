@@ -1,36 +1,26 @@
 [advisories]
-# RUSTSEC-2026-0009 — time <0.3.47 (DoS via stack exhaustion). The fix version
-# requires Rust >=1.88; this crate's MSRV floor is 1.85 (CI tests 1.85.0), so
-# the fix is not resolvable here. time is transitive-only:
-# dioxus-fullstack -> reqwest -> cookie_store -> time.
-# Revisit when the MSRV floor is raised past 1.88.
-#
-# RUSTSEC-2026-0253 — lru 0.16.4 unsoundness (use-after-free in
-# `LruCache::pop()` if a KEY's Drop panics under catch_unwind; Info, unsound
-# not vuln). Fixed in lru >=0.18.2, unresolvable at MSRV 1.85. Unreachable
-# path: framework-internal cache keys have no panicking Drop. Mirrors the
-# justified ignore in .cargo/audit.toml so cargo-audit and cargo-deny agree.
-# Revisit alongside RUSTSEC-2026-0009 or when dioxus-fullstack bumps lru.
-ignore = ["RUSTSEC-2026-0009", "RUSTSEC-2026-0253"]
+ignore = []
 
 [licenses]
+# BSD-3-Clause: subtle (crypto crate). Unicode-3.0: unicode-ident.
+# ISC, Zlib, CC0-1.0: ubiquitous permissive transitive licenses
+# (MIT-equivalent, zlib-licensed, public-domain dedication).
+# BSL-1.0 is the Boost Software License (OSI-approved), not Business Source
+# (that would be BUSL-1.1): xxhash-rust via dioxus-fullstack.
+# CDLA-Permissive-2.0 covers Mozilla CA certificate DATA inside webpki-roots,
+# not code; it is the only way rustls gets trust anchors. All five arrive
+# transitively only. Re-audit this list if a direct dependency ever needs one.
 allow = [
     "MIT",
     "Apache-2.0",
-    "Apache-2.0 WITH LLVM-exception",
-    "BSD-3-Clause",
     "BSD-2-Clause",
+    "BSD-3-Clause",
     "ISC",
-    "Unicode-3.0",
-    "CC0-1.0",
     "Zlib",
-    # Boost Software License 1.0 — OSI-approved, FSF free (xxhash-rust via
-    # dioxus-fullstack).
-    "BSL-1.0",
-    # Permissive data license (webpki-roots root-certificate bundle via
-    # hyper-rustls -> reqwest). Not OSI-listed, so it must be explicit; terms
-    # are permissive attribution for redistributed data.
+    "CC0-1.0",
+    "Unicode-3.0",
     "CDLA-Permissive-2.0",
+    "BSL-1.0",
 ]
 
 [licenses.private]

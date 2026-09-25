@@ -1,0 +1,35 @@
+[package]
+name = "fullstack-app"
+version = "0.1.0"
+edition = "2024"
+description = "Minimal fullstack app on dioxus-auth: server fns, middleware, HTTP-level tests."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shedrackgodstime/dioxus-auth"
+homepage = "https://github.com/shedrackgodstime/dioxus-auth"
+documentation = "https://docs.rs/dioxus-auth"
+keywords = ["auth", "dioxus", "example"]
+categories = ["authentication", "web-programming"]
+
+# The `server` impl is enabled unconditionally: this is an application, not a
+# library, and its tests execute server logic in-process. Shared crates
+# should follow the split-feature convention instead (declare their own
+# `server` feature), so dependents choose the half they need.
+[dependencies]
+dioxus-auth = { path = "../..", features = ["dioxus-fullstack", "server"] }
+dioxus-fullstack = { version = "0.7", features = ["server"] }
+dioxus-server = "0.7"
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+# The generated server fns key their server half off this feature, per the
+# dioxus-fullstack convention (same split as the parent crate). It is on by
+# default because this application always executes server logic in-process;
+# shared crates should leave it opt-in instead.
+[features]
+default = ["server"]
+server = ["dioxus-fullstack/server"]
