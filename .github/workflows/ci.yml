@@ -102,6 +102,28 @@ jobs:
       - name: Check wasm target
         run: cargo check --target wasm32-unknown-unknown
 
+  desktop:
+    # The desktop example lives outside the workspace (see `exclude` in
+    # Cargo.toml): its GUI tree duplicates transitive versions workspace-wide
+    # and trips multiple_crate_versions for every member. It carries its own
+    # lockfile; check hard-gates, clippy stays advisory.
+    name: Desktop example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install WebKit system libraries
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev
+      - name: Check desktop example
+        working-directory: examples/desktop-app
+        run: cargo check
+      - name: Clippy desktop example (advisory)
+        working-directory: examples/desktop-app
+        continue-on-error: true
+        run: cargo clippy --all-targets -- -D warnings -W clippy::pedantic
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

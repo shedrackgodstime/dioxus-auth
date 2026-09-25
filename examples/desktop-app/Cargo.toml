@@ -1,0 +1,20 @@
+[package]
+name = "desktop-app"
+version = "0.1.0"
+edition = "2024"
+description = "Desktop shell on dioxus-auth: the quickstart tree on wry, check-gated (no display in CI)."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shedrackgodstime/dioxus-auth"
+homepage = "https://github.com/shedrackgodstime/dioxus-auth"
+documentation = "https://docs.rs/dioxus-auth"
+keywords = ["auth", "dioxus", "example"]
+categories = ["authentication", "web-programming"]
+
+[dependencies]
+dioxus-auth = { path = "../.." }
+dioxus = { version = "0.7", features = ["macro", "hooks", "signals", "html"] }
+dioxus-core = "0.7"
+dioxus-signals = "0.7"
+dioxus-desktop = "0.7"
+quickstart = { path = "../quickstart" }

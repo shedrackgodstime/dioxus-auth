@@ -19,7 +19,6 @@ whitelist=(
     '^rustfmt\.toml$'
     '^README\.md$'
     '^docs/README\.md$'
-    '^docs/THREAT-MODEL\.md$'
     '^LICENSE$'
     '^LICENSE-MIT$'
     '^LICENSE-APACHE$'

@@ -1,12 +1,20 @@
 [workspace]
-members = [".", "examples/sqlite-reference"]
+members = [".", "examples/sqlite-reference", "examples/quickstart", "examples/fullstack-app"]
+# desktop-app is excluded, not removed: its GUI dependency tree duplicates
+# transitive versions workspace-wide, tripping multiple_crate_versions for
+# every member. It carries its own lockfile and its own CI job instead.
+exclude = ["examples/desktop-app"]
 
 [workspace.dependencies]
 parking_lot = "0.12"
 
 [lints]
 rust = { warnings = "deny", ambiguous_negative_literals = "deny", missing_debug_implementations = "deny", redundant_imports = "deny", redundant_lifetimes = "deny", trivial_numeric_casts = "deny", unused_lifetimes = "deny" }
-clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny", implicit_return = "deny" }
+# multiple_crate_versions is unactionable here: fresh resolves of the dioxus
+# 0.7 tree span ecosystem transitions (rand 0.9/0.10, thiserror 1/2) no
+# version requirement on our side can unify. Direct-dependency duplication
+# stays a review item (proven clean); transitive churn is upstream's.
+clippy = { pedantic = { level = "deny", priority = -1 }, nursery = "deny", cargo = "deny", suspicious = "deny", style = "deny", complexity = "deny", perf = "deny", mod_module_files = "deny", question_mark_used = "deny", implicit_return = "deny", multiple_crate_versions = { level = "allow", priority = 1 } }
 
 [package]
 name = "dioxus-auth"
@@ -50,7 +58,6 @@ include = [
     "/scripts/check-docs.sh",
     "/scripts/verify.sh",
     "/docs/README.md",
-    "/docs/THREAT-MODEL.md",
     "/src/**",
 ]
 
