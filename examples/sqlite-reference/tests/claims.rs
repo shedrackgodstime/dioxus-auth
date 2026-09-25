@@ -423,7 +423,7 @@ fn claim_probing_counts_toward_the_shared_rate_gate() {
 
     let claims = EmailClaims::new()
         .expect("claim machinery must construct")
-        .with_rate_limiter(InMemoryRateLimiter::new(1, Duration::from_secs(60)));
+        .with_rate_limiter(InMemoryRateLimiter::new(1, Duration::from_mins(1)));
     let mut raw = rusqlite::Connection::open(&path).expect("raw connection must open");
     let tx = raw.transaction().expect("dev transaction must open");
     assert_eq!(
